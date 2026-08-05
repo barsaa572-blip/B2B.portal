@@ -1,0 +1,5 @@
+.back-to-search{display:inline-flex;align-items:center;gap:6px;border:1px solid #cbd8ee;border-radius:7px;padding:7px 10px;background:#fff;color:#2759cc;font-size:12px;font-weight:700;cursor:pointer}.back-to-search:hover{background:#edf3ff}.booking-route{justify-content:flex-start}.booking-route h1{margin-right:auto}
+.header-booking-route{display:flex;align-items:center;gap:10px;margin-top:6px}.header-booking-route span{padding:4px 7px;border-radius:4px;background:#eef2f7;color:#61708a;font-size:11px;font-weight:800;text-transform:uppercase}.header-booking-route h1{margin:0;font-size:22px;color:#182b4a}.header-booking-route i{color:#1761e7;font-style:normal}.header-booking-route .back-to-search{margin-left:12px}
+.booking-actions{display:flex;align-items:center;justify-content:space-between;clear:both;margin-top:18px}.booking-actions .issue-ticket{float:none;margin:0}.booking-actions .back-to-search{margin:0}
+.booking-mode main>header{display:none}
+.booking-mode .booking-route{display:none!important}

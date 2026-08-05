@@ -1,0 +1,37 @@
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const PORT = Number(process.env.PORT || 4173);
+const ROOT = fileURLToPath(new URL('.', import.meta.url));
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+const send = (res, status, data, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' }); res.end(Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data)); };
+const normalise = item => { const flights = item.flights ?? []; const first = flights[0] ?? {}; const last = flights.at(-1) ?? first; const number = first.flight_number ?? ''; return { airline: first.airline ?? 'Unknown airline', airlineLogo: first.airline_logo ?? null, airlineCode: number.match(/^([A-Z0-9]{2})\s*/i)?.[1]?.toUpperCase() ?? null, number, departure: first.departure_airport ?? {}, arrival: last.arrival_airport ?? {}, duration: item.total_duration ?? flights.reduce((total, leg) => total + (leg.duration ?? 0), 0), stops: Math.max(0, flights.length - 1), price: item.price ?? null, departureToken: item.departure_token ?? null, segments: flights.map(leg => ({ number: leg.flight_number ?? '', airline: leg.airline ?? '', departure: leg.departure_airport ?? {}, arrival: leg.arrival_airport ?? {}, duration: leg.duration ?? null, airplane: leg.airplane ?? null, travelClass: leg.travel_class ?? null, extensions: leg.extensions ?? [] })) }; };
+async function searchFlights(url, res) {
+  const key = process.env.SERPAPI_KEY;
+  if (!key) return send(res, 503, { error: 'Flight search is not configured. Set SERPAPI_KEY on the server.' });
+  const departure = url.searchParams.get('departure')?.toUpperCase(); const arrival = url.searchParams.get('arrival')?.toUpperCase(); const date = url.searchParams.get('date'); const adults = url.searchParams.get('adults') || '1'; const children = url.searchParams.get('children') || '0'; const infants = url.searchParams.get('infants') || '0'; const trip = url.searchParams.get('trip') || 'oneway'; const returnDate = url.searchParams.get('returnDate'); const departureToken = url.searchParams.get('departureToken'); const airline = url.searchParams.get('airline')?.toUpperCase();
+  if (departureToken) {
+    const loadReturn = async includeAirline => { const params = new URLSearchParams({ engine: 'google_flights', departure_token: departureToken, departure_id: departure || '', arrival_id: arrival || '', outbound_date: date || '', return_date: returnDate || '', adults, children, infants_on_lap: infants, travel_class: '1', currency: 'CNY', hl: 'en', gl: 'cn', type: '1', api_key: key }); if (includeAirline) params.set('include_airlines', includeAirline); const upstream = await fetch(`https://serpapi.com/search.json?${params}`); const data = await upstream.json(); return { upstream, data, results: [...(data.best_flights ?? []), ...(data.other_flights ?? [])].map(normalise) }; };
+    try { let response = await loadReturn(airline); let fallback = false; if (airline && (!response.upstream.ok || response.data.error || response.results.length === 0)) { response = await loadReturn(null); fallback = true; } if (!response.upstream.ok || response.data.error) return send(res, 502, { error: response.data.error || 'Flight provider returned an error.' }); return send(res, 200, { source: 'SerpApi / Google Flights', phase: 'return', sameAirline: !fallback, results: response.results }); } catch { return send(res, 502, { error: 'Flight provider could not be reached.' }); }
+  }
+  if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return send(res, 400, { error: 'departure, arrival and date are required.' });
+  const today = new Date().toISOString().slice(0, 10);
+  if (date < today) return send(res, 400, { error: 'Departure date cannot be in the past.' });
+  if (trip === 'round' && !/^\d{4}-\d{2}-\d{2}$/.test(returnDate || '')) return send(res, 400, { error: 'A return date is required for a round trip.' });
+  if (trip === 'round' && returnDate < date) return send(res, 400, { error: 'Return date cannot be earlier than departure date.' });
+  const params = new URLSearchParams({ engine: 'google_flights', departure_id: departure, arrival_id: arrival, outbound_date: date, adults, children, infants_on_lap: infants, travel_class: '1', currency: 'CNY', hl: 'en', gl: 'cn', type: trip === 'round' ? '1' : '2', api_key: key });
+  if (trip === 'round') params.set('return_date', returnDate);
+  try { const upstream = await fetch(`https://serpapi.com/search.json?${params}`); const data = await upstream.json(); if (!upstream.ok || data.error) return send(res, 502, { error: data.error || 'Flight provider returned an error.' }); send(res, 200, { source: 'SerpApi / Google Flights', phase: 'outbound', trip, results: [...(data.best_flights ?? []), ...(data.other_flights ?? [])].map(normalise) }); }
+  catch { send(res, 502, { error: 'Flight provider could not be reached.' }); }
+}
+async function autocompleteLocations(url, res) {
+  const key = process.env.SERPAPI_KEY; const query = url.searchParams.get('q')?.trim();
+  if (!key) return send(res, 503, { error: 'Location search is not configured.' });
+  if (!query || query.length < 2) return send(res, 200, { options: [] });
+  const params = new URLSearchParams({ engine: 'google_flights_autocomplete', q: query, exclude_regions: 'true', hl: 'en', gl: 'mn', api_key: key });
+  try { const upstream = await fetch(`https://serpapi.com/search.json?${params}`); const data = await upstream.json(); if (!upstream.ok || data.error) return send(res, 502, { error: data.error || 'Location search failed.' }); const seen = new Set(); const options = (data.suggestions ?? []).flatMap(s => { const airports = (s.airports ?? []).map(a => ({ city: a.city || s.name, airport: a.name, code: a.id })); if (airports.length) return airports; if (/^[A-Z]{3}$/i.test(s.id || '')) return [{ city: s.city || s.description?.split(',')[0] || s.name, airport: s.name, code: s.id }]; return []; }).filter(a => a.code && !seen.has(a.code) && seen.add(a.code)); send(res, 200, { options }); }
+  catch { send(res, 502, { error: 'Location provider could not be reached.' }); }
+}
+createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`); if (url.pathname === '/api/flights') return searchFlights(url, res); if (url.pathname === '/api/locations') return autocompleteLocations(url, res); const requested = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, ''); const file = normalize(join(ROOT, requested)); if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try { send(res, 200, await readFile(file), MIME[extname(file)] || 'application/octet-stream'); } catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => console.log(`Flight B2B Portal listening on http://127.0.0.1:${PORT}`));

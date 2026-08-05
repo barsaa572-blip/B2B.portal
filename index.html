@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flight B2B Portal</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="overrides.css" />
+    <link rel="stylesheet" href="selection.css" />
+    <link rel="stylesheet" href="autocomplete.css" />
+    <link rel="stylesheet" href="calendar.css" />
+    <link rel="stylesheet" href="calendar-icon.css" />
+    <link rel="stylesheet" href="airline-logo.css" />
+    <link rel="stylesheet" href="round-pairs.css" />
+    <link rel="stylesheet" href="passenger-checkout.css" />
+    <link rel="stylesheet" href="booking-flow.css" />
+    <link rel="stylesheet" href="order-summary.css" />
+    <link rel="stylesheet" href="booking-back.css" />
+    <link rel="stylesheet" href="search-header.css" />
+    <link rel="stylesheet" href="passenger-country.css" />
+    <link rel="stylesheet" href="country-menu.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"><span class="brand-mark">F</span><span>Flight B2B</span></a>
+      <p class="workspace">AGENCY PORTAL</p>
+      <nav>
+        <button class="nav-link active" data-view="dashboard"><span>◫</span> Dashboard</button>
+        <button class="nav-link" data-view="search"><span>⌁</span> Flight search</button>
+        <button class="nav-link" data-view="bookings"><span>▣</span> Bookings</button>
+        <button class="nav-link" data-view="wallet"><span>◉</span> Wallet</button>
+        <button class="nav-link" data-view="reports"><span>▤</span> Reports</button>
+      </nav>
+      <div class="sidebar-foot"><div class="avatar">BA</div><div><strong>Bayar Agency</strong><small>Agency administrator</small></div><button class="more">•••</button></div>
+    </aside>
+
+    <main>
+      <header><div><p class="eyebrow">TUESDAY, 05 AUGUST</p><h1 id="page-title">Good morning, Bayar</h1></div><div class="header-actions"><button class="icon-btn" aria-label="Notifications">◌<i></i></button><button class="help">?</button></div></header>
+
+      <section id="dashboard" class="view active">
+        <div class="wallet-banner"><div><p>AVAILABLE WALLET BALANCE</p><strong>¥ <span id="wallet-balance">12,480.00</span></strong><small>≈ 5,910,000 MNT · Updated just now</small></div><div class="wallet-actions"><button class="secondary" data-view-target="wallet">View transactions</button><button class="primary" data-open-topup>Request top-up</button></div></div>
+        <div class="grid-3 stats"><article><span class="icon blue">✈</span><div><small>TICKETS THIS MONTH</small><strong>34</strong><em>+12.4% from last month</em></div></article><article><span class="icon purple">¥</span><div><small>MONTHLY SALES</small><strong>¥ 87,342</strong><em>+8.1% from last month</em></div></article><article><span class="icon orange">◷</span><div><small>PENDING ACTION</small><strong>3</strong><em>1 payment time limit today</em></div></article></div>
+        <section class="panel quick"><div class="panel-title"><div><h2>Start a new booking</h2><p>Search live availability when Spring API is connected.</p></div><button class="primary" data-view-target="search">Search flights <span>→</span></button></div><div class="route-row"><div><label>FROM</label><strong>Ulaanbaatar</strong><span>ULN · Chinggis Khaan</span></div><b>⇄</b><div><label>TO</label><strong>Shanghai</strong><span>PVG · Pudong</span></div><div><label>DEPARTURE</label><strong>20 Aug 2026</strong><span>Wednesday</span></div><div><label>PASSENGERS</label><strong>1 Adult</strong><span>Economy</span></div></div></section>
+        <section class="panel"><div class="panel-title"><div><h2>Recent bookings</h2><p>Your latest orders and their current status.</p></div><button class="text-btn" data-view-target="bookings">View all</button></div><div class="table-wrap"><table><thead><tr><th>BOOKING REF.</th><th>ROUTE</th><th>PASSENGER</th><th>ISSUED</th><th>TOTAL</th><th>STATUS</th></tr></thead><tbody id="recent-bookings"></tbody></table></div></section>
+      </section>
+
+      <section id="search" class="view">
+        <div class="section-heading"><div><p class="eyebrow">NEW RESERVATION</p><h1>Flight search</h1><p>Search availability and fares in CNY.</p></div></div>
+        <section class="panel search-panel"><div class="trip-tabs"><button type="button" class="selected" data-trip="round">Round trip</button><button type="button" data-trip="oneway">One way</button></div><form id="search-form"><label>From<div class="autocomplete"><input id="departure" value="Ulaanbaatar (UBN)" autocomplete="off" /><div id="departure-suggestions" class="suggestions" role="listbox"></div></div></label><button type="button" class="swap">⇄</button><label>To<div class="autocomplete"><input id="arrival" value="Shanghai (PVG)" autocomplete="off" /><div id="arrival-suggestions" class="suggestions" role="listbox"></div></div></label><label>Departure<div class="date-control"><input id="outbound-date" type="text" value="2026-08-20" readonly /><button type="button" class="open-calendar" data-date-input="outbound-date" aria-label="Choose departure date">▣</button></div></label><label class="return-date">Return<div class="date-control"><input id="return-date" type="text" value="2026-08-27" readonly /><button type="button" class="open-calendar" data-date-input="return-date" aria-label="Choose return date">▣</button></div></label><button class="primary" type="submit">Search flights</button><div class="passenger-grid" aria-label="Passengers"><div class="counter"><span>Adults</span><div><button type="button" data-change="adults" data-step="-1" aria-label="Decrease adults">−</button><output id="adults-output">1</output><button type="button" data-change="adults" data-step="1" aria-label="Increase adults">+</button></div><input id="adults" type="hidden" value="1" /></div><div class="counter"><span>Children</span><div><button type="button" data-change="children" data-step="-1" aria-label="Decrease children">−</button><output id="children-output">0</output><button type="button" data-change="children" data-step="1" aria-label="Increase children">+</button></div><input id="children" type="hidden" value="0" /></div><div class="counter"><span>Infants</span><div><button type="button" data-change="infants" data-step="-1" aria-label="Decrease infants">−</button><output id="infants-output">0</output><button type="button" data-change="infants" data-step="1" aria-label="Increase infants">+</button></div><input id="infants" type="hidden" value="0" /></div></div></form><p class="passenger-note">Type a city or airport name, then choose the correct airport. A child or infant must travel with at least one adult.</p></section>
+        <div id="flight-results" class="results hidden"><div class="results-head"><h2>Available flights</h2><span>Mock availability · API not connected</span></div><article class="flight"><div class="carrier"><span class="plane">✈</span><div><strong>Spring Airlines</strong><small>9C 8578 · Economy</small></div></div><div class="flight-time"><strong>08:35</strong><span>ULN</span></div><div class="duration">4h 15m <i></i><small>Nonstop</small></div><div class="flight-time"><strong>12:50</strong><span>PVG</span></div><div class="fare"><small>FROM</small><strong>¥ 1,280</strong><span>per adult</span></div><button class="primary book-flight">Select</button></article><article class="flight"><div class="carrier"><span class="plane">✈</span><div><strong>Spring Airlines</strong><small>9C 8576 · Economy</small></div></div><div class="flight-time"><strong>16:20</strong><span>ULN</span></div><div class="duration">4h 25m <i></i><small>Nonstop</small></div><div class="flight-time"><strong>20:45</strong><span>PVG</span></div><div class="fare"><small>FROM</small><strong>¥ 1,460</strong><span>per adult</span></div><button class="primary book-flight">Select</button></article></div>
+      </section>
+
+      <section id="bookings" class="view"><div class="section-heading"><div><p class="eyebrow">ORDER MANAGEMENT</p><h1>Bookings</h1><p>All bookings created by your agency.</p></div><button class="primary" data-view-target="search">New booking</button></div><section class="panel"><div class="filters"><input placeholder="Search PNR, passenger or ticket number" /><select><option>All statuses</option><option>Ticketed</option><option>Pending</option></select><button class="secondary">Export</button></div><div class="table-wrap"><table><thead><tr><th>BOOKING REF.</th><th>ROUTE</th><th>PASSENGER</th><th>ISSUED</th><th>TOTAL</th><th>STATUS</th><th></th></tr></thead><tbody id="all-bookings"></tbody></table></div></section></section>
+
+      <section id="wallet" class="view"><div class="section-heading"><div><p class="eyebrow">AGENCY FINANCE</p><h1>Wallet</h1><p>All values are recorded in CNY.</p></div><button class="primary" data-open-topup>Request top-up</button></div><div class="grid-2"><section class="balance-card"><small>AVAILABLE BALANCE</small><strong>¥ <span class="balance-copy">12,480.00</span></strong><p>Funds available for ticket issuance</p><hr><div><span>Pending top-ups</span><b>¥ 0.00</b></div></section><section class="panel policy"><h2>Top-up process</h2><ol><li>Submit a CNY top-up request with transfer proof.</li><li>Finance verifies the bank transfer.</li><li>Your credit is added and a ledger record is created.</li></ol></section></div><section class="panel"><div class="panel-title"><div><h2>Wallet ledger</h2><p>Immutable financial transaction history.</p></div></div><div class="table-wrap"><table><thead><tr><th>DATE & TIME</th><th>REFERENCE</th><th>DESCRIPTION</th><th>TYPE</th><th>AMOUNT</th><th>BALANCE</th></tr></thead><tbody id="ledger"></tbody></table></div></section></section>
+
+      <section id="reports" class="view"><div class="section-heading"><div><p class="eyebrow">ANALYTICS</p><h1>Reports</h1><p>Agency sales activity at a glance.</p></div></div><div class="empty-state"><span>▤</span><h2>Reports will be available in the next release</h2><p>Sales, ticketing, wallet and airline settlement reports will appear here.</p></div></section>
+    </main>
+
+    <dialog id="topup-modal"><form method="dialog" id="topup-form"><button class="close" value="cancel">×</button><p class="eyebrow">WALLET TOP-UP</p><h2>Request a balance top-up</h2><p class="modal-copy">Your request will be reviewed by finance before credit is added.</p><label>Amount (CNY)<input id="topup-amount" type="number" min="1" placeholder="e.g. 5000" required /></label><label>Bank transfer reference<input placeholder="Transaction reference" required /></label><label>Note <textarea placeholder="Optional note for finance"></textarea></label><button class="primary full" value="submit">Submit request</button></form></dialog>
+    <dialog id="ticket-modal"><form method="dialog"><button class="close" value="cancel">×</button><div class="ticket-icon">✓</div><p class="eyebrow">MOCK BOOKING CREATED</p><h2>Booking is ready to ticket</h2><p class="modal-copy">In production, this step will reserve through the Spring Airlines API, then debit the wallet only after ticket issuance succeeds.</p><div class="booking-ref">PNR <strong>BM7K2Q</strong><span>¥ 1,280.00</span></div><button class="primary full" value="submit">View booking</button></form></dialog>
+    <div id="toast" role="status"></div>
+    <div id="calendar-popover" class="calendar-popover" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>
