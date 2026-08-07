@@ -20,6 +20,8 @@
     <link rel="stylesheet" href="passenger-country.css" />
     <link rel="stylesheet" href="country-menu.css" />
     <link rel="stylesheet" href="auth.css" />
+    <link rel="stylesheet" href="profile-menu.css" />
+    <link rel="stylesheet" href="passenger-details.css" />
   </head>
   <body>
     <aside class="sidebar">
@@ -32,7 +34,12 @@
         <button class="nav-link" data-view="wallet"><span>◉</span> Wallet</button>
         <button class="nav-link" data-view="reports"><span>▤</span> Reports</button>
       </nav>
-      <div class="sidebar-foot"><div class="avatar">BA</div><div><strong>Bayar Agency</strong><small>Agency administrator</small></div><button class="more">•••</button></div>
+      <div class="sidebar-foot">
+        <div class="avatar" id="sidebar-avatar">A</div>
+        <div><strong id="sidebar-role">Ticketing agent</strong><small id="sidebar-username">Admin</small></div>
+        <button class="more" type="button" aria-label="Account menu" aria-expanded="false">•••</button>
+        <div class="sidebar-account-menu" hidden><button type="button" class="sidebar-signout">Sign out</button></div>
+      </div>
     </aside>
 
     <main>

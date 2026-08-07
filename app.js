@@ -4,17 +4,241 @@ const bookings = [
   { ref: 'QF9A2N', route: 'ULN → SHA', passenger: 'ERDENE / TUMUR', issued: '04 Aug 2026', total: '¥ 1,350.00', status: 'Pending' },
   { ref: 'L3Y7CX', route: 'PVG → ULN', passenger: 'MUNKH / NARAN', issued: '02 Aug 2026', total: '¥ 1,290.00', status: 'Ticketed' }
 ];
+bookings.push(
+  { ref: 'NEW2RT', route: 'ULN → PVG', passenger: 'BOLD / TUVSHIN', issued: '07 Aug 2026', total: '¥ 2,680.00', status: 'Ticketed', passengerCount: 1, legStates: { outbound: 'active', return: 'active' } },
+  { ref: 'ONEFLW', route: 'ULN → PVG', passenger: 'SUKH / MUNKH', issued: '01 Aug 2026', total: '¥ 2,520.00', status: 'Partially flown', passengerCount: 1, legStates: { outbound: 'flown', return: 'active' } },
+  { ref: 'TWOACT', route: 'ULN → PVG', passenger: 'BAYAR / SOLONGO', issued: '06 Aug 2026', total: '¥ 5,360.00', status: 'Ticketed', passengerCount: 2, passengers: ['BAYAR / SOLONGO', 'BATBOLD / TUVSHIN'], legStates: { outbound: 'active', return: 'active' } },
+  { ref: 'TWOUSE', route: 'ULN → PVG', passenger: 'TUMUR / ERDENE', issued: '20 Jul 2026', total: '¥ 5,120.00', status: 'Flown', passengerCount: 2, passengers: ['TUMUR / ERDENE', 'DULAM / SARUUL'], legStates: { outbound: 'flown', return: 'flown' } }
+);
+bookings.splice(0, bookings.length,
+  { ref: 'RTA001', route: 'ULN → PVG', passenger: 'BATBOLD / TUVSHIN', issued: '07 Aug 2026', total: '¥ 2,680.00', status: 'Ticketed', passengerCount: 1, legStates: { outbound: 'active', return: 'active' } },
+  { ref: 'RTP002', route: 'ULN → PVG', passenger: 'ERDENE / DULAM', issued: '01 Aug 2026', total: '¥ 2,520.00', status: 'Partially flown', passengerCount: 1, legStates: { outbound: 'flown', return: 'active' } },
+  { ref: 'RTU003', route: 'ULN → PVG', passenger: 'MUNKH / NARAN', issued: '20 Jul 2026', total: '¥ 2,560.00', status: 'Flown', passengerCount: 1, legStates: { outbound: 'flown', return: 'flown' } },
+  { ref: 'OWN004', route: 'ULN → SHA', passenger: 'SARUUL / OYUN', issued: '07 Aug 2026', total: '¥ 1,340.00', status: 'Ticketed', passengerCount: 1, oneWay: true, legStates: { outbound: 'active' } },
+  { ref: 'OWU005', route: 'PVG → ULN', passenger: 'TUMUR / BOLD', issued: '19 Jul 2026', total: '¥ 1,280.00', status: 'Flown', passengerCount: 1, oneWay: true, legStates: { outbound: 'flown' } },
+  { ref: '2RTA06', route: 'ULN → PVG', passenger: 'BAYAR / SOLONGO', issued: '07 Aug 2026', total: '¥ 5,360.00', status: 'Ticketed', passengerCount: 2, passengers: ['BAYAR / SOLONGO', 'BATBOLD / TUVSHIN'], legStates: { outbound: 'active', return: 'active' } },
+  { ref: '2RTP07', route: 'ULN → PVG', passenger: 'DULAM / ERDENE', issued: '01 Aug 2026', total: '¥ 5,040.00', status: 'Partially flown', passengerCount: 2, passengers: ['DULAM / ERDENE', 'MUNKH / NARAN'], legStates: { outbound: 'flown', return: 'active' } },
+  { ref: '2RTU08', route: 'ULN → PVG', passenger: 'OYUN / SARUUL', issued: '20 Jul 2026', total: '¥ 5,120.00', status: 'Flown', passengerCount: 2, passengers: ['OYUN / SARUUL', 'TUMUR / BOLD'], legStates: { outbound: 'flown', return: 'flown' } },
+  { ref: '2OWN09', route: 'ULN → SHA', passenger: 'GANBOLD / ENKHTAIVAN', issued: '07 Aug 2026', total: '¥ 2,680.00', status: 'Ticketed', passengerCount: 2, passengers: ['GANBOLD / ENKHTAIVAN', 'BAYAR / SOLONGO'], oneWay: true, legStates: { outbound: 'active' } },
+  { ref: '2OWU10', route: 'PVG → ULN', passenger: 'NARAN / MUNKH', issued: '19 Jul 2026', total: '¥ 2,560.00', status: 'Flown', passengerCount: 2, passengers: ['NARAN / MUNKH', 'DULAM / ERDENE'], oneWay: true, legStates: { outbound: 'flown' } }
+);
 const ledger = [
   ['05 Aug 2026, 09:42', 'TKT-BM7K2Q', 'Ticket issue · ULN → PVG', 'Debit', '− ¥ 1,280.00', '¥ 12,480.00'],
   ['04 Aug 2026, 15:18', 'TKT-K8M4RP', 'Ticket issue · PVG → ULN', 'Debit', '− ¥ 1,460.00', '¥ 13,760.00'],
   ['01 Aug 2026, 11:05', 'TOP-10681', 'Top-up approved by finance', 'Credit', '+ ¥ 15,000.00', '¥ 15,220.00'],
   ['31 Jul 2026, 16:34', 'TKT-L3Y7CX', 'Ticket issue · PVG → ULN', 'Debit', '− ¥ 1,290.00', '¥ 220.00']
 ];
-const bookingRows = (withAction = false) => bookings.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${b.route}</td><td>${b.passenger}</td><td>${b.issued}</td><td><strong>${b.total}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? '<td><button class="text-btn">View</button></td>' : ''}</tr>`).join('');
-document.querySelector('#recent-bookings').innerHTML = bookingRows();
-document.querySelector('#all-bookings').innerHTML = bookingRows(true);
+const ownBookingRefs = new Set(['RTA001', 'RTP002', 'RTU003', 'OWN004', 'OWU005', '2RTA06', '2RTP07', '2RTU08', '2OWN09', '2OWU10']);
+const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${b.route}</td><td>${b.passenger}</td><td>${b.issued}</td><td><strong>${b.total}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
+const ownBookings = () => bookings.filter(booking => ownBookingRefs.has(booking.ref));
+let bookingScope = 'agent';
+const renderBookings = (query = '') => {
+  const normalized = query.trim().toLowerCase();
+  const displayed = normalized ? bookings.filter(booking => `${booking.ref} ${booking.passenger}`.toLowerCase().includes(normalized)) : (bookingScope === 'agent' ? ownBookings() : bookings);
+  document.querySelector('#recent-bookings').innerHTML = bookingRows(bookingScope === 'agent' ? ownBookings() : bookings);
+  document.querySelector('#all-bookings').innerHTML = bookingRows(displayed, true);
+};
+window.applyBookingScope = role => {
+  bookingScope = role === 'office' ? 'office' : 'agent';
+  const input = document.querySelector('#bookings .filters input');
+  if (input) {
+    input.value = '';
+    input.placeholder = bookingScope === 'agent' ? 'Search your office by PNR or passenger' : 'Search PNR, passenger or ticket number';
+  }
+  const description = document.querySelector('#bookings .section-heading > div > p:not(.eyebrow)');
+  if (description) description.textContent = bookingScope === 'agent' ? 'Your bookings. Search your office by PNR or passenger.' : 'All bookings created by your agency.';
+  renderBookings();
+};
+renderBookings();
+document.querySelector('#bookings .filters input').addEventListener('input', event => renderBookings(event.target.value));
+const bookingDetailModal = () => {
+  let modal = document.querySelector('#booking-detail-modal');
+  if (modal) return modal;
+  modal = document.createElement('dialog');
+  modal.id = 'booking-detail-modal';
+  document.body.append(modal);
+  return modal;
+};
+const bookingFlightDetails = booking => {
+  const [from, to] = booking.route.split('â†’').map(value => value.trim());
+  return `<div class="booking-flight-detail"><div><span>OUTBOUND</span><strong>${from || 'ULN'} â†’ ${to || 'PVG'}</strong><small>Spring Airlines Â· 9C 7058 Â· Economy</small></div><b>13:00 â†’ 17:00</b></div><div class="booking-flight-detail"><div><span>RETURN</span><strong>${to || 'PVG'} â†’ ${from || 'ULN'}</strong><small>Spring Airlines Â· 9C 7057 Â· Economy</small></div><b>08:10 â†’ 12:00</b></div>`;
+};
+const bookingFlightDetailsClean = booking => {
+  const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
+  const states = booking.legStates || { outbound: 'active', return: 'active' };
+  const flightRow = (label, route, number, times, date, state) => `<div class="booking-flight-detail ${state === 'flown' ? 'flown-flight' : ''}"><div><span>${label}</span><strong>${route}</strong><small>${date} &middot; Spring Airlines &middot; ${number} &middot; Economy</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state === 'flown' ? 'flown' : 'ticketed'}">${state === 'flown' ? 'Flown' : 'Ticketed'}</em></div></div>`;
+  const outbound = flightRow(booking.oneWay ? 'ONE WAY' : 'OUTBOUND', `${from} &rarr; ${to}`, '9C 7058', '13:00 &rarr; 17:00', states.outbound === 'flown' ? 'Thu, 30 Jul 2026' : 'Thu, 20 Aug 2026', states.outbound);
+  const returnFlight = booking.oneWay ? '' : flightRow('RETURN', `${to} &rarr; ${from}`, '9C 7057', '08:10 &rarr; 12:00', states.return === 'flown' ? 'Thu, 06 Aug 2026' : 'Thu, 27 Aug 2026', states.return);
+  return `${outbound}${returnFlight}`;
+};
+const openBookingDetail = ref => {
+  const booking = bookings.find(item => item.ref === ref);
+  if (!booking) return;
+  const modal = bookingDetailModal();
+  const passengers = booking.passengers || [booking.passenger];
+  const allFlightsUsed = bookingLegs(booking).every(leg => leg.flown);
+  const passengerDescription = `${booking.passengerCount || passengers.length} Adult${(booking.passengerCount || passengers.length) > 1 ? 's' : ''} &middot; Passport details verified before ticketing`;
+  const passengerList = passengers.map((name, index) => {
+    const type = booking.passengerTypes?.[index] || 'ADT';
+    const passport = ['E1234567', 'E7654321', 'A8901234'][index] || `E${1234000 + index}`;
+    const birthDate = ['1988-04-12', '1991-09-23', '2016-01-08'][index] || '1990-01-01';
+    const expiryDate = ['2031-04-12', '2033-09-23', '2030-01-08'][index] || '2032-01-01';
+    const gender = ['Male', 'Female', 'Female'][index] || 'Male';
+    return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>Passport details verified</span><div class="passenger-document"><span>Passport number</span><b>${passport}</b><span>Date of birth</span><b>${birthDate}</b><span>Gender</span><b>${gender}</b><span>Nationality</span><b>Mongolia</b><span>Passport expiry</span><b>${expiryDate}</b></div></div>`;
+  }).join('');
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Issued ${booking.issued}</span></div><section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span></section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>Bayar Agency</strong><span>+976 8011 5627 &middot; booking@bayaragency.mn</span></section><section class="booking-detail-card booking-fare"><span>Total paid</span><strong>${booking.total}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions"><button type="button" class="secondary cancel-ticket" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button></div>${allFlightsUsed ? '<p class="fully-used-note">This ticket has been fully used. Cancellation and changes are unavailable.</p>' : '<p class="booking-disclaimer">Fees shown before confirmation are estimates. The final amount is confirmed by the airline.</p>'}</section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.cancel-ticket').addEventListener('click', () => showCancelFlow(modal, booking));
+  modal.querySelector('.change-ticket').addEventListener('click', () => showChangeFlow(modal, booking));
+  modal.showModal();
+};
+const showCancelEstimate = (modal, booking) => {
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">Ã—</button><p class="eyebrow">CANCEL TICKET</p><h2>Cancellation estimate</h2><p class="modal-copy">Review the estimated refund before submitting this ticket cancellation request.</p><section class="fee-summary"><div><span>Original ticket amount</span><b>${booking.total}</b></div><div><span>Airline cancellation fee</span><b>âˆ’ Â¥ 320.00</b></div><div><span>Service fee</span><b>âˆ’ Â¥ 60.00</b></div><div class="fee-total"><span>Estimated refund</span><strong>Â¥ 900.00</strong></div></section><p class="booking-warning">After confirmation, the cancellation is sent to the airline. Final refund is subject to fare rules and airline approval.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel">Confirm cancellation</button></div></section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.confirm-cancel').addEventListener('click', () => { modal.close(); toast(`Cancellation request for ${booking.ref} created. Estimated refund: Â¥ 900.00.`); });
+};
+const showChangeEstimate = (modal, booking) => {
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">Ã—</button><p class="eyebrow">CHANGE BOOKING</p><h2>Change itinerary</h2><p class="modal-copy">Choose which flight to change, then select the requested new travel date.</p><section class="change-options"><label><input type="radio" name="change-scope" value="both" checked /> Change both flights</label><label><input type="radio" name="change-scope" value="outbound" /> Departure flight only</label><label><input type="radio" name="change-scope" value="return" /> Return flight only</label></section><label class="change-date">New travel date<input type="date" min="2026-08-08" value="2026-08-25" /></label><section class="fee-summary change-estimate" hidden><div><span>Airline change fee</span><b>Â¥ 150.00</b></div><div><span>Estimated fare difference</span><b>Â¥ 180.00</b></div><div class="fee-total"><span>Estimated additional payment</span><strong>Â¥ 330.00</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change">Calculate change</button><button type="button" class="primary confirm-change" hidden>Confirm change request</button></div></section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.calculate-change').addEventListener('click', event => { modal.querySelector('.change-estimate').hidden = false; modal.querySelector('.confirm-change').hidden = false; event.currentTarget.textContent = 'Recalculate'; });
+  modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} created. Estimated additional payment: Â¥ 330.00.`); });
+};
+const bookingLegs = booking => {
+  const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
+  const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
+  const legs = [{ key: 'outbound', route: `${from} &rarr; ${to}`, flight: 'Spring Airlines &middot; 9C 7058', time: '13:00 &rarr; 17:00', flown: states.outbound === 'flown' }];
+  if (!booking.oneWay) legs.push({ key: 'return', route: `${to} &rarr; ${from}`, flight: 'Spring Airlines &middot; 9C 7057', time: '08:10 &rarr; 12:00', flown: states.return === 'flown' });
+  return legs;
+};
+const flightChoice = (leg, mode, checked = false) => `<label class="flight-choice ${leg.flown ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !leg.flown ? 'checked' : ''} ${leg.flown ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : 'Select'}</i></label>`;
+const passengerChoices = (booking, mode) => (booking.passengers || [booking.passenger]).map((passenger, index) => `<label class="passenger-choice"><input type="checkbox" name="${mode}-passenger" value="${index}" checked /><span><strong>${index + 1}. ${passenger}</strong><small>Adult passenger</small></span></label>`).join('');
+const yen = value => `¥ ${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const showCancelSelection = (modal, booking) => {
+  const legs = bookingLegs(booking);
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the flight and passenger(s) to cancel. A flown segment cannot be cancelled.</p><section class="selection-group"><h3>Flights</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'cancel', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'cancel')}</section></section><section class="fee-summary cancel-estimate" hidden></section><p class="booking-warning" hidden>After confirmation, the cancellation is sent to the airline. The final refund is subject to airline fare rules and approval.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-cancel">Calculate refund</button><button type="button" class="primary confirm-cancel" hidden>Confirm cancellation</button></div></section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.calculate-cancel').addEventListener('click', event => {
+    const selected = [...modal.querySelectorAll('[name="cancel-leg"]:checked')];
+    const selectedPassengers = modal.querySelectorAll('[name="cancel-passenger"]:checked').length;
+    if (!selected.length || !selectedPassengers) { modal.querySelector('.cancel-estimate').hidden = true; modal.querySelector('.booking-warning').hidden = true; modal.querySelector('.confirm-cancel').hidden = true; return; }
+    const ticketAmount = Number(String(booking.total).replace(/[^\d.]/g, '')) * (selected.length / legs.length) * (selectedPassengers / (booking.passengerCount || 1));
+    const airlineFee = ticketAmount * .25;
+    const serviceFee = 30 * selected.length * selectedPassengers;
+    const estimate = { amount: yen(ticketAmount), airline: `− ${yen(airlineFee)}`, service: `− ${yen(serviceFee)}`, refund: yen(Math.max(0, ticketAmount - airlineFee - serviceFee)) };
+    modal.querySelector('.cancel-estimate').innerHTML = `<div><span>Selected ticket amount</span><b>${estimate.amount}</b></div><div><span>Airline cancellation fee</span><b>${estimate.airline}</b></div><div><span>Service fee</span><b>${estimate.service}</b></div><div class="fee-total"><span>Refund</span><strong>${estimate.refund}</strong></div>`;
+    modal.querySelector('.cancel-estimate').hidden = false;
+    modal.querySelector('.booking-warning').hidden = false;
+    modal.querySelector('.confirm-cancel').hidden = false;
+    event.currentTarget.textContent = 'Recalculate refund';
+  });
+  const cancelCalculator = modal.querySelector('.calculate-cancel');
+  modal.querySelectorAll('[name="cancel-leg"], [name="cancel-passenger"]').forEach(input => input.addEventListener('change', () => cancelCalculator.click()));
+  cancelCalculator.click();
+  modal.querySelector('.confirm-cancel').addEventListener('click', () => { modal.close(); toast(`Cancellation request for ${booking.ref} created.`); });
+};
+const showChangeSelection = (modal, booking) => {
+  const legs = bookingLegs(booking);
+  const renderDates = () => [...modal.querySelectorAll('[name="change-leg"]:checked')].map(input => `<label class="change-date"><span>New date for ${input.value === 'outbound' ? 'departure flight' : 'return flight'}</span><input type="date" min="2026-08-08" value="2026-08-25" /></label>`).join('') || '<p class="selection-hint">Select an active flight to choose a new date.</p>';
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the flight and passenger(s) to change. Used segments are shown as Flown and cannot be changed.</p><section class="selection-group"><h3>Flights</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change')}</section></section><section class="change-date-list"></section><section class="fee-summary change-estimate" hidden></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change">Calculate change</button><button type="button" class="primary confirm-change" hidden>Confirm change request</button></div></section>`;
+  const dateList = modal.querySelector('.change-date-list');
+  const refreshDates = () => { dateList.innerHTML = renderDates(); };
+  refreshDates();
+  modal.querySelectorAll('[name="change-leg"]').forEach(input => input.addEventListener('change', refreshDates));
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.calculate-change').addEventListener('click', event => {
+    const selected = modal.querySelectorAll('[name="change-leg"]:checked').length;
+    const selectedPassengers = modal.querySelectorAll('[name="change-passenger"]:checked').length;
+    if (!selected || !selectedPassengers) { modal.querySelector('.change-estimate').hidden = true; modal.querySelector('.confirm-change').hidden = true; return; }
+    const changeFee = 150 * selected * selectedPassengers;
+    const fareDifference = 180 * selected * selectedPassengers;
+    const total = changeFee + fareDifference;
+    modal.querySelector('.change-estimate').innerHTML = `<div><span>Airline change fee</span><b>${yen(changeFee)}</b></div><div><span>Fare difference</span><b>${yen(fareDifference)}</b></div><div class="fee-total"><span>Additional payment</span><strong>${yen(total)}</strong></div>`;
+    modal.querySelector('.change-estimate').hidden = false;
+    modal.querySelector('.confirm-change').hidden = false;
+    event.currentTarget.textContent = 'Recalculate change';
+  });
+  const changeCalculator = modal.querySelector('.calculate-change');
+  modal.querySelectorAll('[name="change-leg"], [name="change-passenger"]').forEach(input => input.addEventListener('change', () => changeCalculator.click()));
+  changeCalculator.click();
+  modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} created.`); });
+};
+const selectedPassengerNames = (modal, mode, booking) => [...modal.querySelectorAll(`[name="${mode}-passenger"]:checked`)].map(input => (booking.passengers || [booking.passenger])[Number(input.value)]);
+const showCancelFlow = (modal, booking) => {
+  const legs = bookingLegs(booking);
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the flight and passenger(s) to cancel. Flown flights cannot be cancelled.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'cancel-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'cancel-flow')}</section></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-cancel-flow">Calculate refund</button></div></section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.calculate-cancel-flow').addEventListener('click', () => {
+    const selectedLegs = legs.filter(leg => modal.querySelector(`[name="cancel-flow-leg"][value="${leg.key}"]`)?.checked);
+    const passengers = selectedPassengerNames(modal, 'cancel-flow', booking);
+    if (!selectedLegs.length || !passengers.length) return toast('Select at least one active flight and one passenger.');
+    const ticketAmount = Number(String(booking.total).replace(/[^\d.]/g, '')) * (selectedLegs.length / legs.length) * (passengers.length / (booking.passengerCount || 1));
+    const airlineFee = ticketAmount * .25; const serviceFee = 30 * selectedLegs.length * passengers.length; const refund = Math.max(0, ticketAmount - airlineFee - serviceFee);
+    modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Cancellation summary</h2><section class="summary-selection"><h3>Flights to cancel</h3>${selectedLegs.map(leg => `<div><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div>`).join('')}<h3>Passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="fee-summary"><div><span>Selected ticket amount</span><b>${yen(ticketAmount)}</b></div><div><span>Airline cancellation fee</span><b>− ${yen(airlineFee)}</b></div><div><span>Service fee</span><b>− ${yen(serviceFee)}</b></div><div class="fee-total"><span>Refund</span><strong>${yen(refund)}</strong></div></section><p class="booking-warning">The final refund is subject to airline fare rules and approval.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel">Confirm cancellation</button></div></section>`;
+    modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+    modal.querySelector('.back-booking').addEventListener('click', () => showCancelFlow(modal, booking));
+    modal.querySelector('.confirm-cancel').addEventListener('click', () => { modal.close(); toast(`Cancellation request for ${booking.ref} created.`); });
+  });
+};
+const showChangeFlow = (modal, booking) => {
+  const legs = bookingLegs(booking);
+  const replacements = leg => {
+    const flightNumber = leg.key === 'outbound' ? '9C 7058' : '9C 7057';
+    const flightTime = leg.key === 'outbound' ? '13:00 → 17:00' : '08:10 → 12:00';
+    const days = '';
+    return `<section class="replacement-flight" data-for="${leg.key}"><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>Spring Airlines &middot; ${flightNumber}</strong><small>${leg.route} &middot; ${flightTime}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="${flightNumber}" data-time="${flightTime}" data-fare="">Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>August 2026</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days">${days}</div><p>Same airline and flight availability. – means no flight available.</p></div><div class="daily-flight-options"></div></section>`;
+  };
+  const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight').forEach(section => {
+    const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options'); const calendarToday = new Date(); calendarToday.setHours(0, 0, 0, 0); const calendarYear = calendarToday.getFullYear(); let shownMonth = calendarToday.getMonth();
+    const renderDailyFlights = (date, baseFare) => {
+      const twoFlights = Number(date.slice(-2)) % 2 === 0;
+      const flight = trigger.dataset.flight; const time = trigger.dataset.time;
+      const option = (number, timing, fare, checked) => `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${number}|${timing}|${fare}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines &middot; ${number}</strong><small>${timing} &middot; Economy</small></span><b>+ ${yen(fare)}</b></label>`;
+      choices.innerHTML = `<h3>Available flights on ${date}</h3>${option(flight, time, baseFare, true)}${twoFlights ? option(flight === '9C 7058' ? '9C 7012' : '9C 7011', flight === '9C 7058' ? '16:10 → 20:15' : '14:15 → 18:05', Number(baseFare) + 80, false) : ''}<div class="pre-calculate-fare">Fare difference <strong>+ ${yen(baseFare)}</strong></div>`;
+      choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => { const fare = input.value.split('|')[2]; trigger.dataset.fare = fare; trigger.dataset.flight = input.value.split('|')[0]; trigger.dataset.time = input.value.split('|')[1]; choices.querySelector('.pre-calculate-fare').innerHTML = `Fare difference <strong>+ ${yen(fare)}</strong>`; }));
+    };
+    const selectDay = day => { section.querySelectorAll('.availability-day').forEach(item => item.classList.remove('selected')); day.classList.add('selected'); trigger.dataset.fare = day.dataset.fare; trigger.textContent = `${day.dataset.date} · ${yen(day.dataset.fare)}`; calendar.hidden = true; renderDailyFlights(day.dataset.date, day.dataset.fare); };
+    const renderMonth = () => {
+      const year = calendarYear; const first = new Date(year, shownMonth, 1); const start = (first.getDay() + 6) % 7; const totalDays = new Date(year, shownMonth + 1, 0).getDate();
+      calendar.querySelector('.availability-head strong').textContent = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      const blanks = Array.from({ length: start }, () => '<span class="availability-blank"></span>').join('');
+      const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const dateObject = new Date(year, shownMonth, day); const price = (day + shownMonth) % 5 === 0 ? null : 140 + ((day * 17 + shownMonth * 11) % 7) * 20; const date = `${year}-${String(shownMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; const disabled = price === null || dateObject < calendarToday; return `<button type="button" class="availability-day ${price === null ? 'unavailable' : ''}${dateObject.getTime() === calendarToday.getTime() ? ' today' : ''}" data-date="${date}" data-fare="${price ?? ''}" ${disabled ? 'disabled' : ''}><strong>${day}</strong><span>${price === null ? '–' : yen(price)}</span></button>`; }).join('');
+      calendar.querySelector('.availability-days').innerHTML = `${blanks}${buttons}`;
+      calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(day => day.addEventListener('click', () => selectDay(day)));
+    };
+    trigger.addEventListener('click', () => { calendar.hidden = !calendar.hidden; });
+    calendar.querySelector('.availability-prev').addEventListener('click', () => { shownMonth = Math.max(calendarToday.getMonth(), shownMonth - 1); renderMonth(); });
+    calendar.querySelector('.availability-next').addEventListener('click', () => { shownMonth = Math.min(11, shownMonth + 1); renderMonth(); });
+    renderMonth();
+  });
+  const renderReplacements = () => { const selected = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked); modal.querySelector('.replacement-list').innerHTML = selected.map(replacements).join('') || '<p class="selection-hint">Select an active flight first.</p>'; bindAvailabilityCalendars(); };
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the itinerary and passenger(s), then select a new date and flight.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change-flow')}</section></section><section class="replacement-list"></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change-flow">Calculate change</button></div></section>`;
+  renderReplacements();
+  modal.querySelectorAll('[name="change-flow-leg"]').forEach(input => input.addEventListener('change', renderReplacements));
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.calculate-change-flow').addEventListener('click', () => {
+    const selectedLegs = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked);
+    const passengers = selectedPassengerNames(modal, 'change-flow', booking);
+    const selectedNewFlights = selectedLegs.map(leg => modal.querySelector(`[name="daily-${leg.key}"]:checked`));
+    if (!selectedLegs.length || !passengers.length || selectedNewFlights.some(flight => !flight)) return toast('Select flights, passengers, and replacement flights.');
+    const changeFee = 150 * selectedLegs.length * passengers.length;
+    const fareDifference = selectedNewFlights.reduce((total, input) => total + Number(input.value.split('|')[2]) * passengers.length, 0);
+    const additional = changeFee + fareDifference;
+    const comparisons = selectedLegs.map((leg, index) => { const [number, time, fare] = selectedNewFlights[index].value.split('|'); return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${leg.route}</strong><span>Spring Airlines &middot; ${number} &middot; ${time}</span><em>+ ${yen(fare)}</em></div></div>`; }).join('');
+    modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Change summary</h2><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${yen(changeFee)}</b></div><div><span>Fare difference</span><b>${yen(fareDifference)}</b></div><div class="fee-total"><span>Additional payment</span><strong>${yen(additional)}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm change request</button></div></section>`;
+    modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+    modal.querySelector('.back-booking').addEventListener('click', () => showChangeFlow(modal, booking));
+    modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} created.`); });
+  });
+};
+document.addEventListener('click', event => { const button = event.target.closest('.view-booking'); if (button) openBookingDetail(button.dataset.bookingRef); });
 document.querySelector('#ledger').innerHTML = ledger.map(row => `<tr>${row.map((x,i)=> `<td class="${i===3 ? (x === 'Credit' ? 'credit' : 'debit') : ''}">${x}</td>`).join('')}</tr>`).join('');
-const showView = id => { document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.view===id)); document.querySelector('#page-title').textContent = id==='dashboard' ? 'Good morning, Bayar' : id==='search' ? 'Flight search' : id[0].toUpperCase()+id.slice(1); window.scrollTo({top:0,behavior:'smooth'}); };
+const showView = id => { document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.view===id)); document.querySelector('main > header').hidden = id === 'bookings'; document.querySelector('#page-title').textContent = id==='dashboard' ? 'Good morning, Bayar' : id==='search' ? 'Flight search' : id[0].toUpperCase()+id.slice(1); window.scrollTo({top:0,behavior:'smooth'}); };
 document.querySelectorAll('[data-view], [data-view-target]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view || btn.dataset.viewTarget)));
 const formatMinutes = minutes => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 const resultArea = document.querySelector('#flight-results');

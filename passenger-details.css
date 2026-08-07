@@ -1,0 +1,1 @@
+.passenger-name-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.passenger-type{border-radius:12px;background:#eaf1ff;color:#245bd4;padding:4px 7px;font-size:10px;letter-spacing:.06em}.passenger-document{grid-template-columns:minmax(110px,auto) 1fr!important}@media(max-width:650px){.passenger-document{grid-template-columns:1fr!important}}
