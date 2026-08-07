@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="search-header.css" />
     <link rel="stylesheet" href="passenger-country.css" />
     <link rel="stylesheet" href="country-menu.css" />
+    <link rel="stylesheet" href="auth.css" />
   </head>
   <body>
     <aside class="sidebar">
@@ -61,6 +62,8 @@
     <dialog id="ticket-modal"><form method="dialog"><button class="close" value="cancel">×</button><div class="ticket-icon">✓</div><p class="eyebrow">MOCK BOOKING CREATED</p><h2>Booking is ready to ticket</h2><p class="modal-copy">In production, this step will reserve through the Spring Airlines API, then debit the wallet only after ticket issuance succeeds.</p><div class="booking-ref">PNR <strong>BM7K2Q</strong><span>¥ 1,280.00</span></div><button class="primary full" value="submit">View booking</button></form></dialog>
     <div id="toast" role="status"></div>
     <div id="calendar-popover" class="calendar-popover" hidden></div>
+    <div id="auth-root"></div>
     <script src="app.js"></script>
+    <script src="auth.js"></script>
   </body>
 </html>
