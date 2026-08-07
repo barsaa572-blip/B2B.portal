@@ -6,8 +6,9 @@
   };
   const root = document.querySelector('#auth-root');
   const savedSession = sessionStorage.getItem('flightb2b-demo-session');
-  const stored = savedSession ? JSON.parse(savedSession) : null;
-  const validStoredSession = stored && stored.username === 'Admin';
+  let stored = null;
+  try { stored = savedSession ? JSON.parse(savedSession) : null; } catch { sessionStorage.removeItem('flightb2b-demo-session'); }
+  const validStoredSession = stored && stored.username === 'Admin' && roles[stored.role];
   if (savedSession && !validStoredSession) sessionStorage.removeItem('flightb2b-demo-session');
   let chosenRole = validStoredSession ? stored.role : 'agent';
   const escape = value => String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
