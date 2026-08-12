@@ -1,5 +1,5 @@
 (() => {
-  let overview = { agencies: [], branches: [], profiles: [], wallets: [] };
+  let overview = { agencies: [], branches: [], profiles: [], wallets: [], topups: [] };
   const byId = id => document.querySelector(id);
   const session = () => JSON.parse(sessionStorage.getItem('flightb2b-session') || '{}');
   const escape = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
@@ -21,7 +21,7 @@
     byId('#agency-list').innerHTML = visible.map(item => {
       const offices = overview.branches.filter(entry => entry.agency_id === item.id).length;
       const users = overview.profiles.filter(entry => entry.agency_id === item.id).length;
-      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn wallet-adjust" data-agency-id="${item.id}">Balance</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No agencies found.</td></tr>';
     byId('#user-list').innerHTML = overview.profiles.map(item => {
       const company = agency(item.agency_id)?.name || 'Platform';
@@ -35,6 +35,13 @@
     byId('#admin-agency-count').textContent = activeAgencies;
     byId('#admin-user-count').textContent = activeUsers;
     byId('#admin-network-balance').textContent = money(total);
+    const topupTarget = byId('#admin-topups');
+    if (topupTarget) topupTarget.innerHTML = (overview.topups || []).map(item => {
+      const company = agency(item.agency_id)?.name || 'Agency';
+      const expiry = item.expires_at ? new Date(item.expires_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+      const status = String(item.status || 'pending');
+      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td>${money(item.amount_cny)}</td><td><strong>₮ ${Number(item.total_mnt || 0).toLocaleString('en-US')}</strong></td><td>${expiry}</td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="7" class="no-bookings">No top-up invoices yet.</td></tr>';
   };
   const modal = () => {
     let element = byId('#admin-modal');
@@ -93,6 +100,7 @@
     byId('#add-agency')?.addEventListener('click', openAgency);
     byId('#add-user')?.addEventListener('click', openUser);
     byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('agency-open')) openAgencyAccess(button.dataset.agencyId); if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
+    byId('#admin-topups')?.addEventListener('click', async event => { const button = event.target.closest('.topup-approve'); if (!button || !confirm('Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify('Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
   };
