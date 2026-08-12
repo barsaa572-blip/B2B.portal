@@ -142,7 +142,9 @@ export async function createTopupRequest({ profile, amount, paymentReference, no
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
   const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const rate = await getCnyMntRate();
-  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: Number(amount), amount_mnt: quoteCnyToMnt(amount, rate), official_cny_mnt_rate: rate.officialRateMnt, markup_mnt: rate.markupMnt, effective_cny_mnt_rate: rate.effectiveRateMnt, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
+  const amountMnt = quoteCnyToMnt(amount, rate);
+  const serviceFeeMnt = Math.round(amountMnt * 0.03);
+  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: Number(amount), amount_mnt: amountMnt, service_fee_mnt: serviceFeeMnt, total_mnt: amountMnt + serviceFeeMnt, official_cny_mnt_rate: rate.officialRateMnt, markup_mnt: rate.markupMnt, effective_cny_mnt_rate: rate.effectiveRateMnt, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
   return created[0];
 }
 
