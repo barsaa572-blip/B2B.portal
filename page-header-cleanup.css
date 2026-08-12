@@ -1,0 +1,35 @@
+/* Each view has its own page heading. Hide the old global heading to avoid duplicates. */
+main {
+  padding-top: 24px;
+}
+
+main > header {
+  height: 0;
+  margin: 0;
+  position: relative;
+  z-index: 2;
+}
+
+main > header > div:first-child {
+  display: none;
+}
+
+/* The booking route is deliberately moved here by the booking flow. */
+main > header > div:first-child:has(.header-booking-route) {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+main > header .header-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+@media (max-width: 650px) {
+  main {
+    padding-top: 18px;
+  }
+}
