@@ -42,6 +42,7 @@
       const status = String(item.status || 'pending');
       return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td>${money(item.amount_cny)}</td><td><strong>₮ ${Number(item.total_mnt || 0).toLocaleString('en-US')}</strong></td><td>${expiry}</td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="7" class="no-bookings">No top-up invoices yet.</td></tr>';
+    topupTarget.querySelectorAll('.topup-approve').forEach(button => button.insertAdjacentHTML('afterend', `<button class="secondary topup-delete" data-topup-id="${button.dataset.topupId}">Delete</button>`));
   };
   const modal = () => {
     let element = byId('#admin-modal');
@@ -100,7 +101,7 @@
     byId('#add-agency')?.addEventListener('click', openAgency);
     byId('#add-user')?.addEventListener('click', openUser);
     byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('agency-open')) openAgencyAccess(button.dataset.agencyId); if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
-    byId('#admin-topups')?.addEventListener('click', async event => { const button = event.target.closest('.topup-approve'); if (!button || !confirm('Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify('Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });
+    byId('#admin-topups')?.addEventListener('click', async event => { const approve = event.target.closest('.topup-approve'); const remove = event.target.closest('.topup-delete'); const button = approve || remove; if (!button) return; const deleting = Boolean(remove); if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { if (deleting) await api(`/api/topups/${button.dataset.topupId}`, { method: 'DELETE' }); else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
   };
