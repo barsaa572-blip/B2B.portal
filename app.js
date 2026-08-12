@@ -345,7 +345,7 @@ document.querySelector('#search-form').addEventListener('submit', async e => {
   finally { button.disabled = false; button.textContent = 'Search flights'; }
 });
 bindFlightButtons();
-const topup = document.querySelector('#topup-modal');
+const topup = document.querySelector('#topup-modal'); topup.querySelector('.close').addEventListener('click', () => topup.close());
 const toast = message => { const t=document.querySelector('#toast');t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400); };
 const portalSession = () => JSON.parse(sessionStorage.getItem('flightb2b-session') || '{}');
 const secureFetch = async (url, options = {}) => fetch(url, { ...options, headers: { authorization: `Bearer ${portalSession().accessToken}`, ...(options.headers || {}) } });
