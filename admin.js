@@ -38,9 +38,8 @@
     const topupTarget = byId('#admin-topups');
     if (topupTarget) topupTarget.innerHTML = (overview.topups || []).map(item => {
       const company = agency(item.agency_id)?.name || 'Agency';
-      const expiry = item.expires_at ? new Date(item.expires_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
       const status = String(item.status || 'pending');
-      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td>${money(item.amount_cny)}</td><td><strong>₮ ${Number(item.total_mnt || 0).toLocaleString('en-US')}</strong></td><td>${expiry}</td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
+      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td>${money(item.amount_cny)}</td><td><strong>₮ ${Number(item.total_mnt || 0).toLocaleString('en-US')}</strong></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="7" class="no-bookings">No top-up invoices yet.</td></tr>';
     topupTarget.querySelectorAll('.topup-approve').forEach(button => button.insertAdjacentHTML('afterend', `<button class="secondary topup-delete" data-topup-id="${button.dataset.topupId}">Delete</button>`));
   };

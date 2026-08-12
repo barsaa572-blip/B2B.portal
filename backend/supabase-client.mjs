@@ -105,13 +105,12 @@ export async function updateOfficeAgent(manager, id, { fullName, branchId, activ
 }
 
 export async function getAdminOverview() {
-  await expirePendingTopupRequests();
   const [agencies, branches, profiles, wallets, topups] = await Promise.all([
     secretRequest('/rest/v1/agencies?select=id,name,active,created_at&order=name.asc'),
     secretRequest('/rest/v1/branches?select=id,agency_id,name&order=name.asc'),
     secretRequest('/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,active,created_at&order=full_name.asc'),
     secretRequest('/rest/v1/wallets?select=agency_id,balance_cny,updated_at'),
-    secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,total_mnt,status,created_at,expires_at&order=created_at.desc')
+    secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,total_mnt,status,created_at&order=created_at.desc')
   ]);
   return { agencies, branches, profiles, wallets, topups };
 }
@@ -185,7 +184,6 @@ export async function createTopupRequest({ profile, amount, paymentReference, no
 }
 
 export async function getTopupRequests(profile) {
-  await expirePendingTopupRequests();
   let filter = profile.role === 'platform_admin' ? '' : profile.role === 'office_manager' ? `&agency_id=eq.${profile.agency_id}` : `&requested_by=eq.${profile.id}`;
   return secretRequest(`/rest/v1/topup_requests?select=*&order=created_at.desc${filter}`);
 }
@@ -210,7 +208,6 @@ export async function getTopupInvoice(profile, id) {
 }
 
 export async function approveTopupRequest(id, approvedBy) {
-  await expirePendingTopupRequests();
   return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });
 }
 

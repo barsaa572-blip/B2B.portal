@@ -5,13 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { getSpringStatus } from './backend/spring-client.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expirePendingTopupRequests, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
-const expireInvoices = () => expirePendingTopupRequests().catch(error => console.error('Top-up expiry check failed:', error.message));
-expireInvoices();
-setInterval(expireInvoices, 60_000);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 const send = (res, status, data, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' }); res.end(Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data)); };
 const readJson = req => new Promise((resolve, reject) => { let raw = ''; req.on('data', chunk => { raw += chunk;
