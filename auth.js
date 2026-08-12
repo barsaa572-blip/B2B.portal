@@ -42,6 +42,7 @@
     const currentRole = roleKey(session.profile.role);
     document.body.classList.add(`role-${currentRole}`);
     window.applyBookingScope?.(currentRole);
+    if (currentRole === 'platform') window.loadAdministration?.();
     bindSidebarAccount(session);
   };
   const render = () => {
