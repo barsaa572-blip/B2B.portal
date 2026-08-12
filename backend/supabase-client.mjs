@@ -135,3 +135,29 @@ export async function deleteUser(id) {
   const response = await request(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` } });
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || 'Unable to delete user.'); }
 }
+
+export async function createTopupRequest({ profile, amount, paymentReference, note }) {
+  if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
+  const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: Number(amount), payment_reference: paymentReference, note: note || null } });
+  return created[0];
+}
+
+export async function getTopupRequests(profile) {
+  let filter = profile.role === 'platform_admin' ? '' : profile.role === 'office_manager' ? `&agency_id=eq.${profile.agency_id}` : `&requested_by=eq.${profile.id}`;
+  return secretRequest(`/rest/v1/topup_requests?select=*&order=created_at.desc${filter}`);
+}
+
+export async function getTopupInvoice(profile, id) {
+  const rows = await secretRequest(`/rest/v1/topup_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
+  const request = rows[0];
+  if (!request) throw new Error('Invoice not found.');
+  const allowed = profile.role === 'platform_admin' || request.requested_by === profile.id || (profile.role === 'office_manager' && request.agency_id === profile.agency_id);
+  if (!allowed) throw new Error('You do not have access to this invoice.');
+  const agencies = await secretRequest(`/rest/v1/agencies?select=name&id=eq.${encodeURIComponent(request.agency_id)}&limit=1`);
+  return { ...request, agencyName: agencies[0]?.name || 'Agency' };
+}
+
+export async function approveTopupRequest(id, approvedBy) {
+  return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });
+}
