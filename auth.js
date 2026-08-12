@@ -4,11 +4,12 @@
     office: { label: 'Office manager', description: 'View your agency or branch bookings, statistics and wallet balance.' },
     platform: { label: 'Platform admin', description: 'Manage every agency, user, booking and wallet adjustment.' }
   };
+  const roleKey = role => ({ office_manager: 'office', platform_admin: 'platform' }[role] || role);
   const root = document.querySelector('#auth-root');
   const savedSession = sessionStorage.getItem('flightb2b-session');
   let stored = null;
   try { stored = savedSession ? JSON.parse(savedSession) : null; } catch { sessionStorage.removeItem('flightb2b-session'); }
-  const validStoredSession = stored && stored.accessToken && stored.profile && roles[stored.profile.role];
+  const validStoredSession = stored && stored.accessToken && stored.profile && roles[roleKey(stored.profile.role)];
   if (savedSession && !validStoredSession) sessionStorage.removeItem('flightb2b-session');
   const escape = value => String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
   const signOut = () => { sessionStorage.removeItem('flightb2b-session'); sessionStorage.removeItem('flightb2b-demo-session'); location.reload(); };
@@ -21,7 +22,7 @@
     const signout = document.querySelector('.sidebar-signout');
     if (!avatar || !role || !username || !more || !menu || !signout) return;
     avatar.textContent = session.profile.full_name.slice(0, 1).toUpperCase();
-    role.textContent = roles[session.profile.role].label;
+    role.textContent = roles[roleKey(session.profile.role)].label;
     username.textContent = session.profile.full_name;
     if (more.dataset.bound) return;
     more.dataset.bound = 'true';
@@ -38,8 +39,9 @@
   const applyRole = session => {
     root.hidden = true;
     document.body.classList.remove('role-agent','role-office','role-platform');
-    document.body.classList.add(`role-${session.profile.role}`);
-    window.applyBookingScope?.(session.profile.role);
+    const currentRole = roleKey(session.profile.role);
+    document.body.classList.add(`role-${currentRole}`);
+    window.applyBookingScope?.(currentRole);
     bindSidebarAccount(session);
   };
   const render = () => {

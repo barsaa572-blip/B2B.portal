@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="auth.css" />
     <link rel="stylesheet" href="profile-menu.css" />
     <link rel="stylesheet" href="passenger-details.css" />
+    <link rel="stylesheet" href="admin.css" />
   </head>
   <body>
     <aside class="sidebar">
@@ -33,6 +34,7 @@
         <button class="nav-link" data-view="bookings"><span>▣</span> Bookings</button>
         <button class="nav-link" data-view="wallet"><span>◉</span> Wallet</button>
         <button class="nav-link" data-view="reports"><span>▤</span> Reports</button>
+        <button class="nav-link admin-nav" data-view="administration"><span>⚙</span> Administration</button>
       </nav>
       <div class="sidebar-foot">
         <div class="avatar" id="sidebar-avatar">A</div>
@@ -63,6 +65,13 @@
       <section id="wallet" class="view"><div class="section-heading"><div><p class="eyebrow">AGENCY FINANCE</p><h1>Wallet</h1><p>All values are recorded in CNY.</p></div><button class="primary" data-open-topup>Request top-up</button></div><div class="grid-2"><section class="balance-card"><small>AVAILABLE BALANCE</small><strong>¥ <span class="balance-copy">12,480.00</span></strong><p>Funds available for ticket issuance</p><hr><div><span>Pending top-ups</span><b>¥ 0.00</b></div></section><section class="panel policy"><h2>Top-up process</h2><ol><li>Submit a CNY top-up request with transfer proof.</li><li>Finance verifies the bank transfer.</li><li>Your credit is added and a ledger record is created.</li></ol></section></div><section class="panel"><div class="panel-title"><div><h2>Wallet ledger</h2><p>Immutable financial transaction history.</p></div></div><div class="table-wrap"><table><thead><tr><th>DATE & TIME</th><th>REFERENCE</th><th>DESCRIPTION</th><th>TYPE</th><th>AMOUNT</th><th>BALANCE</th></tr></thead><tbody id="ledger"></tbody></table></div></section></section>
 
       <section id="reports" class="view"><div class="section-heading"><div><p class="eyebrow">ANALYTICS</p><h1>Reports</h1><p>Agency sales activity at a glance.</p></div></div><div class="empty-state"><span>▤</span><h2>Reports will be available in the next release</h2><p>Sales, ticketing, wallet and airline settlement reports will appear here.</p></div></section>
+
+      <section id="administration" class="view admin-view">
+        <div class="section-heading"><div><p class="eyebrow">PLATFORM CONTROL</p><h1>Agencies &amp; users</h1><p>Create agency access, offices and ticketing users. Balance changes are recorded in the ledger.</p></div><button class="primary" id="add-agency">Add agency</button></div>
+        <div class="grid-3 admin-stats"><article><small>ACTIVE AGENCIES</small><strong>3</strong><span>3 agencies can issue tickets</span></article><article><small>ACTIVE USERS</small><strong>12</strong><span>2 office managers · 10 agents</span></article><article><small>NETWORK BALANCE</small><strong>¥ 68,450.00</strong><span>Available across all agencies</span></article></div>
+        <section class="panel admin-panel"><div class="panel-title"><div><h2>Agency accounts</h2><p>Each agency has an independent wallet and booking data.</p></div><input id="agency-filter" placeholder="Search agency" /></div><div class="table-wrap"><table><thead><tr><th>AGENCY</th><th>OFFICES</th><th>USERS</th><th>AVAILABLE BALANCE</th><th>STATUS</th><th></th></tr></thead><tbody id="agency-list"></tbody></table></div></section>
+        <section class="panel admin-panel"><div class="panel-title"><div><h2>User access</h2><p>Office managers can see their agency. Ticketing agents see their own bookings.</p></div><button class="secondary" id="add-user">Add user</button></div><div class="table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>AGENCY / OFFICE</th><th>ROLE</th><th>STATUS</th><th></th></tr></thead><tbody id="user-list"></tbody></table></div></section>
+      </section>
     </main>
 
     <dialog id="topup-modal"><form method="dialog" id="topup-form"><button class="close" value="cancel">×</button><p class="eyebrow">WALLET TOP-UP</p><h2>Request a balance top-up</h2><p class="modal-copy">Your request will be reviewed by finance before credit is added.</p><label>Amount (CNY)<input id="topup-amount" type="number" min="1" placeholder="e.g. 5000" required /></label><label>Bank transfer reference<input placeholder="Transaction reference" required /></label><label>Note <textarea placeholder="Optional note for finance"></textarea></label><button class="primary full" value="submit">Submit request</button></form></dialog>
@@ -71,6 +80,7 @@
     <div id="calendar-popover" class="calendar-popover" hidden></div>
     <div id="auth-root"></div>
     <script src="app.js"></script>
+    <script src="admin.js"></script>
     <script src="auth.js"></script>
   </body>
 </html>
