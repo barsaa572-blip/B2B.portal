@@ -1,5 +1,5 @@
 const MARKUP_MNT = 4;
-const DEFAULT_SOURCE = 'https://monxansh.appspot.com/xansh.json?currency=CNY';
+const DEFAULT_SOURCE = 'http://127.0.0.1:8000/api/rates/bank/MongolBank?limit=1';
 const CACHE_MS = 6 * 60 * 60 * 1000;
 let cachedRate = null;
 
@@ -27,9 +27,9 @@ export async function getCnyMntRate() {
   try {
     const response = await fetch(process.env.MONGOLBANK_CNY_RATE_API_URL || DEFAULT_SOURCE, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
     const body = await response.json();
-    const row = Array.isArray(body) ? body.find(item => String(item.code).toUpperCase() === 'CNY') : body;
-    const value = number(row?.rate_float ?? row?.rate);
-    const rate = buildRate({ official: value, rateDate: row?.rate_date || row?.last_date, source: 'monxansh.appspot.com / Mongolbank rate' });
+    const row = Array.isArray(body) ? body[0] : body;
+    const value = number(row?.rates?.cny?.noncash?.sell ?? row?.rates?.cny?.noncash?.buy ?? row?.rate_float ?? row?.rate);
+    const rate = buildRate({ official: value, rateDate: row?.date || row?.rate_date || row?.last_date, source: 'Local MongolBank exchange-rate service' });
     cachedRate = { value: rate, loadedAt: Date.now() };
     return rate;
   } catch (error) {
