@@ -104,3 +104,34 @@ export async function createUser({ email, password, fullName, agencyId, branchId
 export async function adjustWallet({ agencyId, amount, reason, createdBy }) {
   return secretRequest('/rest/v1/rpc/platform_adjust_wallet', { method: 'POST', body: { p_agency_id: agencyId, p_amount: Number(amount), p_reason: reason, p_created_by: createdBy } });
 }
+
+export async function updateAgency(id, { name, active }) {
+  const body = {};
+  if (name !== undefined) body.name = name;
+  if (active !== undefined) body.active = active;
+  const updated = await secretRequest(`/rest/v1/agencies?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body });
+  return updated[0];
+}
+
+export async function deleteAgency(id) {
+  const [profiles, bookings, transactions] = await Promise.all([
+    secretRequest(`/rest/v1/profiles?select=id&id=not.is.null&agency_id=eq.${encodeURIComponent(id)}&limit=1`),
+    secretRequest(`/rest/v1/bookings?select=id&agency_id=eq.${encodeURIComponent(id)}&limit=1`),
+    secretRequest(`/rest/v1/wallet_transactions?select=id&agency_id=eq.${encodeURIComponent(id)}&limit=1`)
+  ]);
+  if (profiles.length || bookings.length || transactions.length) throw new Error('This agency has users, bookings, or wallet history. Deactivate it instead to preserve its audit trail.');
+  await secretRequest(`/rest/v1/agencies?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function updateUser(id, { fullName, agencyId, branchId, role, active }) {
+  const updated = await secretRequest(`/rest/v1/profiles?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: { full_name: fullName, agency_id: agencyId || null, branch_id: branchId || null, role, active } });
+  return updated[0];
+}
+
+export async function deleteUser(id) {
+  const bookings = await secretRequest(`/rest/v1/bookings?select=id&created_by=eq.${encodeURIComponent(id)}&limit=1`);
+  if (bookings.length) throw new Error('This user has booking history. Deactivate the account instead to preserve the audit trail.');
+  const { secretKey } = config();
+  const response = await request(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` } });
+  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || 'Unable to delete user.'); }
+}

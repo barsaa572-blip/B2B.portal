@@ -21,13 +21,13 @@
     byId('#agency-list').innerHTML = visible.map(item => {
       const offices = overview.branches.filter(entry => entry.agency_id === item.id).length;
       const users = overview.profiles.filter(entry => entry.agency_id === item.id).length;
-      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td><button class="text-btn wallet-adjust" data-agency-id="${item.id}">Adjust balance</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn wallet-adjust" data-agency-id="${item.id}">Balance</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No agencies found.</td></tr>';
     byId('#user-list').innerHTML = overview.profiles.map(item => {
       const company = agency(item.agency_id)?.name || 'Platform';
       const office = branch(item.branch_id)?.name;
       const role = { agent: 'Ticketing agent', office_manager: 'Office manager', platform_admin: 'Platform administrator' }[item.role] || item.role;
-      return `<tr><td><strong>${escape(item.full_name)}</strong></td><td>${escape(item.email || 'Login account')}</td><td>${escape(company)}${office ? ` · ${escape(office)}` : ''}</td><td>${role}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td></td></tr>`;
+      return `<tr><td><strong>${escape(item.full_name)}</strong></td><td>${escape(item.email || 'Login account')}</td><td>${escape(company)}${office ? ` · ${escape(office)}` : ''}</td><td>${role}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn user-edit" data-user-id="${item.id}">Edit</button><button class="text-btn user-delete" data-user-id="${item.id}">Delete</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No users found.</td></tr>';
     const activeAgencies = overview.agencies.filter(item => item.active).length;
     const activeUsers = overview.profiles.filter(item => item.active).length;
@@ -61,12 +61,31 @@
     element.showModal(); element.querySelector('.close').onclick = () => closeModal(element);
     element.querySelector('form').onsubmit = async event => { event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget)); const submit = event.currentTarget.querySelector('.primary'); const error = event.currentTarget.querySelector('.admin-form-error'); submit.disabled = true; try { await api('/api/admin/wallet-adjustments', { method: 'POST', body: JSON.stringify({ ...values, agencyId }) }); closeModal(element); await load(); notify('Wallet adjustment recorded.'); } catch (issue) { error.textContent = issue.message; error.hidden = false; submit.disabled = false; } };
   };
+  const openEditAgency = agencyId => {
+    const item = agency(agencyId); const element = modal();
+    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">EDIT AGENCY</p><h2>${escape(item.name)}</h2><label>Agency name<input name="name" required value="${escape(item.name)}" /></label><label class="check-label"><input name="active" type="checkbox" ${item.active ? 'checked' : ''} /> Agency is active and can issue tickets</label><p class="admin-form-error" hidden></p><button class="primary full">Save changes</button></form>`;
+    element.showModal(); element.querySelector('.close').onclick = () => closeModal(element);
+    element.querySelector('form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const error = form.querySelector('.admin-form-error'); try { await api(`/api/admin/agencies/${agencyId}`, { method: 'PATCH', body: JSON.stringify({ name: new FormData(form).get('name'), active: form.elements.active.checked }) }); closeModal(element); await load(); notify('Agency updated.'); } catch (issue) { error.textContent = issue.message; error.hidden = false; } };
+  };
+  const openEditUser = userId => {
+    const item = overview.profiles.find(entry => entry.id === userId); const element = modal();
+    const agencyOptions = overview.agencies.map(entry => `<option value="${entry.id}" ${entry.id === item.agency_id ? 'selected' : ''}>${escape(entry.name)}</option>`).join('');
+    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">EDIT USER</p><h2>${escape(item.full_name)}</h2><label>Full name<input name="fullName" required value="${escape(item.full_name)}" /></label><label>Agency<select name="agencyId"><option value="">Platform / no agency</option>${agencyOptions}</select></label><label>Role<select name="role"><option value="agent" ${item.role === 'agent' ? 'selected' : ''}>Ticketing agent</option><option value="office_manager" ${item.role === 'office_manager' ? 'selected' : ''}>Office manager</option><option value="platform_admin" ${item.role === 'platform_admin' ? 'selected' : ''}>Platform administrator</option></select></label><label class="check-label"><input name="active" type="checkbox" ${item.active ? 'checked' : ''} /> Account is active</label><p class="admin-form-error" hidden></p><button class="primary full">Save changes</button></form>`;
+    element.showModal(); element.querySelector('.close').onclick = () => closeModal(element);
+    element.querySelector('form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const error = form.querySelector('.admin-form-error'); try { await api(`/api/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ fullName: new FormData(form).get('fullName'), agencyId: new FormData(form).get('agencyId'), role: new FormData(form).get('role'), active: form.elements.active.checked }) }); closeModal(element); await load(); notify('User updated.'); } catch (issue) { error.textContent = issue.message; error.hidden = false; } };
+  };
+  const remove = async (type, id) => {
+    const name = type === 'agencies' ? agency(id)?.name : overview.profiles.find(item => item.id === id)?.full_name;
+    if (!confirm(`Delete ${name}? If it has booking or financial history, the system will require deactivation instead.`)) return;
+    try { await api(`/api/admin/${type}/${id}`, { method: 'DELETE' }); await load(); notify(`${type === 'agencies' ? 'Agency' : 'User'} deleted.`); } catch (issue) { notify(issue.message); }
+  };
   const load = async () => { try { overview = await api('/api/admin/overview'); render(byId('#agency-filter')?.value); } catch (error) { notify(error.message); } };
   const setup = () => {
     byId('#agency-filter')?.addEventListener('input', event => render(event.target.value));
     byId('#add-agency')?.addEventListener('click', openAgency);
     byId('#add-user')?.addEventListener('click', openUser);
-    byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('.wallet-adjust'); if (button) openAdjustment(button.dataset.agencyId); });
+    byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
+    byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
   };
   window.loadAdministration = load;
