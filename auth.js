@@ -45,6 +45,7 @@
     if (currentRole === 'platform') window.loadAdministration?.();
     if (currentRole === 'office') window.loadTeamAccess?.();
     window.loadTopupInvoices?.();
+    window.loadWallet?.();
     bindSidebarAccount(session);
   };
   const render = () => {

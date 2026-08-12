@@ -190,6 +190,15 @@ export async function getTopupRequests(profile) {
   return secretRequest(`/rest/v1/topup_requests?select=*&order=created_at.desc${filter}`);
 }
 
+export async function getWalletDetails(profile) {
+  if (!profile.agency_id) throw new Error('Your account is not assigned to an agency wallet.');
+  const [wallets, transactions] = await Promise.all([
+    secretRequest(`/rest/v1/wallets?select=agency_id,balance_cny,updated_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&limit=1`),
+    secretRequest(`/rest/v1/wallet_transactions?select=id,entry_type,amount_cny,reason,created_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&order=created_at.desc&limit=100`)
+  ]);
+  return { wallet: wallets[0] || { balance_cny: 0 }, transactions };
+}
+
 export async function getTopupInvoice(profile, id) {
   const rows = await secretRequest(`/rest/v1/topup_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
   const request = rows[0];
