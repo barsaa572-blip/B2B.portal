@@ -161,3 +161,13 @@ export async function getTopupInvoice(profile, id) {
 export async function approveTopupRequest(id, approvedBy) {
   return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });
 }
+
+export async function deleteTopupRequest(profile, id) {
+  const rows = await secretRequest(`/rest/v1/topup_requests?select=id,status,requested_by,agency_id&id=eq.${encodeURIComponent(id)}&limit=1`);
+  const request = rows[0];
+  if (!request) throw new Error('Invoice not found.');
+  if (request.status !== 'pending') throw new Error('Approved or rejected invoices cannot be deleted.');
+  const allowed = profile.role === 'platform_admin' || request.requested_by === profile.id || (profile.role === 'office_manager' && request.agency_id === profile.agency_id);
+  if (!allowed) throw new Error('You do not have permission to delete this invoice.');
+  await secretRequest(`/rest/v1/topup_requests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
