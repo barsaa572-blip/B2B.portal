@@ -70,6 +70,40 @@ export async function requirePlatformAdmin(accessToken) {
   return profile;
 }
 
+export async function requireOfficeManager(accessToken) {
+  const profile = await profileForAccessToken(accessToken);
+  if (profile.role !== 'office_manager' || !profile.agency_id) throw new Error('Office manager access is required.');
+  return profile;
+}
+
+export async function getOfficeUserAccess(manager) {
+  const [agency, branches, profiles] = await Promise.all([
+    secretRequest(`/rest/v1/agencies?select=id,name,active&id=eq.${encodeURIComponent(manager.agency_id)}&limit=1`),
+    secretRequest(`/rest/v1/branches?select=id,agency_id,name&agency_id=eq.${encodeURIComponent(manager.agency_id)}&order=name.asc`),
+    secretRequest(`/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,active,created_at&agency_id=eq.${encodeURIComponent(manager.agency_id)}&order=full_name.asc`)
+  ]);
+  return { agency: agency[0] || null, branches, profiles };
+}
+
+export async function createOfficeAgent(manager, { email, password, fullName, branchId }) {
+  if (branchId) {
+    const branches = await secretRequest(`/rest/v1/branches?select=id&agency_id=eq.${encodeURIComponent(manager.agency_id)}&id=eq.${encodeURIComponent(branchId)}&limit=1`);
+    if (!branches.length) throw new Error('The selected office does not belong to your agency.');
+  }
+  return createUser({ email, password, fullName, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent' });
+}
+
+export async function updateOfficeAgent(manager, id, { fullName, branchId, active }) {
+  const users = await secretRequest(`/rest/v1/profiles?select=id,role,agency_id&id=eq.${encodeURIComponent(id)}&limit=1`);
+  const user = users[0];
+  if (!user || user.agency_id !== manager.agency_id || user.role !== 'agent') throw new Error('You can manage ticketing agents in your own agency only.');
+  if (branchId) {
+    const branches = await secretRequest(`/rest/v1/branches?select=id&agency_id=eq.${encodeURIComponent(manager.agency_id)}&id=eq.${encodeURIComponent(branchId)}&limit=1`);
+    if (!branches.length) throw new Error('The selected office does not belong to your agency.');
+  }
+  return updateUser(id, { fullName, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent', active });
+}
+
 export async function getAdminOverview() {
   const [agencies, branches, profiles, wallets] = await Promise.all([
     secretRequest('/rest/v1/agencies?select=id,name,active,created_at&order=name.asc'),

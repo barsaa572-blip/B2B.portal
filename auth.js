@@ -43,6 +43,7 @@
     document.body.classList.add(`role-${currentRole}`);
     window.applyBookingScope?.(currentRole);
     if (currentRole === 'platform') window.loadAdministration?.();
+    if (currentRole === 'office') window.loadTeamAccess?.();
     window.loadTopupInvoices?.();
     bindSidebarAccount(session);
   };

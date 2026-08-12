@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="profile-menu.css" />
     <link rel="stylesheet" href="passenger-details.css" />
     <link rel="stylesheet" href="admin.css" />
+    <link rel="stylesheet" href="team.css" />
   </head>
   <body>
     <aside class="sidebar">
@@ -35,6 +36,7 @@
         <button class="nav-link" data-view="bookings"><span>▣</span> Bookings</button>
         <button class="nav-link" data-view="wallet"><span>◉</span> Wallet</button>
         <button class="nav-link" data-view="reports"><span>▤</span> Reports</button>
+        <button class="nav-link team-nav" data-view="team"><span>♙</span> Team access</button>
         <button class="nav-link admin-nav" data-view="administration"><span>⚙</span> Administration</button>
       </nav>
       <div class="sidebar-foot">
@@ -67,11 +69,13 @@
 
       <section id="reports" class="view"><div class="section-heading"><div><p class="eyebrow">ANALYTICS</p><h1>Reports</h1><p>Agency sales activity at a glance.</p></div></div><div class="empty-state"><span>▤</span><h2>Reports will be available in the next release</h2><p>Sales, ticketing, wallet and airline settlement reports will appear here.</p></div></section>
 
+      <section id="team" class="view team-view"><div class="section-heading"><div><p class="eyebrow">AGENCY ACCESS</p><h1>Ticketing agents</h1><p>Create and manage agent accounts for your agency only.</p></div><button class="primary" id="add-team-agent">Add ticketing agent</button></div><section class="panel"><div class="panel-title"><div><h2>Agency users</h2><p id="team-agency-name">Loading agency access…</p></div></div><div class="table-wrap"><table><thead><tr><th>NAME</th><th>ROLE</th><th>OFFICE</th><th>STATUS</th><th></th></tr></thead><tbody id="team-user-list"></tbody></table></div></section></section>
+
       <section id="administration" class="view admin-view">
         <div class="section-heading"><div><p class="eyebrow">PLATFORM CONTROL</p><h1>Agencies &amp; users</h1><p>Create agency access, offices and ticketing users. Balance changes are recorded in the ledger.</p></div><button class="primary" id="add-agency">Add agency</button></div>
         <div class="grid-3 admin-stats"><article><small>ACTIVE AGENCIES</small><strong id="admin-agency-count">—</strong><span>Agencies that can issue tickets</span></article><article><small>ACTIVE USERS</small><strong id="admin-user-count">—</strong><span>Managers and ticketing agents</span></article><article><small>NETWORK BALANCE</small><strong id="admin-network-balance">—</strong><span>Available across all agencies</span></article></div>
         <section class="panel admin-panel"><div class="panel-title"><div><h2>Agency accounts</h2><p>Each agency has an independent wallet and booking data.</p></div><input id="agency-filter" placeholder="Search agency" /></div><div class="table-wrap"><table><thead><tr><th>AGENCY</th><th>OFFICES</th><th>USERS</th><th>AVAILABLE BALANCE</th><th>STATUS</th><th></th></tr></thead><tbody id="agency-list"></tbody></table></div></section>
-        <section class="panel admin-panel"><div class="panel-title"><div><h2>User access</h2><p>Office managers can see their agency. Ticketing agents see their own bookings.</p></div><button class="secondary" id="add-user">Add user</button></div><div class="table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>AGENCY / OFFICE</th><th>ROLE</th><th>STATUS</th><th></th></tr></thead><tbody id="user-list"></tbody></table></div></section>
+        <section class="panel admin-panel"><div class="panel-title"><div><h2>User access</h2><p>Open an agency to review all of its managers and ticketing agents.</p></div><button class="secondary" id="add-user">Add office manager</button></div><div class="table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>AGENCY / OFFICE</th><th>ROLE</th><th>STATUS</th><th></th></tr></thead><tbody id="user-list"></tbody></table></div></section>
       </section>
     </main>
 
@@ -82,6 +86,7 @@
     <div id="auth-root"></div>
     <script src="app.js"></script>
     <script src="admin.js"></script>
+    <script src="team.js"></script>
     <script src="auth.js"></script>
   </body>
 </html>

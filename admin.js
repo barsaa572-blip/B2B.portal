@@ -21,7 +21,7 @@
     byId('#agency-list').innerHTML = visible.map(item => {
       const offices = overview.branches.filter(entry => entry.agency_id === item.id).length;
       const users = overview.profiles.filter(entry => entry.agency_id === item.id).length;
-      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn wallet-adjust" data-agency-id="${item.id}">Balance</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn wallet-adjust" data-agency-id="${item.id}">Balance</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No agencies found.</td></tr>';
     byId('#user-list').innerHTML = overview.profiles.map(item => {
       const company = agency(item.agency_id)?.name || 'Platform';
@@ -51,7 +51,7 @@
   const openUser = () => {
     const element = modal();
     const options = overview.agencies.map(item => `<option value="${item.id}">${escape(item.name)}</option>`).join('');
-    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">NEW USER</p><h2>Create user access</h2><p>The user can sign in immediately with this email and password.</p><label>Full name<input name="fullName" required /></label><label>Email address<input name="email" type="email" required /></label><label>Temporary password<input name="password" type="password" minlength="8" required /></label><label>Agency<select name="agencyId" required><option value="">Select agency</option>${options}</select></label><label>Role<select name="role" required><option value="agent">Ticketing agent</option><option value="office_manager">Office manager</option></select></label><p class="admin-form-error" hidden></p><button class="primary full">Create user</button></form>`;
+    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">NEW OFFICE MANAGER</p><h2>Create manager access</h2><p>The manager can sign in and create ticketing agents for their own agency.</p><label>Full name<input name="fullName" required /></label><label>Email address<input name="email" type="email" required /></label><label>Temporary password<input name="password" type="password" minlength="8" required /></label><label>Agency<select name="agencyId" required><option value="">Select agency</option>${options}</select></label><input name="role" type="hidden" value="office_manager" /><p class="admin-form-error" hidden></p><button class="primary full">Create office manager</button></form>`;
     element.showModal(); element.querySelector('.close').onclick = () => closeModal(element);
     element.querySelector('form').onsubmit = async event => { event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget)); const submit = event.currentTarget.querySelector('.primary'); const error = event.currentTarget.querySelector('.admin-form-error'); submit.disabled = true; try { await api('/api/admin/users', { method: 'POST', body: JSON.stringify(values) }); closeModal(element); await load(); notify('User account created. Share the temporary password securely.'); } catch (issue) { error.textContent = issue.message; error.hidden = false; submit.disabled = false; } };
   };
@@ -66,6 +66,14 @@
     element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">EDIT AGENCY</p><h2>${escape(item.name)}</h2><label>Agency name<input name="name" required value="${escape(item.name)}" /></label><label class="check-label"><input name="active" type="checkbox" ${item.active ? 'checked' : ''} /> Agency is active and can issue tickets</label><p class="admin-form-error" hidden></p><button class="primary full">Save changes</button></form>`;
     element.showModal(); element.querySelector('.close').onclick = () => closeModal(element);
     element.querySelector('form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const error = form.querySelector('.admin-form-error'); try { await api(`/api/admin/agencies/${agencyId}`, { method: 'PATCH', body: JSON.stringify({ name: new FormData(form).get('name'), active: form.elements.active.checked }) }); closeModal(element); await load(); notify('Agency updated.'); } catch (issue) { error.textContent = issue.message; error.hidden = false; } };
+  };
+  const openAgencyAccess = agencyId => {
+    const item = agency(agencyId); const element = modal();
+    const users = overview.profiles.filter(profile => profile.agency_id === agencyId);
+    const offices = overview.branches.filter(branch => branch.agency_id === agencyId);
+    const officeName = id => offices.find(office => office.id === id)?.name || 'Main office';
+    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">AGENCY ACCESS</p><h2>${escape(item?.name || 'Agency')}</h2><p>${users.length} user account(s). Office managers create ticketing agents within this agency.</p><div class="agency-access-list">${users.map(user => `<div><strong>${escape(user.full_name)}</strong><span>${user.role === 'office_manager' ? 'Office manager' : user.role === 'agent' ? 'Ticketing agent' : 'Platform administrator'} · ${escape(officeName(user.branch_id))}</span><b class="tag ${user.active ? 'ticketed' : 'pending'}">${user.active ? 'Active' : 'Inactive'}</b></div>`).join('') || '<p>No users have been assigned yet.</p>'}</div><button type="button" class="secondary full close-agency-access">Close</button></form>`;
+    element.showModal(); element.querySelector('.close').onclick = () => closeModal(element); element.querySelector('.close-agency-access').onclick = () => closeModal(element);
   };
   const openEditUser = userId => {
     const item = overview.profiles.find(entry => entry.id === userId); const element = modal();
@@ -84,7 +92,7 @@
     byId('#agency-filter')?.addEventListener('input', event => render(event.target.value));
     byId('#add-agency')?.addEventListener('click', openAgency);
     byId('#add-user')?.addEventListener('click', openUser);
-    byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
+    byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('agency-open')) openAgencyAccess(button.dataset.agencyId); if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
   };
