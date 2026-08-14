@@ -19,6 +19,28 @@ const bearer = req => req.headers.authorization?.replace(/^Bearer\s+/i, '');
 const requiredText = (value, label) => { const text = String(value || '').trim();
 if (!text && label === 'Payment reference') return 'Not provided';
 if (!text) throw new Error(`${label} is required.`); return text; };
+const parseDateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? new Date(`${value}T00:00:00Z`) : null;
+const ageAtDeparture = (birth, departure) => {
+  let age = departure.getUTCFullYear() - birth.getUTCFullYear();
+  if (departure.getUTCMonth() < birth.getUTCMonth() || (departure.getUTCMonth() === birth.getUTCMonth() && departure.getUTCDate() < birth.getUTCDate())) age -= 1;
+  return age;
+};
+const addMonths = (date, months) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, date.getUTCDate()));
+const validateBookingPassengers = ({ itinerary, passengers }) => {
+  const departure = parseDateOnly(itinerary?.departureDate);
+  if (!departure) throw new Error('A valid departure date is required.');
+  for (const traveller of passengers?.travellers || []) {
+    const birth = parseDateOnly(traveller.dateOfBirth);
+    const expiry = parseDateOnly(traveller.documentExpiry);
+    const name = traveller.lastName || 'Passenger';
+    if (!birth) throw new Error(`${name}: date of birth is required.`);
+    const age = ageAtDeparture(birth, departure);
+    if (traveller.type === 'ADT' && age < 12) throw new Error(`${name}: ADT must be at least 12 years old on departure.`);
+    if (traveller.type === 'CHD' && (age < 2 || age >= 12)) throw new Error(`${name}: CHD must be from 2 years old until the day before the 12th birthday.`);
+    if (traveller.type === 'INF' && age >= 2) throw new Error(`${name}: INF must be under 2 years old on departure.`);
+    if (!expiry || expiry < addMonths(departure, 6)) throw new Error(`${name}: travel document must be valid for at least 6 months from departure.`);
+  }
+};
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const invoiceDocument = invoice => { const amount = Number(invoice.amount_mnt || 0);
 const fee = Number(invoice.service_fee_mnt || 0);
@@ -214,6 +236,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body.itinerary || !body.passengers) throw new Error('Itinerary and passenger details are required.');
+    validateBookingPassengers(body);
     return send(res, 201, { booking: await createPortalBooking(profile, body) });
   }
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);

@@ -393,15 +393,41 @@ const loadBookings = async () => {
   } catch (error) { console.warn(error.message); }
 };
 const totalCnyForSelection = () => [selectedOutbound, selectedReturn].filter(Boolean).reduce((sum, flight) => sum + cnyAmount(flight.price), 0) * activePassengerCounts.adults;
+const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? new Date(`${value}T00:00:00`) : null;
+const ageOnDate = (birthDate, travelDate) => {
+  let age = travelDate.getFullYear() - birthDate.getFullYear();
+  const birthdayThisYear = new Date(travelDate.getFullYear(), birthDate.getMonth(), birthDate.getDate());
+  if (travelDate < birthdayThisYear) age -= 1;
+  return age;
+};
+const addCalendarMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, date.getDate());
+const passengerValidationError = (traveller, departureDate) => {
+  const birthDate = dateOnly(traveller.dateOfBirth);
+  const expiryDate = dateOnly(traveller.documentExpiry);
+  if (!birthDate) return `${traveller.lastName || 'Passenger'}: date of birth is required.`;
+  const age = ageOnDate(birthDate, departureDate);
+  const type = traveller.type;
+  if (type === 'ADT' && age < 12) return `${traveller.lastName || 'Passenger'} is ${age}. ADT must be 12 years old or above on the departure date.`;
+  if (type === 'CHD' && (age < 2 || age >= 12)) return `${traveller.lastName || 'Passenger'} is ${age}. CHD must be from 2 years old until the day before the 12th birthday.`;
+  if (type === 'INF' && age >= 2) return `${traveller.lastName || 'Passenger'} is ${age}. INF must be under 2 years old on the departure date.`;
+  if (!expiryDate || expiryDate < addCalendarMonths(departureDate, 6)) return `${traveller.lastName || 'Passenger'}: travel document must be valid for at least 6 months from departure.`;
+  return '';
+};
 const createPortalBookingFromForm = async event => {
   event.preventDefault();
   const submit = event.currentTarget.querySelector('.issue-ticket');
-  const travellers = [...event.currentTarget.querySelectorAll('.passenger-card')].map(card => {
+  const cards = [...event.currentTarget.querySelectorAll('.passenger-card')];
+  const travellers = cards.map(card => {
     const get = name => card.querySelector(`[name="${name}"]`)?.value.trim() || '';
     return { type: ({ Adult: 'ADT', Child: 'CHD', Infant: 'INF' })[card.dataset.passengerType] || 'ADT', lastName: get('last-name'), firstName: get('first-name'), dateOfBirth: get('date-of-birth'), documentType: get('document-type'), documentNumber: get('document-number'), nationality: get('nationality'), issuingCountry: get('issuing-country'), documentExpiry: get('document-expiry'), gender: get('gender') };
   });
+  const departureDate = document.querySelector('#outbound-date')?.value;
+  const travelDate = dateOnly(departureDate);
+  if (!travelDate) { toast('A valid departure date is required.'); return; }
+  const validation = travellers.map(traveller => passengerValidationError(traveller, travelDate)).find(Boolean);
+  if (validation) { toast(validation); return; }
   const route = `${selectedOutbound?.departure?.id || ''} → ${selectedOutbound?.arrival?.id || ''}`;
-  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', flights: [selectedOutbound, selectedReturn].filter(Boolean) };
+  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, flights: [selectedOutbound, selectedReturn].filter(Boolean) };
   const contact = { name: event.currentTarget.querySelector('[name="contact-name"]')?.value.trim(), phone: event.currentTarget.querySelector('[name="contact-phone"]')?.value.trim(), email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim() };
   submit.disabled = true; submit.textContent = 'Creating booking…';
   try {
