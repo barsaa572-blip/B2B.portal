@@ -58,7 +58,16 @@ const normaliseSpring = item => {
     cabinKg: allowance.handbag ?? allowance.cabinBag ?? allowance.handBaggage ?? null,
     cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
   };
-  return { airline: basic.airlineName || 'Spring Airlines', airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: baseFare + taxes, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: seat.seatName || seat.cabinName || 'Economy', seatPrice: baseFare, taxes, baggage }, segments: [{ number: basic.flightNo || 'Flight', airline: basic.airlineName || 'Spring Airlines', departure, arrival, duration, airplane: basic.acType || null, travelClass: seat.seatName || seat.cabinName || 'Economy', baggage }] };
+  const fare = {
+    fareType: seat.seatName || seat.cabinName || 'Public fare',
+    bookingClass: seat.seatCode || seat.cabinCode || null,
+    cabin: seat.cabinName || seat.seatName || 'Economy',
+    baseFare,
+    taxes,
+    total: baseFare + taxes,
+    remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null
+  };
+  return { airline: basic.airlineName || 'Spring Airlines', airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline: basic.airlineName || 'Spring Airlines', departure, arrival, duration, airplane: basic.acType || null, travelClass: fare.cabin, baggage, fare }] };
 };
 const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
   if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('departure, arrival and date are required.');
