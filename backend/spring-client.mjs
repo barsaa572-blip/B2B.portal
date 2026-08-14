@@ -13,7 +13,7 @@ const trimUrl = value => value.replace(/\/+$/, '');
 
 export function getSpringStatus(env = process.env) {
   return {
-    httpJsonReady: Boolean(env.SPRING_HTTP_BASE_URL && env.SPRING_OAUTH_CLIENT_ID && env.SPRING_OAUTH_CLIENT_SECRET),
+    httpJsonReady: Boolean((env.SPRING_TOKEN_URL || env.SPRING_HTTP_BASE_URL) && env.SPRING_OAUTH_CLIENT_ID && env.SPRING_OAUTH_CLIENT_SECRET),
     xmlOrderQueryReady: Boolean(env.SPRING_XML_WSDL_URL && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD && env.SPRING_XML_ORDER_DETAILS_ACTION),
     endpoints: {
       flightSearch: '/weekApiFlightSearch/ota/flights/searchFlightsOtaDayKegui',
@@ -34,11 +34,11 @@ export function getSpringStatus(env = process.env) {
 
 export function createSpringClient(env = process.env) {
   const baseUrl = env.SPRING_HTTP_BASE_URL ? trimUrl(env.SPRING_HTTP_BASE_URL) : '';
+  const endpoint = (variable, path) => env[variable] || `${required(baseUrl, 'SPRING_HTTP_BASE_URL')}${path}`;
 
-  async function jsonRequest(path, payload, accessToken) {
-    required(baseUrl, 'SPRING_HTTP_BASE_URL');
+  async function jsonRequest(url, payload, accessToken) {
     required(accessToken, 'Spring access token');
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -50,7 +50,7 @@ export function createSpringClient(env = process.env) {
     const text = await response.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    if (!response.ok) throw new Error(`Spring API ${path} failed (${response.status}).`);
+    if (!response.ok) throw new Error(`Spring API request failed (${response.status}).`);
     return data;
   }
 
@@ -58,11 +58,10 @@ export function createSpringClient(env = process.env) {
     getAccessToken: () => {
       const appKey = required(env.SPRING_OAUTH_CLIENT_ID, 'SPRING_OAUTH_CLIENT_ID');
       const secret = required(env.SPRING_OAUTH_CLIENT_SECRET, 'SPRING_OAUTH_CLIENT_SECRET');
-      required(baseUrl, 'SPRING_HTTP_BASE_URL');
       const grantType = 'SHA2';
       const timestamp = Date.now();
       const sign = createHash('md5').update(`${appKey}${grantType}${secret}${timestamp}${appKey}`, 'utf8').digest('hex').toUpperCase();
-      return fetch(`${baseUrl}/auth/oauth2/accessToken`, {
+      return fetch(endpoint('SPRING_TOKEN_URL', '/auth/oauth2/accessToken'), {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ appKey, grantType, sign, timestamp })
@@ -72,14 +71,14 @@ export function createSpringClient(env = process.env) {
         return data.oauth2ResultDTO;
       });
     },
-    searchFlights: (payload, token) => jsonRequest('/weekApiFlightSearch/ota/flights/searchFlightsOtaDayKegui', payload, token),
-    getSpecificPrice: (payload, token) => jsonRequest('/getSpecificPriceNew', payload, token),
-    bookOrder: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/bookOrderC', payload, token),
-    calculateRefund: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/calcRetTktFeeOTA', payload, token),
-    refundTicket: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/refundTicketB2cAgentOTA', payload, token),
-    getChangeInfo: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/getFlightBgInfo', payload, token),
-    getChangeAvailability: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/getFlightBgApp', payload, token),
-    submitChange: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/submitFlightBgOTA', payload, token),
-    getFareRules: (payload, token) => jsonRequest('/weekApiFlightSearch/ota/flights/searchKeguiBySegId', payload, token)
+    searchFlights: (payload, token) => jsonRequest(endpoint('SPRING_FLIGHT_SEARCH_URL', '/weekApiFlightSearch/ota/flights/searchFlightsOtaDayKegui'), payload, token),
+    getSpecificPrice: (payload, token) => jsonRequest(endpoint('SPRING_PRICE_CHECK_URL', '/apiFlightSearch/ota/normalFlightSearch/getSpecificPriceNew'), payload, token),
+    bookOrder: (payload, token) => jsonRequest(endpoint('SPRING_BOOK_ORDER_URL', '/apiOrder/ota/orderOtaCtr/bookOrderC'), payload, token),
+    calculateRefund: (payload, token) => jsonRequest(endpoint('SPRING_CANCELLATION_FEE_URL', '/apiOrder/ota/orderOtaCtr/calcRetTktFeeOTA'), payload, token),
+    refundTicket: (payload, token) => jsonRequest(endpoint('SPRING_REFUND_URL', '/apiOrder/ota/orderOtaCtr/refundTicketB2cAgentOTA'), payload, token),
+    getChangeInfo: (payload, token) => jsonRequest(endpoint('SPRING_CHANGE_INFO_URL', '/apiOrder/ota/orderOtaCtr/getFlightBgInfo'), payload, token),
+    getChangeAvailability: (payload, token) => jsonRequest(endpoint('SPRING_CHANGE_AVAILABILITY_URL', '/apiOrder/ota/orderOtaCtr/getFlightBgApp'), payload, token),
+    submitChange: (payload, token) => jsonRequest(endpoint('SPRING_SUBMIT_CHANGE_URL', '/apiOrder/ota/orderOtaCtr/submitFlightBgOTA'), payload, token),
+    getFareRules: (payload, token) => jsonRequest(endpoint('SPRING_FARE_RULES_URL', '/apiFlightSearch/ota/flights/searchKeguiBySegId'), payload, token)
   };
 }
