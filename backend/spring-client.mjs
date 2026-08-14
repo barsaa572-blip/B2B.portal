@@ -16,17 +16,17 @@ export function getSpringStatus(env = process.env) {
     httpJsonReady: Boolean(env.SPRING_HTTP_BASE_URL && env.SPRING_OAUTH_CLIENT_ID && env.SPRING_OAUTH_CLIENT_SECRET),
     xmlOrderQueryReady: Boolean(env.SPRING_XML_WSDL_URL && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD && env.SPRING_XML_ORDER_DETAILS_ACTION),
     endpoints: {
-      flightSearch: '/ota/flights/searchFlightsOtaDayKegui',
+      flightSearch: '/weekApiFlightSearch/ota/flights/searchFlightsOtaDayKegui',
       priceCheck: '/getSpecificPriceNew',
-      createOrder: '/ota/orderOtaCtr/bookOrderC',
-      cancellationFee: '/ota/orderOtaCtr/calcRetTktFeeOTA',
-      refund: '/ota/orderOtaCtr/refundTicketB2cAgentOTA',
-      changeInfo: '/ota/orderOtaCtr/getFlightBgInfo',
-      changeAvailability: '/ota/orderOtaCtr/getFlightBgApp',
-      submitChange: '/ota/orderOtaCtr/submitFlightBgOTA',
-      fareRules: '/ota/flights/searchKeguiBySegId',
-      accessToken: '/oauth2/accessToken',
-      refreshToken: '/oauth2/refreshToken',
+      createOrder: '/apiOrder/ota/orderOtaCtr/bookOrderC',
+      cancellationFee: '/apiOrder/ota/orderOtaCtr/calcRetTktFeeOTA',
+      refund: '/apiOrder/ota/orderOtaCtr/refundTicketB2cAgentOTA',
+      changeInfo: '/apiOrder/ota/orderOtaCtr/getFlightBgInfo',
+      changeAvailability: '/apiOrder/ota/orderOtaCtr/getFlightBgApp',
+      submitChange: '/apiOrder/ota/orderOtaCtr/submitFlightBgOTA',
+      fareRules: '/weekApiFlightSearch/ota/flights/searchKeguiBySegId',
+      accessToken: '/auth/oauth2/accessToken',
+      refreshToken: '/auth/oauth2/refreshToken',
       orderDetail: 'getOrderDetailInfoC2 (XML/SOAP)'
     }
   };
@@ -62,7 +62,7 @@ export function createSpringClient(env = process.env) {
       const grantType = 'SHA2';
       const timestamp = Date.now();
       const sign = createHash('md5').update(`${appKey}${grantType}${secret}${timestamp}${appKey}`, 'utf8').digest('hex').toUpperCase();
-      return fetch(`${baseUrl}/oauth2/accessToken`, {
+      return fetch(`${baseUrl}/auth/oauth2/accessToken`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ appKey, grantType, sign, timestamp })
@@ -72,14 +72,14 @@ export function createSpringClient(env = process.env) {
         return data.oauth2ResultDTO;
       });
     },
-    searchFlights: (payload, token) => jsonRequest('/ota/flights/searchFlightsOtaDayKegui', payload, token),
+    searchFlights: (payload, token) => jsonRequest('/weekApiFlightSearch/ota/flights/searchFlightsOtaDayKegui', payload, token),
     getSpecificPrice: (payload, token) => jsonRequest('/getSpecificPriceNew', payload, token),
-    bookOrder: (payload, token) => jsonRequest('/ota/orderOtaCtr/bookOrderC', payload, token),
-    calculateRefund: (payload, token) => jsonRequest('/ota/orderOtaCtr/calcRetTktFeeOTA', payload, token),
-    refundTicket: (payload, token) => jsonRequest('/ota/orderOtaCtr/refundTicketB2cAgentOTA', payload, token),
-    getChangeInfo: (payload, token) => jsonRequest('/ota/orderOtaCtr/getFlightBgInfo', payload, token),
-    getChangeAvailability: (payload, token) => jsonRequest('/ota/orderOtaCtr/getFlightBgApp', payload, token),
-    submitChange: (payload, token) => jsonRequest('/ota/orderOtaCtr/submitFlightBgOTA', payload, token),
-    getFareRules: (payload, token) => jsonRequest('/ota/flights/searchKeguiBySegId', payload, token)
+    bookOrder: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/bookOrderC', payload, token),
+    calculateRefund: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/calcRetTktFeeOTA', payload, token),
+    refundTicket: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/refundTicketB2cAgentOTA', payload, token),
+    getChangeInfo: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/getFlightBgInfo', payload, token),
+    getChangeAvailability: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/getFlightBgApp', payload, token),
+    submitChange: (payload, token) => jsonRequest('/apiOrder/ota/orderOtaCtr/submitFlightBgOTA', payload, token),
+    getFareRules: (payload, token) => jsonRequest('/weekApiFlightSearch/ota/flights/searchKeguiBySegId', payload, token)
   };
 }
