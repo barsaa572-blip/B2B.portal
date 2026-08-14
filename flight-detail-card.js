@@ -10,10 +10,11 @@
     const response = await originalFetch(...args);
     const url = String(args[0] || '');
     if (url.includes('/api/flights')) {
-      response.clone().json().then(data => {
+      try {
+        const data = await response.clone().json();
         (data.results || []).forEach(rememberFlight);
         (data.roundPairs || []).forEach(pair => { rememberFlight(pair.outbound); rememberFlight(pair.returnFlight); });
-      }).catch(() => {});
+      } catch { /* A non-JSON flight response is handled by the normal search UI. */ }
     }
     return response;
   };
