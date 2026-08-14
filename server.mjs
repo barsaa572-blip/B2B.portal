@@ -95,15 +95,18 @@ const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) =>
   if (trip === 'round' && !/^\d{4}-\d{2}-\d{2}$/.test(returnDate || '')) throw new Error('A return date is required for a round trip.');
   if (trip === 'round' && returnDate < date) throw new Error('Return date cannot be earlier than departure date.');
 };
-async function searchSpringFlights({ departure, arrival, date, trip, returnDate }) {
+async function searchSpringFlights({ departure, arrival, date, trip, returnDate, passengers }) {
   const client = createSpringClient(); const token = await client.getAccessToken();
   const payload = (oriCode, destCode, flightDay) => ({ codeType: 1, oriCode: springAirportCode(oriCode), destCode: springAirportCode(destCode), flightDay, lang: 'zh_cn', moneyClassId: 0 });
   const outboundData = await client.searchFlights(payload(departure, arrival, date), token.accessToken);
   const outbound = (await Promise.all((outboundData.flightsList ?? []).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
-  if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound };
+  // Spring availability returns a fare per adult seat. The supplied request
+  // specification has no passenger-count fields, so CHD/INF amounts must be
+  // verified by getSpecificPriceNew rather than guessed here.
+  if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, passengers, results: outbound };
   const returnData = await client.searchFlights(payload(arrival, departure, returnDate), token.accessToken);
   const returns = (await Promise.all((returnData.flightsList ?? []).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
-  return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound, roundPairs: outbound.slice(0, 3).flatMap(outboundFlight => returns.slice(0, 3).map(returnFlight => ({ outbound: outboundFlight, returnFlight, sameAirline: outboundFlight.airlineCode === returnFlight.airlineCode }))) };
+  return { source: 'Spring Airlines', phase: 'outbound', trip, passengers, results: outbound, roundPairs: outbound.slice(0, 3).flatMap(outboundFlight => returns.slice(0, 3).map(returnFlight => ({ outbound: outboundFlight, returnFlight, sameAirline: outboundFlight.airlineCode === returnFlight.airlineCode }))) };
 }
 async function searchFlights(url, res) {
   const departure = url.searchParams.get('departure')?.toUpperCase();
@@ -112,12 +115,13 @@ const date = url.searchParams.get('date');
 const adults = url.searchParams.get('adults') || '1';
 const children = url.searchParams.get('children') || '0';
 const infants = url.searchParams.get('infants') || '0';
+const passengers = { adults: Math.max(1, Number(adults) || 1), children: Math.max(0, Number(children) || 0), infants: Math.max(0, Number(infants) || 0) };
 const trip = url.searchParams.get('trip') || 'oneway';
 const returnDate = url.searchParams.get('returnDate');
 const departureToken = url.searchParams.get('departureToken');
 const airline = url.searchParams.get('airline')?.toUpperCase();
   if (getSpringStatus().httpJsonReady && !departureToken) {
-    try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); return send(res, 200, await searchSpringFlights({ departure, arrival, date, trip, returnDate })); }
+    try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); return send(res, 200, await searchSpringFlights({ departure, arrival, date, trip, returnDate, passengers })); }
     catch (error) { return send(res, 502, { error: error.message || 'Spring Airlines flight search is unavailable.' }); }
   }
   const key = process.env.SERPAPI_KEY;

@@ -18,6 +18,24 @@
 .fare-detail-table .fare-head { color: #6b7c99; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: #fbfcff; }
 .fare-detail-table .fare-value { color: #142d5a; font-size: 13px; align-items: center; }
 .fare-detail-table .fare-value strong:last-child { color: #065f46; }
+.passenger-price-details { display: inline-flex; align-items: center; gap: 6px; margin: 12px 18px; padding: 0; border: 0; background: transparent; color: #1463df; font: inherit; font-size: 13px; cursor: pointer; }
+.passenger-price-details:hover { text-decoration: underline; }
+#passenger-price-modal { width: min(1180px, calc(100vw - 36px)); max-width: none; border: 0; border-radius: 10px; padding: 0; color: #172747; box-shadow: 0 22px 60px rgba(11, 29, 61, .28); }
+#passenger-price-modal::backdrop { background: rgba(10, 24, 50, .55); }
+.passenger-price-modal-content { position: relative; padding: 26px 28px 30px; }
+.passenger-price-modal-content .close { position: absolute; top: 18px; right: 20px; width: 42px; height: 42px; border: 2px solid #18294a; border-radius: 9px; background: #fff; color: #18294a; font-size: 30px; line-height: 1; cursor: pointer; }
+.passenger-price-modal-content h2 { margin: 0 0 36px; font-size: 25px; }
+.price-detail-total { margin: 0 0 8px; color: #263651; font-size: 15px; }
+.price-detail-total strong { font-size: 17px; }
+.price-detail-total span { color: #62718a; }
+.price-detail-table-wrap { overflow-x: auto; border: 1px solid #dce5f3; border-radius: 7px; }
+.price-detail-table-wrap table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px; }
+.price-detail-table-wrap th, .price-detail-table-wrap td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #dce5f3; }
+.price-detail-table-wrap th { color: #2d3b52; background: #f8fafc; font-weight: 700; }
+.price-detail-table-wrap td:nth-child(n+4), .price-detail-table-wrap th:nth-child(n+4) { text-align: right; }
+.price-detail-table-wrap tfoot th, .price-detail-table-wrap tfoot td { border-bottom: 0; background: #f7f9fd; }
+.price-pending { color: #7a879b; }
+.price-detail-note { margin: 16px 0 0; padding: 12px 14px; border-radius: 7px; background: #fff7df; color: #7d5a10; font-size: 13px; line-height: 1.45; }
 .rich-leg { display: grid; grid-template-columns: minmax(0, 1fr) 270px; border-bottom: 1px solid #e2e9f4; }
 .rich-leg:last-child { border-bottom: 0; }
 .rich-leg-main { padding: 18px; min-width: 0; }
