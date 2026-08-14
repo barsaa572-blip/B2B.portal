@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSpringClient, getSpringStatus } from './backend/spring-client.mjs';
-import { searchAirports } from './backend/airport-directory.mjs';
+import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
 import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
@@ -33,20 +33,38 @@ const springTime = value => {
 // Spring uses ULN for Ulaanbaatar. Accept UBN as a legacy alias if submitted.
 const springAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
 const portalAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
-const springAirport = endpoint => {
+const springText = value => String(value ?? '')
+  .replace(/春秋航空/g, 'Spring Airlines')
+  .replace(/吉祥航空/g, 'Juneyao Airlines')
+  .replace(/中国国际航空/g, 'Air China')
+  .replace(/中国东方航空/g, 'China Eastern Airlines')
+  .replace(/中国南方航空/g, 'China Southern Airlines')
+  .replace(/经济舱/g, 'Economy')
+  .replace(/超级经济舱/g, 'Premium Economy')
+  .replace(/公务舱|商务舱/g, 'Business')
+  .replace(/头等舱/g, 'First Class')
+  .replace(/空客/g, 'Airbus ')
+  .replace(/波音/g, 'Boeing ')
+  .replace(/航站楼/g, 'Terminal ')
+  .replace(/国际机场/g, 'International Airport')
+  .replace(/机场/g, 'Airport')
+  .replace(/直飞/g, 'Nonstop')
+  .replace(/公斤/g, 'kg');
+const springAirport = async endpoint => {
   const airport = endpoint?.airportCityInfo ?? endpoint ?? {};
   const time = endpoint?.oriTimeInfo?.timeBJ ?? endpoint?.destTimeInfo?.timeBJ ?? endpoint?.timeInfo?.timeBJ ?? endpoint?.timeBJ;
-  return { id: portalAirportCode(airport.airportCode || airport.cityCode), name: airport.airportName || airport.cityName || '', time: springTime(time) };
+  const id = portalAirportCode(airport.airportCode || airport.cityCode);
+  const directoryAirport = await airportByCode(id);
+  return { id, name: directoryAirport?.airport || springText(airport.airportName || airport.cityName || ''), time: springTime(time) };
 };
 const minutesBetween = (first, last) => {
   const value = time => { const match = String(time || '').match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : null; };
   const start = value(first); const end = value(last);
   return start === null || end === null ? 0 : (end - start + 1440) % 1440;
 };
-const normaliseSpring = item => {
+const normaliseSpring = async item => {
   const basic = item.flightBasicInfo ?? item;
-  const departure = springAirport(basic.oriEndPoint);
-  const arrival = springAirport(basic.destEndPoint);
+  const [departure, arrival] = await Promise.all([springAirport(basic.oriEndPoint), springAirport(basic.destEndPoint)]);
   const seats = [...(item.normSeatPriceList ?? basic.normSeatPriceList ?? [])].filter(seat => Number(seat.remSeatNum ?? seat.remainSeatNum ?? 1) > 0).sort((a, b) => Number(a.seatPrice ?? a.price ?? Infinity) - Number(b.seatPrice ?? b.price ?? Infinity));
   const seat = seats[0] ?? {};
   const baseFare = Number(seat.seatPrice ?? seat.price ?? basic.pubPrice ?? 0);
@@ -59,15 +77,16 @@ const normaliseSpring = item => {
     cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
   };
   const fare = {
-    fareType: seat.seatName || seat.cabinName || 'Public fare',
+    fareType: springText(seat.seatName || seat.cabinName || 'Public fare'),
     bookingClass: seat.seatCode || seat.cabinCode || null,
-    cabin: seat.cabinName || seat.seatName || 'Economy',
+    cabin: springText(seat.cabinName || seat.seatName || 'Economy'),
     baseFare,
     taxes,
     total: baseFare + taxes,
     remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null
   };
-  return { airline: basic.airlineName || 'Spring Airlines', airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline: basic.airlineName || 'Spring Airlines', departure, arrival, duration, airplane: basic.acType || null, travelClass: fare.cabin, baggage, fare }] };
+  const airline = springText(basic.airlineName || 'Spring Airlines');
+  return { airline, airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
 };
 const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
   if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('departure, arrival and date are required.');
@@ -79,10 +98,10 @@ async function searchSpringFlights({ departure, arrival, date, trip, returnDate 
   const client = createSpringClient(); const token = await client.getAccessToken();
   const payload = (oriCode, destCode, flightDay) => ({ codeType: 1, oriCode: springAirportCode(oriCode), destCode: springAirportCode(destCode), flightDay, lang: 'zh_cn', moneyClassId: 0 });
   const outboundData = await client.searchFlights(payload(departure, arrival, date), token.accessToken);
-  const outbound = (outboundData.flightsList ?? []).map(normaliseSpring).filter(flight => flight.departure.id && flight.arrival.id);
+  const outbound = (await Promise.all((outboundData.flightsList ?? []).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
   if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound };
   const returnData = await client.searchFlights(payload(arrival, departure, returnDate), token.accessToken);
-  const returns = (returnData.flightsList ?? []).map(normaliseSpring).filter(flight => flight.departure.id && flight.arrival.id);
+  const returns = (await Promise.all((returnData.flightsList ?? []).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
   return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound, roundPairs: outbound.slice(0, 3).flatMap(outboundFlight => returns.slice(0, 3).map(returnFlight => ({ outbound: outboundFlight, returnFlight, sameAirline: outboundFlight.airlineCode === returnFlight.airlineCode }))) };
 }
 async function searchFlights(url, res) {

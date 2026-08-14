@@ -56,3 +56,17 @@ export async function searchAirports(query, limit = 10) {
   };
   return airports.filter(airport => `${airport.code} ${airport.city} ${airport.airport} ${airport.country}`.toLowerCase().includes(text)).sort((left, right) => rank(left) - rank(right) || left.city.localeCompare(right.city)).slice(0, limit);
 }
+
+// Use the English airport name from OurAirports when a carrier response only
+// provides Chinese text.  This keeps the portal language independent from the
+// supplier's response language.
+export async function airportByCode(code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(normalized)) return null;
+  try {
+    const airports = await getDirectory();
+    return airports.find(airport => airport.code === normalized) || null;
+  } catch {
+    return null;
+  }
+}
