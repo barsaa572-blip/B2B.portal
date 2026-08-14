@@ -57,7 +57,7 @@ const springAirport = async endpoint => {
   const time = endpoint?.oriTimeInfo?.timeBJ ?? endpoint?.destTimeInfo?.timeBJ ?? endpoint?.timeInfo?.timeBJ ?? endpoint?.timeBJ;
   const id = portalAirportCode(airport.airportCode || airport.cityCode);
   const directoryAirport = await airportByCode(id);
-  return { id, name: directoryAirport?.airport || springText(airport.airportName || airport.cityName || ''), time: springTime(time) };
+  return { id, name: directoryAirport?.airport || springText(airport.airportName || airport.cityName || ''), terminal: springText(airport.airportTerminal || airport.terminal || ''), time: springTime(time) };
 };
 const minutesBetween = (first, last) => {
   const value = time => { const match = String(time || '').match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : null; };
