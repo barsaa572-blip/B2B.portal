@@ -4,6 +4,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSpringClient, getSpringStatus } from './backend/spring-client.mjs';
 import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
+import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
 import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
@@ -140,7 +141,13 @@ if (!upstream.ok || data.error) return send(res, 502, { error: data.error || 'Fl
 async function autocompleteLocations(url, res) {
   const query = url.searchParams.get('q')?.trim();
   if (!query || query.length < 2) return send(res, 200, { options: [] });
-  try { return send(res, 200, { options: await searchAirports(query) }); }
+  try {
+    const options = await searchAirports(query);
+    // Spring-supported airports appear first; city and airport names themselves
+    // still come from the English global airport directory.
+    options.sort((left, right) => rankSpringAirport(left.code) - rankSpringAirport(right.code) || left.city.localeCompare(right.city));
+    return send(res, 200, { options: options.map(option => ({ ...option, springSupported: rankSpringAirport(option.code) === 0 })) });
+  }
   catch (error) { return send(res, 503, { error: error.message || 'Airport directory is unavailable.' }); }
 }
 
