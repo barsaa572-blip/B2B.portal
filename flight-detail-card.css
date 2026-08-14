@@ -6,6 +6,11 @@
   border: 1px solid #dce5f3;
   border-radius: 12px;
 }
+.segment-details.rich-details-ui[hidden] { display: none !important; }
+
+/* One-way results: keep the detail control beside the Select button. */
+.flight { position: relative; }
+.flight .inline-detail-toggle { position: absolute; right: 102px; top: 35px; z-index: 2; }
 
 .rich-details-ui .detail-route { margin: 0; padding: 14px 18px; background: #f5f8fc; border-bottom: 1px solid #e2e9f4; }
 .fare-detail-table { border-bottom: 1px solid #e2e9f4; }
@@ -48,4 +53,5 @@
   .rich-duration { display: none; }
   .rich-info-row, .rich-baggage { margin-left: 0; }
   .fare-detail-table > div { grid-template-columns: 1fr 1fr; }
+  .flight .inline-detail-toggle { right: 94px; }
 }
