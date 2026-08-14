@@ -404,18 +404,41 @@ const addCalendarMonths = (date, months) => new Date(date.getFullYear(), date.ge
 const passengerValidationError = (traveller, departureDate) => {
   const birthDate = dateOnly(traveller.dateOfBirth);
   const expiryDate = dateOnly(traveller.documentExpiry);
-  if (!birthDate) return `${traveller.lastName || 'Passenger'}: date of birth is required.`;
+  if (!birthDate) return { field: 'date-of-birth', message: 'Date of birth is required.' };
   const age = ageOnDate(birthDate, departureDate);
   const type = traveller.type;
-  if (type === 'ADT' && age < 12) return `${traveller.lastName || 'Passenger'} is ${age}. ADT must be 12 years old or above on the departure date.`;
-  if (type === 'CHD' && (age < 2 || age >= 12)) return `${traveller.lastName || 'Passenger'} is ${age}. CHD must be from 2 years old until the day before the 12th birthday.`;
-  if (type === 'INF' && age >= 2) return `${traveller.lastName || 'Passenger'} is ${age}. INF must be under 2 years old on the departure date.`;
-  if (!expiryDate || expiryDate < addCalendarMonths(departureDate, 6)) return `${traveller.lastName || 'Passenger'}: travel document must be valid for at least 6 months from departure.`;
-  return '';
+  if (type === 'ADT' && age < 12) return { field: 'date-of-birth', message: `ADT must be 12 years old or above on departure. This passenger is ${age}.` };
+  if (type === 'CHD' && (age < 2 || age >= 12)) return { field: 'date-of-birth', message: `CHD must be from age 2 until the day before the 12th birthday. This passenger is ${age}.` };
+  if (type === 'INF' && age >= 2) return { field: 'date-of-birth', message: `INF must be under 2 years old on departure. This passenger is ${age}.` };
+  if (!expiryDate || expiryDate < addCalendarMonths(departureDate, 6)) return { field: 'document-expiry', message: 'Travel document must be valid for at least 6 months from departure.' };
+  return null;
+};
+const clearFormErrors = form => form.querySelectorAll('.field-error, .field-error-message').forEach(element => {
+  if (element.classList.contains('field-error')) element.classList.remove('field-error');
+  else element.remove();
+});
+const setFieldError = (field, message) => {
+  if (!field) return;
+  field.classList.add('field-error');
+  const label = field.closest('label');
+  if (!label) return;
+  const help = document.createElement('small');
+  help.className = 'field-error-message';
+  help.textContent = message;
+  label.append(help);
+};
+const validateRequiredFields = form => {
+  const required = [...form.querySelectorAll('[required]')];
+  const missing = required.filter(field => !String(field.value || '').trim());
+  missing.forEach(field => setFieldError(field, 'This field is required.'));
+  return missing[0] || null;
 };
 const createPortalBookingFromForm = async event => {
   event.preventDefault();
   const submit = event.currentTarget.querySelector('.issue-ticket');
+  clearFormErrors(event.currentTarget);
+  const missing = validateRequiredFields(event.currentTarget);
+  if (missing) { missing.focus(); toast('Complete the highlighted required field.'); return; }
   const cards = [...event.currentTarget.querySelectorAll('.passenger-card')];
   const travellers = cards.map(card => {
     const get = name => card.querySelector(`[name="${name}"]`)?.value.trim() || '';
@@ -424,8 +447,14 @@ const createPortalBookingFromForm = async event => {
   const departureDate = document.querySelector('#outbound-date')?.value;
   const travelDate = dateOnly(departureDate);
   if (!travelDate) { toast('A valid departure date is required.'); return; }
-  const validation = travellers.map(traveller => passengerValidationError(traveller, travelDate)).find(Boolean);
-  if (validation) { toast(validation); return; }
+  const invalidPassenger = travellers.map((traveller, index) => ({ index, error: passengerValidationError(traveller, travelDate) })).find(item => item.error);
+  if (invalidPassenger) {
+    const field = cards[invalidPassenger.index]?.querySelector(`[name="${invalidPassenger.error.field}"]`);
+    setFieldError(field, invalidPassenger.error.message);
+    field?.focus();
+    toast(invalidPassenger.error.message);
+    return;
+  }
   const route = `${selectedOutbound?.departure?.id || ''} → ${selectedOutbound?.arrival?.id || ''}`;
   const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, flights: [selectedOutbound, selectedReturn].filter(Boolean) };
   const contact = { name: event.currentTarget.querySelector('[name="contact-name"]')?.value.trim(), phone: event.currentTarget.querySelector('[name="contact-phone"]')?.value.trim(), email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim() };
@@ -445,6 +474,10 @@ const createPortalBookingFromForm = async event => {
   } catch (error) { toast(error.message || 'Booking could not be created.'); }
   finally { submit.disabled = false; submit.textContent = 'Book'; }
 };
+document.addEventListener('click', event => {
+  const book = event.target.closest('.issue-ticket');
+  if (book?.form) book.form.noValidate = true;
+});
 const updatePortalBookingStatus = async (pnr, action) => {
   const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${action}`, { method: 'POST' });
   const data = await response.json();
