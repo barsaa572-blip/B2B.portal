@@ -52,7 +52,12 @@ const normaliseSpring = item => {
   const baseFare = Number(seat.seatPrice ?? seat.price ?? basic.pubPrice ?? 0);
   const taxes = Number(basic.fuelFee ?? 0) + Number(basic.portPay ?? 0) + Number(basic.otherFeeSum ?? 0);
   const duration = Number(basic.flightDuration ?? basic.duration ?? minutesBetween(departure.time, arrival.time));
-  const baggage = { checkedKg: seat.kegui?.bag ?? null, cabinKg: seat.kegui?.handbag ?? null, cabinSize: seat.kegui?.handbagSize ?? null };
+  const allowance = seat.kegui ?? seat.baggage ?? basic.kegui ?? {};
+  const baggage = {
+    checkedKg: allowance.bag ?? allowance.checkedBag ?? allowance.checkedBaggage ?? null,
+    cabinKg: allowance.handbag ?? allowance.cabinBag ?? allowance.handBaggage ?? null,
+    cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
+  };
   return { airline: basic.airlineName || 'Spring Airlines', airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: baseFare + taxes, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: seat.seatName || seat.cabinName || 'Economy', seatPrice: baseFare, taxes, baggage }, segments: [{ number: basic.flightNo || 'Flight', airline: basic.airlineName || 'Spring Airlines', departure, arrival, duration, airplane: basic.acType || null, travelClass: seat.seatName || seat.cabinName || 'Economy', baggage }] };
 };
 const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
