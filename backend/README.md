@@ -10,7 +10,7 @@ Copy `.env.example` values to the hosting provider's environment settings. Do no
 
 ## Spring integration status
 
-The HTTP JSON routes are mapped in `spring-client.mjs`. They will be connected after Spring provides the exact OAuth request example and test request/response samples.
+The HTTP JSON routes are mapped in `spring-client.mjs`. Token signing is `uppercase(md5(appKey + "SHA2" + appSecret + timestamp + appKey))`; credentials must stay only in the server environment.
 
 Order detail (`getOrderDetailInfoC2`) is XML/SOAP. Its final XML envelope, SOAPAction, namespace, and response mapper must be implemented from Spring's XML example. This prevents sending an incorrectly guessed booking request.
 

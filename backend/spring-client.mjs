@@ -2,6 +2,8 @@
  * Server-only Spring Airlines integration boundary.
  * Browser code must never import this module or receive its credentials.
  */
+import { createHash } from 'node:crypto';
+
 const required = (value, name) => {
   if (!value) throw new Error(`${name} is not configured on the server.`);
   return value;
@@ -54,11 +56,21 @@ export function createSpringClient(env = process.env) {
 
   return {
     getAccessToken: () => {
-      // Exact OAuth request fields are intentionally added only from Spring's test example.
-      required(env.SPRING_OAUTH_CLIENT_ID, 'SPRING_OAUTH_CLIENT_ID');
-      required(env.SPRING_OAUTH_CLIENT_SECRET, 'SPRING_OAUTH_CLIENT_SECRET');
+      const appKey = required(env.SPRING_OAUTH_CLIENT_ID, 'SPRING_OAUTH_CLIENT_ID');
+      const secret = required(env.SPRING_OAUTH_CLIENT_SECRET, 'SPRING_OAUTH_CLIENT_SECRET');
       required(baseUrl, 'SPRING_HTTP_BASE_URL');
-      throw new Error('OAuth request format is awaiting the Spring test example.');
+      const grantType = 'SHA2';
+      const timestamp = Date.now();
+      const sign = createHash('md5').update(`${appKey}${grantType}${secret}${timestamp}${appKey}`, 'utf8').digest('hex').toUpperCase();
+      return fetch(`${baseUrl}/oauth2/accessToken`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ appKey, grantType, sign, timestamp })
+      }).then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ifSuccess !== 'Y' || !data.oauth2ResultDTO?.accessToken) throw new Error(data.errMsg || `Spring token request failed (${response.status}).`);
+        return data.oauth2ResultDTO;
+      });
     },
     searchFlights: (payload, token) => jsonRequest('/ota/flights/searchFlightsOtaDayKegui', payload, token),
     getSpecificPrice: (payload, token) => jsonRequest('/getSpecificPriceNew', payload, token),
