@@ -31,6 +31,7 @@ const springTime = value => {
   const match = String(value || '').match(/(\d{1,2}:\d{2})(?::\d{2})?/);
   return match ? match[1].padStart(5, '0') : '';
 };
+const SPRING_AIRLINES_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Spring_Airlines_Logo.png';
 // Spring uses ULN for Ulaanbaatar. Accept UBN as a legacy alias if submitted.
 const springAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
 const portalAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
@@ -87,7 +88,7 @@ const normaliseSpring = async item => {
     remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null
   };
   const airline = springText(basic.airlineName || 'Spring Airlines');
-  return { airline, airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
+  return { airline, airlineLogo: SPRING_AIRLINES_LOGO, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline, airlineLogo: SPRING_AIRLINES_LOGO, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
 };
 const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
   if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('departure, arrival and date are required.');
