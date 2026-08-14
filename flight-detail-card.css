@@ -18,8 +18,9 @@
 .fare-detail-table .fare-head { color: #6b7c99; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: #fbfcff; }
 .fare-detail-table .fare-value { color: #142d5a; font-size: 13px; align-items: center; }
 .fare-detail-table .fare-value strong:last-child { color: #065f46; }
-.passenger-price-details { display: inline-flex; align-items: center; gap: 6px; margin: 12px 18px; padding: 0; border: 0; background: transparent; color: #1463df; font: inherit; font-size: 13px; cursor: pointer; }
-.passenger-price-details:hover { text-decoration: underline; }
+.fare-detail-actions { display: flex; align-items: center; gap: 20px; padding: 12px 18px; }
+.passenger-price-details,.fare-rules-details { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: #1463df; font: inherit; font-size: 13px; cursor: pointer; }
+.passenger-price-details:hover,.fare-rules-details:hover { text-decoration: underline; }
 #passenger-price-modal { width: min(1180px, calc(100vw - 36px)); max-width: none; border: 0; border-radius: 10px; padding: 0; color: #172747; box-shadow: 0 22px 60px rgba(11, 29, 61, .28); }
 #passenger-price-modal::backdrop { background: rgba(10, 24, 50, .55); }
 .passenger-price-modal-content { position: relative; padding: 26px 28px 30px; }
@@ -64,6 +65,13 @@
 .fare-rule-group div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 11px; color: #51698e; }
 .fare-rule-group div span { max-width: 58%; }
 .fare-rule-group div b { color: #183c78; text-align: right; font-size: 11px; }
+.fare-rules-modal-content { padding: 27px 30px; min-width: min(650px,calc(100vw - 32px)); position: relative; }
+.fare-rules-modal-content h2 { margin: 0 0 5px; font-size: 23px; }
+.fare-rules-modal-content > p { margin: 0 0 19px; color: #61718d; }
+.fare-rules-modal-content > small { display: block; margin-top: 18px; color: #71819c; line-height: 1.45; }
+.fare-rules-modal-content .fare-rule-groups { border: 1px solid #e0e8f4; border-radius: 9px; padding: 2px 16px 13px; }
+.fare-rules-modal-content .fare-rule-group div { font-size: 12px; padding: 7px 0; }
+.fare-rules-modal-content .fare-rule-group div b { font-size: 12px; }
 .rich-services { padding: 18px; border-left: 1px solid #e2e9f4; background: #fbfcff; color: #4d6387; font-size: 12px; }
 .rich-services h4 { margin: 0 0 7px; color: #18355f; font-size: 12px; }
 .rich-services p { margin: 0 0 17px; line-height: 1.45; }

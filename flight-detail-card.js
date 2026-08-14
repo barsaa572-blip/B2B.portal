@@ -29,7 +29,7 @@
     const money = value => Number.isFinite(Number(value)) && typeof quoteMnt === 'function' ? quoteMnt(value) : 'Verified before issue';
     const total = data ? money(fare.total ?? data.price) : text(flight?.querySelector('.fare strong'), text(pair?.querySelector('.pair-footer strong'), 'Shown at itinerary selection'));
     const number = data?.number || flight?.querySelector('.segment-carrier span')?.textContent?.match(/[A-Z0-9]+\s*\d+/i)?.[0] || '';
-    return `<div class="fare-detail-table"><div class="fare-head"><span>Passenger</span><span>Fare type</span><span>Fare amount</span><span>Taxes</span><span>Total</span></div><div class="fare-value"><strong>ADT</strong><span>${fare.fareType || fare.seatName || 'Public fare'}</span><span>${data ? money(fare.baseFare ?? fare.seatPrice) : 'Verified before issue'}</span><span>${data ? money(fare.taxes) : 'Verified before issue'}</span><strong>${total}</strong></div></div><button type="button" class="passenger-price-details" data-flight-number="${number.replace(/\s/g, '')}">ⓘ Details per passenger</button>`;
+    return `<div class="fare-detail-table"><div class="fare-head"><span>Passenger</span><span>Fare type</span><span>Fare amount</span><span>Taxes</span><span>Total</span></div><div class="fare-value"><strong>ADT</strong><span>${fare.fareType || fare.seatName || 'Public fare'}</span><span>${data ? money(fare.baseFare ?? fare.seatPrice) : 'Verified before issue'}</span><span>${data ? money(fare.taxes) : 'Verified before issue'}</span><strong>${total}</strong></div></div><div class="fare-detail-actions"><button type="button" class="passenger-price-details" data-flight-number="${number.replace(/\s/g, '')}">ⓘ Details per passenger</button><button type="button" class="fare-rules-details" data-flight-number="${number.replace(/\s/g, '')}">ⓘ Fare rules</button></div>`;
   };
 
   const currentCounts = () => typeof activePassengerCounts !== 'undefined' ? activePassengerCounts : ({
@@ -72,15 +72,26 @@
     if (start && end) return `${offsetText(start)} to ${offsetText(end)}`;
     return 'Any time';
   };
-  const fareRules = source => {
-    const data = flightFor(source);
-    const rules = data?.fare?.rules || data?.spring?.fare?.rules || [];
+  const fareRulesMarkup = rules => {
     if (!rules.length) return '<p>Fare rules are not provided for this fare.</p>';
     const rateLabel = sourceCode => sourceCode === 1 ? 'fare' : sourceCode === 2 ? 'fare + fuel surcharge' : 'applicable fare';
     const amount = entry => entry.valueType === 2
       ? `${Math.round(Number(entry.value) * 100)}% of ${rateLabel(entry.calculationSource)}`
       : `${price(entry.value)} fee`;
     return `<div class="fare-rule-groups">${rules.map(rule => `<section class="fare-rule-group"><h4>${rule.label}</h4>${rule.entries.map(entry => `<div><span>${ruleWindow(entry)}</span><b>${amount(entry)}</b></div>`).join('')}</section>`).join('')}</div>`;
+  };
+  const fareRules = source => {
+    const data = flightFor(source);
+    return fareRulesMarkup(data?.fare?.rules || data?.spring?.fare?.rules || []);
+  };
+  const openFareRules = number => {
+    const flight = flightsByNumber.get(String(number).replace(/\s/g, ''));
+    const rules = flight?.fare?.rules || flight?.spring?.fare?.rules || [];
+    let modal = document.querySelector('#fare-rules-modal');
+    if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rules-modal'; document.body.append(modal); }
+    modal.innerHTML = `<section class="fare-rules-modal-content"><button type="button" class="close" aria-label="Close">×</button><h2>Fare rules</h2><p>${flight?.departure?.id || '—'} → ${flight?.arrival?.id || '—'} · ${flight?.airline || 'Airline'} ${flight?.number || ''}</p>${fareRulesMarkup(rules)}<small>Final refund and change amounts are confirmed by Spring Airlines before ticket issuance.</small></section>`;
+    modal.querySelector('.close').addEventListener('click', () => modal.close());
+    modal.showModal();
   };
   const buildLeg = source => {
     const carrier = text(source.querySelector('.segment-carrier span'), 'Flight');
@@ -105,6 +116,8 @@
   document.addEventListener('click', event => {
     const priceButton = event.target.closest('.passenger-price-details');
     if (priceButton) { openPassengerPriceDetails(priceButton.dataset.flightNumber); return; }
+    const fareRulesButton = event.target.closest('.fare-rules-details');
+    if (fareRulesButton) { openFareRules(fareRulesButton.dataset.flightNumber); return; }
     const button = event.target.closest('.segment-toggle');
     if (!button) return;
     const detail = document.querySelector('#' + button.dataset.detailId);
