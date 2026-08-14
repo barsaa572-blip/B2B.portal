@@ -64,6 +64,23 @@ const minutesBetween = (first, last) => {
   const start = value(first); const end = value(last);
   return start === null || end === null ? 0 : (end - start + 1440) % 1440;
 };
+const normaliseFareRules = allowance => {
+  const labels = { 1: 'Refund', 2: 'Change' };
+  return (allowance?.keguiInfoList ?? []).map(rule => ({
+    type: Number(rule.keguiType),
+    label: labels[Number(rule.keguiType)] ?? 'Fare condition',
+    valueType: Number(rule.valueType ?? rule.valType),
+    calculationSource: Number(rule.calcSource ?? 0),
+    entries: (rule.keguiValueList ?? []).map(entry => ({
+      value: Number(entry.keguiValue),
+      valueType: Number(entry.valType ?? rule.valueType),
+      calculationSource: Number(entry.calcSource ?? rule.calcSource ?? 0),
+      intervalType: Number(entry.intervalType ?? 0),
+      start: entry.flightDateStart ?? null,
+      end: entry.flightDateEnd ?? null
+    })).filter(entry => Number.isFinite(entry.value))
+  })).filter(rule => rule.entries.length);
+};
 const normaliseSpring = async item => {
   const basic = item.flightBasicInfo ?? item;
   const [departure, arrival] = await Promise.all([springAirport(basic.oriEndPoint), springAirport(basic.destEndPoint)]);
@@ -78,6 +95,7 @@ const normaliseSpring = async item => {
     cabinKg: allowance.handbag ?? allowance.cabinBag ?? allowance.handBaggage ?? null,
     cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
   };
+  const rules = normaliseFareRules(allowance);
   const fare = {
     fareType: springText(seat.seatName || seat.cabinName || 'Public fare'),
     bookingClass: seat.seatCode || seat.cabinCode || null,
@@ -85,7 +103,8 @@ const normaliseSpring = async item => {
     baseFare,
     taxes,
     total: baseFare + taxes,
-    remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null
+    remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null,
+    rules
   };
   const airline = springText(basic.airlineName || 'Spring Airlines');
   return { airline, airlineLogo: SPRING_AIRLINES_LOGO, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline, airlineLogo: SPRING_AIRLINES_LOGO, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };

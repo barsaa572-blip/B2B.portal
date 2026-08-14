@@ -55,6 +55,33 @@
     modal.querySelector('.close').addEventListener('click', () => modal.close());
     modal.showModal();
   };
+  const offsetText = value => {
+    const match = String(value || '').match(/^(-?)(\d+)([HD])$/i);
+    if (!match) return '';
+    const unit = match[3].toUpperCase() === 'H' ? 'hour' : 'day';
+    const count = Number(match[2]);
+    const label = `${count} ${unit}${count === 1 ? '' : 's'}`;
+    return match[1] === '-' ? `${label} before departure` : count === 0 ? 'departure time' : `${label} after departure`;
+  };
+  const ruleWindow = entry => {
+    const start = entry?.start; const end = entry?.end;
+    if (start === '0H' && !end) return 'After departure / no-show';
+    if (!start && end) return `More than ${offsetText(end)}`;
+    if (start && !end) return `After ${offsetText(start)}`;
+    if (start && end === '0H') return `Within ${offsetText(start).replace(' before departure', '')} before departure`;
+    if (start && end) return `${offsetText(start)} to ${offsetText(end)}`;
+    return 'Any time';
+  };
+  const fareRules = source => {
+    const data = flightFor(source);
+    const rules = data?.fare?.rules || data?.spring?.fare?.rules || [];
+    if (!rules.length) return '<p>Fare rules are not provided for this fare.</p>';
+    const rateLabel = sourceCode => sourceCode === 1 ? 'fare' : sourceCode === 2 ? 'fare + fuel surcharge' : 'applicable fare';
+    const amount = entry => entry.valueType === 2
+      ? `${Math.round(Number(entry.value) * 100)}% of ${rateLabel(entry.calculationSource)}`
+      : `${price(entry.value)} fee`;
+    return `<div class="fare-rule-groups">${rules.map(rule => `<section class="fare-rule-group"><h4>${rule.label}</h4>${rule.entries.map(entry => `<div><span>${ruleWindow(entry)}</span><b>${amount(entry)}</b></div>`).join('')}</section>`).join('')}</div>`;
+  };
   const buildLeg = source => {
     const carrier = text(source.querySelector('.segment-carrier span'), 'Flight');
     const carrierIcon = source.querySelector('.segment-carrier img')?.outerHTML || '&#9992;';
@@ -64,7 +91,7 @@
     const meta = text(source.querySelector('.segment-meta'), 'Economy');
     const baggage = text(source.querySelector('.segment-baggage span'), 'Baggage allowance is not provided for this fare.');
     const point = (label, node) => `<div class="rich-point"><small>${label}</small><strong>${text(node?.querySelector('strong'), '')}</strong><span>${text(node?.querySelector('span'), '')}</span></div>`;
-    return `<section class="rich-leg"><div class="rich-leg-main"><div class="rich-carrier"><span class="rich-plane">${carrierIcon}</span><div><b>${carrier}</b><small>${meta}</small></div></div><div class="rich-leg-points">${point('DEPARTURE', departure)}<div class="rich-duration"><b>${duration}</b><i></i><small>Nonstop</small></div>${point('ARRIVAL', arrival)}</div><div class="rich-info-row"><span><span class="rich-info-label">AIRCRAFT / CABIN</span><strong>${meta}</strong></span></div><div class="rich-baggage"><b>Baggage information</b><br><span>${baggage}</span></div></div><aside class="rich-services"><h4>Included</h4><p>${baggage}</p><h4>Fare conditions</h4><p>Change, refund and no-show rules are confirmed from Spring before ticket issuance.</p></aside></section>`;
+    return `<section class="rich-leg"><div class="rich-leg-main"><div class="rich-carrier"><span class="rich-plane">${carrierIcon}</span><div><b>${carrier}</b><small>${meta}</small></div></div><div class="rich-leg-points">${point('DEPARTURE', departure)}<div class="rich-duration"><b>${duration}</b><i></i><small>Nonstop</small></div>${point('ARRIVAL', arrival)}</div><div class="rich-info-row"><span><span class="rich-info-label">AIRCRAFT / CABIN</span><strong>${meta}</strong></span></div><div class="rich-baggage"><b>Baggage information</b><br><span>${baggage}</span></div></div><aside class="rich-services"><h4>Included</h4><p>${baggage}</p><h4>Fare conditions</h4>${fareRules(source)}</aside></section>`;
   };
   const enhance = detail => {
     if (detail.dataset.richDetails === 'true') return;

@@ -58,6 +58,12 @@
 .rich-baggage { margin: 15px 0 0 40px; padding: 11px 13px; border-radius: 8px; background: #f7f9fd; color: #4c6389; font-size: 12px; }
 .rich-baggage b { color: #1b3763; }
 .rich-baggage span + span::before { content: ' · '; color: #98a8c0; }
+.fare-rule-groups { display: grid; gap: 11px; }
+.fare-rule-group { border-top: 1px solid #e1e8f3; padding-top: 10px; }
+.fare-rule-group h4 { margin: 0 0 6px; }
+.fare-rule-group div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 11px; color: #51698e; }
+.fare-rule-group div span { max-width: 58%; }
+.fare-rule-group div b { color: #183c78; text-align: right; font-size: 11px; }
 .rich-services { padding: 18px; border-left: 1px solid #e2e9f4; background: #fbfcff; color: #4d6387; font-size: 12px; }
 .rich-services h4 { margin: 0 0 7px; color: #18355f; font-size: 12px; }
 .rich-services p { margin: 0 0 17px; line-height: 1.45; }
