@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getSpringStatus } from './backend/spring-client.mjs';
+import { createSpringClient, getSpringStatus } from './backend/spring-client.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
 import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
@@ -25,9 +25,48 @@ const normalise = item => { const flights = item.flights ?? [];
 const first = flights[0] ?? {};
 const last = flights.at(-1) ?? first;
 const number = first.flight_number ?? ''; return { airline: first.airline ?? 'Unknown airline', airlineLogo: first.airline_logo ?? null, airlineCode: number.match(/^([A-Z0-9]{2})\s*/i)?.[1]?.toUpperCase() ?? null, number, departure: first.departure_airport ?? {}, arrival: last.arrival_airport ?? {}, duration: item.total_duration ?? flights.reduce((total, leg) => total + (leg.duration ?? 0), 0), stops: Math.max(0, flights.length - 1), price: item.price ?? null, departureToken: item.departure_token ?? null, segments: flights.map(leg => ({ number: leg.flight_number ?? '', airline: leg.airline ?? '', departure: leg.departure_airport ?? {}, arrival: leg.arrival_airport ?? {}, duration: leg.duration ?? null, airplane: leg.airplane ?? null, travelClass: leg.travel_class ?? null, extensions: leg.extensions ?? [] })) }; };
+const springTime = value => {
+  const match = String(value || '').match(/(\d{1,2}:\d{2})(?::\d{2})?/);
+  return match ? match[1].padStart(5, '0') : '';
+};
+const springAirport = endpoint => {
+  const airport = endpoint?.airportCityInfo ?? endpoint ?? {};
+  const time = endpoint?.oriTimeInfo?.timeBJ ?? endpoint?.destTimeInfo?.timeBJ ?? endpoint?.timeInfo?.timeBJ ?? endpoint?.timeBJ;
+  return { id: airport.airportCode || airport.cityCode || '', name: airport.airportName || airport.cityName || '', time: springTime(time) };
+};
+const minutesBetween = (first, last) => {
+  const value = time => { const match = String(time || '').match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : null; };
+  const start = value(first); const end = value(last);
+  return start === null || end === null ? 0 : (end - start + 1440) % 1440;
+};
+const normaliseSpring = item => {
+  const basic = item.flightBasicInfo ?? item;
+  const departure = springAirport(basic.oriEndPoint);
+  const arrival = springAirport(basic.destEndPoint);
+  const seats = [...(item.normSeatPriceList ?? basic.normSeatPriceList ?? [])].filter(seat => Number(seat.remSeatNum ?? seat.remainSeatNum ?? 1) > 0).sort((a, b) => Number(a.seatPrice ?? a.price ?? Infinity) - Number(b.seatPrice ?? b.price ?? Infinity));
+  const seat = seats[0] ?? {};
+  const baseFare = Number(seat.seatPrice ?? seat.price ?? basic.pubPrice ?? 0);
+  const taxes = Number(basic.fuelFee ?? 0) + Number(basic.portPay ?? 0) + Number(basic.otherFeeSum ?? 0);
+  const duration = Number(basic.flightDuration ?? basic.duration ?? minutesBetween(departure.time, arrival.time));
+  return { airline: basic.airlineName || 'Spring Airlines', airlineLogo: null, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: baseFare + taxes, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: seat.seatName || seat.cabinName || 'Economy', seatPrice: baseFare, taxes }, segments: [{ number: basic.flightNo || 'Flight', airline: basic.airlineName || 'Spring Airlines', departure, arrival, duration, airplane: basic.acType || null, travelClass: seat.seatName || seat.cabinName || 'Economy' }] };
+};
+const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
+  if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('departure, arrival and date are required.');
+  if (date < new Date().toISOString().slice(0, 10)) throw new Error('Departure date cannot be in the past.');
+  if (trip === 'round' && !/^\d{4}-\d{2}-\d{2}$/.test(returnDate || '')) throw new Error('A return date is required for a round trip.');
+  if (trip === 'round' && returnDate < date) throw new Error('Return date cannot be earlier than departure date.');
+};
+async function searchSpringFlights({ departure, arrival, date, trip, returnDate }) {
+  const client = createSpringClient(); const token = await client.getAccessToken();
+  const payload = (oriCode, destCode, flightDay) => ({ codeType: 1, oriCode, destCode, flightDay, lang: 'zh_cn', moneyClassId: 0 });
+  const outboundData = await client.searchFlights(payload(departure, arrival, date), token.accessToken);
+  const outbound = (outboundData.flightsList ?? []).map(normaliseSpring).filter(flight => flight.departure.id && flight.arrival.id);
+  if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound };
+  const returnData = await client.searchFlights(payload(arrival, departure, returnDate), token.accessToken);
+  const returns = (returnData.flightsList ?? []).map(normaliseSpring).filter(flight => flight.departure.id && flight.arrival.id);
+  return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound, roundPairs: outbound.slice(0, 3).flatMap(outboundFlight => returns.slice(0, 3).map(returnFlight => ({ outbound: outboundFlight, returnFlight, sameAirline: outboundFlight.airlineCode === returnFlight.airlineCode }))) };
+}
 async function searchFlights(url, res) {
-  const key = process.env.SERPAPI_KEY;
-  if (!key) return send(res, 503, { error: 'Flight search is not configured. Set SERPAPI_KEY on the server.' });
   const departure = url.searchParams.get('departure')?.toUpperCase();
 const arrival = url.searchParams.get('arrival')?.toUpperCase();
 const date = url.searchParams.get('date');
@@ -38,6 +77,12 @@ const trip = url.searchParams.get('trip') || 'oneway';
 const returnDate = url.searchParams.get('returnDate');
 const departureToken = url.searchParams.get('departureToken');
 const airline = url.searchParams.get('airline')?.toUpperCase();
+  if (getSpringStatus().httpJsonReady && !departureToken) {
+    try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); return send(res, 200, await searchSpringFlights({ departure, arrival, date, trip, returnDate })); }
+    catch (error) { return send(res, 502, { error: error.message || 'Spring Airlines flight search is unavailable.' }); }
+  }
+  const key = process.env.SERPAPI_KEY;
+  if (!key) return send(res, 503, { error: 'Flight search is not configured.' });
   if (departureToken) {
     const loadReturn = async includeAirline => { const params = new URLSearchParams({ engine: 'google_flights', departure_token: departureToken, departure_id: departure || '', arrival_id: arrival || '', outbound_date: date || '', return_date: returnDate || '', adults, children, infants_on_lap: infants, travel_class: '1', currency: 'CNY', hl: 'en', gl: 'cn', type: '1', api_key: key });
 if (includeAirline) params.set('include_airlines', includeAirline);
@@ -46,11 +91,7 @@ const data = await upstream.json(); return { upstream, data, results: [...(data.
     try { let response = await loadReturn(airline); let fallback = false;
 if (airline && (!response.upstream.ok || response.data.error || response.results.length === 0)) { response = await loadReturn(null); fallback = true; } if (!response.upstream.ok || response.data.error) return send(res, 502, { error: response.data.error || 'Flight provider returned an error.' }); return send(res, 200, { source: 'SerpApi / Google Flights', phase: 'return', sameAirline: !fallback, results: response.results }); } catch { return send(res, 502, { error: 'Flight provider could not be reached.' }); }
   }
-  if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return send(res, 400, { error: 'departure, arrival and date are required.' });
-  const today = new Date().toISOString().slice(0, 10);
-  if (date < today) return send(res, 400, { error: 'Departure date cannot be in the past.' });
-  if (trip === 'round' && !/^\d{4}-\d{2}-\d{2}$/.test(returnDate || '')) return send(res, 400, { error: 'A return date is required for a round trip.' });
-  if (trip === 'round' && returnDate < date) return send(res, 400, { error: 'Return date cannot be earlier than departure date.' });
+  try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); } catch (error) { return send(res, 400, { error: error.message }); }
   const params = new URLSearchParams({ engine: 'google_flights', departure_id: departure, arrival_id: arrival, outbound_date: date, adults, children, infants_on_lap: infants, travel_class: '1', currency: 'CNY', hl: 'en', gl: 'cn', type: trip === 'round' ? '1' : '2', api_key: key });
   if (trip === 'round') params.set('return_date', returnDate);
   try { const upstream = await fetch(`https://serpapi.com/search.json?${params}`);

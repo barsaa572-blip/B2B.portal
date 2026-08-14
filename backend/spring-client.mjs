@@ -50,7 +50,7 @@ export function createSpringClient(env = process.env) {
     const text = await response.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    if (!response.ok) throw new Error(`Spring API request failed (${response.status}).`);
+    if (!response.ok || data.ifSuccess === 'N') throw new Error(data.errMsg || `Spring API request failed (${response.status}).`);
     return data;
   }
 
