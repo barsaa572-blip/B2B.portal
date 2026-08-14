@@ -3,39 +3,12 @@ const mnt = value => `₮ ${Math.round(Number(value || 0)).toLocaleString('en-US
 const cnyAmount = value => Number(String(value ?? '').replace(/[^\d.]/g, ''));
 const quoteMnt = value => pricingRate ? mnt(cnyAmount(value) * pricingRate.effectiveRateMnt) : 'Rate unavailable';
 
-const bookings = [
-  { ref: 'BM7K2Q', route: 'ULN → PVG', passenger: 'BATBOLD / ENKHTAIVAN', issued: '05 Aug 2026', total: '¥ 1,280.00', status: 'Ticketed' },
-  { ref: 'K8M4RP', route: 'PVG → ULN', passenger: 'DULAM / SARUUL', issued: '04 Aug 2026', total: '¥ 1,460.00', status: 'Ticketed' },
-  { ref: 'QF9A2N', route: 'ULN → SHA', passenger: 'ERDENE / TUMUR', issued: '04 Aug 2026', total: '¥ 1,350.00', status: 'Pending' },
-  { ref: 'L3Y7CX', route: 'PVG → ULN', passenger: 'MUNKH / NARAN', issued: '02 Aug 2026', total: '¥ 1,290.00', status: 'Ticketed' }
-];
-bookings.push(
-  { ref: 'NEW2RT', route: 'ULN → PVG', passenger: 'BOLD / TUVSHIN', issued: '07 Aug 2026', total: '¥ 2,680.00', status: 'Ticketed', passengerCount: 1, legStates: { outbound: 'active', return: 'active' } },
-  { ref: 'ONEFLW', route: 'ULN → PVG', passenger: 'SUKH / MUNKH', issued: '01 Aug 2026', total: '¥ 2,520.00', status: 'Partially flown', passengerCount: 1, legStates: { outbound: 'flown', return: 'active' } },
-  { ref: 'TWOACT', route: 'ULN → PVG', passenger: 'BAYAR / SOLONGO', issued: '06 Aug 2026', total: '¥ 5,360.00', status: 'Ticketed', passengerCount: 2, passengers: ['BAYAR / SOLONGO', 'BATBOLD / TUVSHIN'], legStates: { outbound: 'active', return: 'active' } },
-  { ref: 'TWOUSE', route: 'ULN → PVG', passenger: 'TUMUR / ERDENE', issued: '20 Jul 2026', total: '¥ 5,120.00', status: 'Flown', passengerCount: 2, passengers: ['TUMUR / ERDENE', 'DULAM / SARUUL'], legStates: { outbound: 'flown', return: 'flown' } }
-);
-bookings.splice(0, bookings.length,
-  { ref: 'RTA001', route: 'ULN → PVG', passenger: 'BATBOLD / TUVSHIN', issued: '07 Aug 2026', total: '¥ 2,680.00', status: 'Ticketed', passengerCount: 1, legStates: { outbound: 'active', return: 'active' } },
-  { ref: 'RTP002', route: 'ULN → PVG', passenger: 'ERDENE / DULAM', issued: '01 Aug 2026', total: '¥ 2,520.00', status: 'Partially flown', passengerCount: 1, legStates: { outbound: 'flown', return: 'active' } },
-  { ref: 'RTU003', route: 'ULN → PVG', passenger: 'MUNKH / NARAN', issued: '20 Jul 2026', total: '¥ 2,560.00', status: 'Flown', passengerCount: 1, legStates: { outbound: 'flown', return: 'flown' } },
-  { ref: 'OWN004', route: 'ULN → SHA', passenger: 'SARUUL / OYUN', issued: '07 Aug 2026', total: '¥ 1,340.00', status: 'Ticketed', passengerCount: 1, oneWay: true, legStates: { outbound: 'active' } },
-  { ref: 'OWU005', route: 'PVG → ULN', passenger: 'TUMUR / BOLD', issued: '19 Jul 2026', total: '¥ 1,280.00', status: 'Flown', passengerCount: 1, oneWay: true, legStates: { outbound: 'flown' } },
-  { ref: '2RTA06', route: 'ULN → PVG', passenger: 'BAYAR / SOLONGO', issued: '07 Aug 2026', total: '¥ 5,360.00', status: 'Ticketed', passengerCount: 2, passengers: ['BAYAR / SOLONGO', 'BATBOLD / TUVSHIN'], legStates: { outbound: 'active', return: 'active' } },
-  { ref: '2RTP07', route: 'ULN → PVG', passenger: 'DULAM / ERDENE', issued: '01 Aug 2026', total: '¥ 5,040.00', status: 'Partially flown', passengerCount: 2, passengers: ['DULAM / ERDENE', 'MUNKH / NARAN'], legStates: { outbound: 'flown', return: 'active' } },
-  { ref: '2RTU08', route: 'ULN → PVG', passenger: 'OYUN / SARUUL', issued: '20 Jul 2026', total: '¥ 5,120.00', status: 'Flown', passengerCount: 2, passengers: ['OYUN / SARUUL', 'TUMUR / BOLD'], legStates: { outbound: 'flown', return: 'flown' } },
-  { ref: '2OWN09', route: 'ULN → SHA', passenger: 'GANBOLD / ENKHTAIVAN', issued: '07 Aug 2026', total: '¥ 2,680.00', status: 'Ticketed', passengerCount: 2, passengers: ['GANBOLD / ENKHTAIVAN', 'BAYAR / SOLONGO'], oneWay: true, legStates: { outbound: 'active' } },
-  { ref: '2OWU10', route: 'PVG → ULN', passenger: 'NARAN / MUNKH', issued: '19 Jul 2026', total: '¥ 2,560.00', status: 'Flown', passengerCount: 2, passengers: ['NARAN / MUNKH', 'DULAM / ERDENE'], oneWay: true, legStates: { outbound: 'flown' } }
-);
-const ledger = [
-  ['05 Aug 2026, 09:42', 'TKT-BM7K2Q', 'Ticket issue · ULN → PVG', 'Debit', '− ¥ 1,280.00', '¥ 12,480.00'],
-  ['04 Aug 2026, 15:18', 'TKT-K8M4RP', 'Ticket issue · PVG → ULN', 'Debit', '− ¥ 1,460.00', '¥ 13,760.00'],
-  ['01 Aug 2026, 11:05', 'TOP-10681', 'Top-up approved by finance', 'Credit', '+ ¥ 15,000.00', '¥ 15,220.00'],
-  ['31 Jul 2026, 16:34', 'TKT-L3Y7CX', 'Ticket issue · PVG → ULN', 'Debit', '− ¥ 1,290.00', '¥ 220.00']
-];
-const ownBookingRefs = new Set(['RTA001', 'RTP002', 'RTU003', 'OWN004', 'OWU005', '2RTA06', '2RTP07', '2RTU08', '2OWN09', '2OWU10']);
+// Bookings and the wallet ledger are populated only from live backend data.
+// Demo orders must never appear in an agency-facing portal.
+const bookings = [];
+const ledger = [];
 const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${b.route}</td><td>${b.passenger}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
-const ownBookings = () => bookings.filter(booking => ownBookingRefs.has(booking.ref));
+const ownBookings = () => bookings;
 let bookingScope = 'agent';
 const renderBookings = (query = '') => {
   const normalized = query.trim().toLowerCase();
@@ -242,7 +215,7 @@ const showChangeFlow = (modal, booking) => {
   });
 };
 document.addEventListener('click', event => { const button = event.target.closest('.view-booking'); if (button) openBookingDetail(button.dataset.bookingRef); });
-document.querySelector('#ledger').innerHTML = ledger.map(row => `<tr>${row.map((x,i)=> `<td class="${i===3 ? (x === 'Credit' ? 'credit' : 'debit') : ''}">${x}</td>`).join('')}</tr>`).join('');
+document.querySelector('#ledger').innerHTML = '<tr><td colspan="6" class="no-bookings">No wallet transactions yet.</td></tr>';
 const showView = id => { document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.view===id)); document.querySelector('main > header').hidden = id === 'bookings'; document.querySelector('#page-title').textContent = id==='dashboard' ? 'Good morning, Bayar' : id==='search' ? 'Flight search' : id[0].toUpperCase()+id.slice(1); window.scrollTo({top:0,behavior:'smooth'}); };
 document.querySelectorAll('[data-view], [data-view-target]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view || btn.dataset.viewTarget)));
 const formatMinutes = minutes => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
