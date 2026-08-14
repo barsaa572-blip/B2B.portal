@@ -29,10 +29,9 @@ const springTime = value => {
   const match = String(value || '').match(/(\d{1,2}:\d{2})(?::\d{2})?/);
   return match ? match[1].padStart(5, '0') : '';
 };
-// Spring's gateway uses the legacy ULN code, while the portal displays the
-// current IATA code UBN to agents.
+// Spring uses ULN for Ulaanbaatar. Accept UBN as a legacy alias if submitted.
 const springAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
-const portalAirportCode = code => String(code || '').toUpperCase() === 'ULN' ? 'UBN' : String(code || '').toUpperCase();
+const portalAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
 const springAirport = endpoint => {
   const airport = endpoint?.airportCityInfo ?? endpoint ?? {};
   const time = endpoint?.oriTimeInfo?.timeBJ ?? endpoint?.destTimeInfo?.timeBJ ?? endpoint?.timeInfo?.timeBJ ?? endpoint?.timeBJ;
