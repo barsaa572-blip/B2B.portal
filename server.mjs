@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSpringClient, getSpringStatus } from './backend/spring-client.mjs';
+import { searchAirports } from './backend/airport-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
 import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
@@ -103,19 +104,10 @@ if (!upstream.ok || data.error) return send(res, 502, { error: data.error || 'Fl
   catch { send(res, 502, { error: 'Flight provider could not be reached.' }); }
 }
 async function autocompleteLocations(url, res) {
-  const key = process.env.SERPAPI_KEY;
-const query = url.searchParams.get('q')?.trim();
-  if (!key) return send(res, 503, { error: 'Location search is not configured.' });
+  const query = url.searchParams.get('q')?.trim();
   if (!query || query.length < 2) return send(res, 200, { options: [] });
-  const params = new URLSearchParams({ engine: 'google_flights_autocomplete', q: query, exclude_regions: 'true', hl: 'en', gl: 'mn', api_key: key });
-  try { const upstream = await fetch(`https://serpapi.com/search.json?${params}`);
-const data = await upstream.json();
-if (!upstream.ok || data.error) return send(res, 502, { error: data.error || 'Location search failed.' });
-const seen = new Set();
-const options = (data.suggestions ?? []).flatMap(s => { const airports = (s.airports ?? []).map(a => ({ city: a.city || s.name, airport: a.name, code: a.id }));
-if (airports.length) return airports;
-if (/^[A-Z]{3}$/i.test(s.id || '')) return [{ city: s.city || s.description?.split(',')[0] || s.name, airport: s.name, code: s.id }]; return []; }).filter(a => a.code && !seen.has(a.code) && seen.add(a.code)); send(res, 200, { options }); }
-  catch { send(res, 502, { error: 'Location provider could not be reached.' }); }
+  try { return send(res, 200, { options: await searchAirports(query) }); }
+  catch (error) { return send(res, 503, { error: error.message || 'Airport directory is unavailable.' }); }
 }
 
 async function handleOfficeUsers(req, res, url) {

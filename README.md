@@ -2,6 +2,8 @@
 
 The live search integration is server-side. The SerpApi key is never placed in `index.html` or `app.js`.
 
+Airport autocomplete uses the [OurAirports public-domain dataset](https://ourairports.com/data/) on the server. It is downloaded once per server process; Spring's `ULN` alias is retained for Ulaanbaatar.
+
 ## Run locally (PowerShell)
 
 1. Create a new SerpApi key in the SerpApi dashboard. Do not use a key that has been pasted into chat or committed to source control.
