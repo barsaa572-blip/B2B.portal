@@ -107,29 +107,34 @@ const normaliseSpring = async item => {
   const basic = item.flightBasicInfo ?? item;
   const [departure, arrival] = await Promise.all([springAirport(basic.oriEndPoint), springAirport(basic.destEndPoint)]);
   const seats = [...(item.normSeatPriceList ?? basic.normSeatPriceList ?? [])].filter(seat => Number(seat.remSeatNum ?? seat.remainSeatNum ?? 1) > 0).sort((a, b) => Number(a.seatPrice ?? a.price ?? Infinity) - Number(b.seatPrice ?? b.price ?? Infinity));
-  const seat = seats[0] ?? {};
-  const baseFare = Number(seat.seatPrice ?? seat.price ?? basic.pubPrice ?? 0);
   const taxes = Number(basic.fuelFee ?? 0) + Number(basic.portPay ?? 0) + Number(basic.otherFeeSum ?? 0);
   const duration = Number(basic.flightDuration ?? basic.duration ?? minutesBetween(departure.time, arrival.time));
-  const allowance = seat.kegui ?? seat.baggage ?? basic.kegui ?? {};
-  const baggage = {
-    checkedKg: allowance.bag ?? allowance.checkedBag ?? allowance.checkedBaggage ?? null,
-    cabinKg: allowance.handbag ?? allowance.cabinBag ?? allowance.handBaggage ?? null,
-    cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
+  const toFareOption = (seat, index) => {
+    const baseFare = Number(seat.seatPrice ?? seat.price ?? basic.pubPrice ?? 0);
+    const allowance = seat.kegui ?? seat.baggage ?? basic.kegui ?? {};
+    const baggage = {
+      checkedKg: allowance.bag ?? allowance.checkedBag ?? allowance.checkedBaggage ?? null,
+      cabinKg: allowance.handbag ?? allowance.cabinBag ?? allowance.handBaggage ?? null,
+      cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
+    };
+    return {
+      id: String(seat.seatId ?? seat.seatCode ?? seat.cabinCode ?? `fare-${index}`),
+      fareType: springText(seat.seatName || seat.cabinName || 'Public fare'),
+      bookingClass: seat.seatCode || seat.cabinCode || null,
+      cabin: springText(seat.cabinName || seat.seatName || 'Economy'),
+      baseFare,
+      taxes,
+      total: baseFare + taxes,
+      remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null,
+      baggage,
+      rules: normaliseFareRules(allowance)
+    };
   };
-  const rules = normaliseFareRules(allowance);
-  const fare = {
-    fareType: springText(seat.seatName || seat.cabinName || 'Public fare'),
-    bookingClass: seat.seatCode || seat.cabinCode || null,
-    cabin: springText(seat.cabinName || seat.seatName || 'Economy'),
-    baseFare,
-    taxes,
-    total: baseFare + taxes,
-    remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null,
-    rules
-  };
+  const fareOptions = (seats.length ? seats : [{}]).map(toFareOption);
+  const fare = fareOptions[0];
+  const baggage = fare.baggage;
   const airline = springText(basic.airlineName || 'Spring Airlines');
-  return { airline, airlineLogo: SPRING_AIRLINES_LOGO, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: baseFare, taxes, baggage, fare }, fare, segments: [{ number: basic.flightNo || 'Flight', airline, airlineLogo: SPRING_AIRLINES_LOGO, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
+  return { airline, airlineLogo: SPRING_AIRLINES_LOGO, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: fare.baseFare, taxes, baggage, fare }, fare, fareOptions, segments: [{ number: basic.flightNo || 'Flight', airline, airlineLogo: SPRING_AIRLINES_LOGO, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
 };
 const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
   if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('departure, arrival and date are required.');

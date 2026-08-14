@@ -226,7 +226,7 @@ const showView = id => { document.querySelectorAll('.view').forEach(v=>v.classLi
 document.querySelectorAll('[data-view], [data-view-target]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view || btn.dataset.viewTarget)));
 const formatMinutes = minutes => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 const resultArea = document.querySelector('#flight-results');
-let tripType = 'round'; let visibleFlights = []; let searchPhase = 'outbound'; let selectedOutbound = null; let selectedReturn = null;
+let tripType = 'round'; let visibleFlights = []; let searchPhase = 'outbound'; let selectedOutbound = null; let selectedReturn = null; let roundReturnFlights = [];
 let activePassengerCounts = { adults: 1, children: 0, infants: 0 };
 let passengerSearchStale = false;
 const passengerCounts = () => ({
@@ -331,16 +331,37 @@ const renderFlights = (results, phase = 'outbound', sameAirline = true) => {
   resultArea.innerHTML = `${phase === 'return' ? selectedOutboundPanel() : ''}<div class="results-head"><h2>${heading}</h2><span>${note}</span></div>${flights || '<div class="no-results">No flights found for this route and date.</div>'}`;
   bindFlightButtons();
 };
+const applyFareOption = (flight, fare) => {
+  flight.fare = fare; flight.price = fare.total;
+  flight.spring = { ...(flight.spring || {}), seatName: fare.fareType, seatPrice: fare.baseFare, taxes: fare.taxes, baggage: fare.baggage, fare };
+  flight.segments = (flight.segments || []).map(segment => ({ ...segment, travelClass: fare.cabin || segment.travelClass, baggage: fare.baggage || segment.baggage, fare }));
+  return flight;
+};
+const fareBaggageText = fare => {
+  const baggage = fare?.baggage || {};
+  const cabin = baggage.cabinKg === null || baggage.cabinKg === undefined ? 'Carry-on: confirm with airline' : `Carry-on: ${baggage.cabinKg} kg`;
+  const checked = baggage.checkedKg === null || baggage.checkedKg === undefined ? 'Checked baggage: not included' : `Checked baggage: ${baggage.checkedKg} kg`;
+  return `${cabin} · ${checked}`;
+};
+const continueWithFare = (flight, fare, phase) => {
+  applyFareOption(flight, fare);
+  if (phase === 'return') { selectedReturn = flight; return prepareBookingScreen(); }
+  selectedOutbound = flight;
+  if (tripType !== 'round') { selectedReturn = null; return prepareBookingScreen(); }
+  if (roundReturnFlights.length) return renderFlights(roundReturnFlights, 'return', true);
+  resultArea.innerHTML = '<div class="no-results"><strong>Return flight is unavailable.</strong><br>Please search again or choose another outbound flight.</div>';
+};
+const showFareOptions = (flight, phase) => {
+  const options = flight.fareOptions?.length ? flight.fareOptions : [flight.fare].filter(Boolean);
+  if (options.length < 2) return continueWithFare(flight, options[0] || { total: flight.price, baseFare: flight.price, taxes: 0, fareType: 'Public fare', cabin: 'Economy' }, phase);
+  const leg = phase === 'return' ? 'Return' : 'Departure';
+  resultArea.classList.remove('hidden');
+  resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT</p><h2>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</h2><p>${flight.airline || 'Airline'} ${flight.number || 'Flight'} · ${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</p></header><div class="fare-choice-grid">${options.map((fare, index) => `<button type="button" class="fare-family-choice ${index === 0 ? 'recommended' : ''}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.cabin || 'Economy'} class</b>${index === 0 ? '<em>Lowest fare</em>' : ''}</span><small>${fare.fareType || 'Public fare'}${fare.bookingClass ? ` · ${fare.bookingClass}` : ''}</small><hr><strong>Baggage</strong><p>${fareBaggageText(fare)}</p><strong>Flexibility</strong><p>${fare.rules?.length ? 'Refund and change conditions available' : 'Fare conditions confirmed before issue'}</p><div class="fare-family-price"><span>Per adult</span><b>${quoteMnt(fare.total)}</b></div></button>`).join('')}</div><footer><span>Select a fare to continue</span><strong>${leg} · ${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</strong></footer></section>`;
+  resultArea.querySelectorAll('[data-fare-index]').forEach(button => button.addEventListener('click', () => continueWithFare(flight, options[Number(button.dataset.fareIndex)], phase)));
+};
 async function selectFlight(flight) {
   if (passengerSearchStale) return toast('Search again after changing passenger count before selecting a flight.');
-  if (tripType !== 'round') { selectedOutbound = flight; selectedReturn = null; return prepareBookingScreen(); }
-  if (searchPhase === 'return') { selectedReturn = flight; return prepareBookingScreen(); }
-  selectedOutbound = flight;
-  if (!flight?.departureToken) { resultArea.innerHTML = '<div class="no-results"><strong>Return flight cannot be loaded.</strong><br>The flight provider did not return a departure token for this option.</div>'; return; }
-  resultArea.innerHTML = '<div class="no-results"><strong>Searching return flights...</strong></div>';
-  const query = returnSearchQuery(flight);
-  try { const response = await fetch(`/api/flights?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); renderFlights(data.results, 'return', data.sameAirline); }
-  catch (error) { resultArea.innerHTML = `<div class="no-results"><strong>Return search is unavailable.</strong><br>${error.message || 'Please try again later.'}</div>`; }
+  showFareOptions(flight, searchPhase);
 }
 document.querySelectorAll('[data-trip]').forEach(button => button.addEventListener('click', () => { tripType = button.dataset.trip; document.querySelectorAll('[data-trip]').forEach(b => b.classList.toggle('selected', b === button)); document.querySelector('.return-date').hidden = tripType !== 'round'; resultArea.classList.add('hidden'); }));
 const passengerLimits = { adults: { min: 1, max: 9 }, children: { min: 0, max: 8 }, infants: { min: 0, max: 8 } };
@@ -382,8 +403,8 @@ document.querySelector('#search-form').addEventListener('submit', async e => {
   e.preventDefault(); const button = e.currentTarget.querySelector('.primary'); const departureInput = document.querySelector('#departure'); const arrivalInput = document.querySelector('#arrival');
   const departure = departureInput.value.match(/\(([A-Z]{3})\)/)?.[1] || departureInput.value.trim(); const arrival = arrivalInput.value.match(/\(([A-Z]{3})\)/)?.[1] || arrivalInput.value.trim();
   activePassengerCounts = passengerCounts(); passengerSearchStale = false;
-  selectedOutbound = null; selectedReturn = null; button.disabled = true; button.textContent = 'Searching…';
-  try { const query = new URLSearchParams({ departure, arrival, date: document.querySelector('#outbound-date').value, returnDate: document.querySelector('#return-date').value, adults: document.querySelector('#adults').value, children: document.querySelector('#children').value, infants: document.querySelector('#infants').value, trip: tripType }); const response = await fetch(`/api/flights?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); activePassengerCounts = data.passengers || activePassengerCounts; if (tripType === 'round') { if (data.roundPairs?.length) renderRoundPairs(data.roundPairs); else await loadRoundPairs(data.results); } else renderFlights(data.results, 'outbound'); }
+  selectedOutbound = null; selectedReturn = null; roundReturnFlights = []; button.disabled = true; button.textContent = 'Searching…';
+  try { const query = new URLSearchParams({ departure, arrival, date: document.querySelector('#outbound-date').value, returnDate: document.querySelector('#return-date').value, adults: document.querySelector('#adults').value, children: document.querySelector('#children').value, infants: document.querySelector('#infants').value, trip: tripType }); const response = await fetch(`/api/flights?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); activePassengerCounts = data.passengers || activePassengerCounts; if (tripType === 'round') { const seen = new Set(); roundReturnFlights = (data.roundPairs ?? []).map(pair => pair.returnFlight).filter(flight => { const key = `${flight.number}|${flight.departure?.time}|${flight.arrival?.time}`; if (seen.has(key)) return false; seen.add(key); return true; }); renderFlights(data.results, 'outbound'); } else renderFlights(data.results, 'outbound'); }
   catch (error) { showMockSearch(departure, arrival); }
   finally { button.disabled = false; button.textContent = 'Search flights'; }
 });
