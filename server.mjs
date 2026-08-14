@@ -29,10 +29,14 @@ const springTime = value => {
   const match = String(value || '').match(/(\d{1,2}:\d{2})(?::\d{2})?/);
   return match ? match[1].padStart(5, '0') : '';
 };
+// Spring's gateway uses the legacy ULN code, while the portal displays the
+// current IATA code UBN to agents.
+const springAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
+const portalAirportCode = code => String(code || '').toUpperCase() === 'ULN' ? 'UBN' : String(code || '').toUpperCase();
 const springAirport = endpoint => {
   const airport = endpoint?.airportCityInfo ?? endpoint ?? {};
   const time = endpoint?.oriTimeInfo?.timeBJ ?? endpoint?.destTimeInfo?.timeBJ ?? endpoint?.timeInfo?.timeBJ ?? endpoint?.timeBJ;
-  return { id: airport.airportCode || airport.cityCode || '', name: airport.airportName || airport.cityName || '', time: springTime(time) };
+  return { id: portalAirportCode(airport.airportCode || airport.cityCode), name: airport.airportName || airport.cityName || '', time: springTime(time) };
 };
 const minutesBetween = (first, last) => {
   const value = time => { const match = String(time || '').match(/(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : null; };
@@ -58,7 +62,7 @@ const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) =>
 };
 async function searchSpringFlights({ departure, arrival, date, trip, returnDate }) {
   const client = createSpringClient(); const token = await client.getAccessToken();
-  const payload = (oriCode, destCode, flightDay) => ({ codeType: 1, oriCode, destCode, flightDay, lang: 'zh_cn', moneyClassId: 0 });
+  const payload = (oriCode, destCode, flightDay) => ({ codeType: 1, oriCode: springAirportCode(oriCode), destCode: springAirportCode(destCode), flightDay, lang: 'zh_cn', moneyClassId: 0 });
   const outboundData = await client.searchFlights(payload(departure, arrival, date), token.accessToken);
   const outbound = (outboundData.flightsList ?? []).map(normaliseSpring).filter(flight => flight.departure.id && flight.arrival.id);
   if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, results: outbound };
