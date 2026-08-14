@@ -32,7 +32,7 @@
     return `<div class="fare-detail-table"><div class="fare-head"><span>Passenger</span><span>Fare type</span><span>Fare amount</span><span>Taxes</span><span>Total</span></div><div class="fare-value"><strong>ADT</strong><span>${fare.fareType || fare.seatName || 'Public fare'}</span><span>${data ? money(fare.baseFare ?? fare.seatPrice) : 'Verified before issue'}</span><span>${data ? money(fare.taxes) : 'Verified before issue'}</span><strong>${total}</strong></div></div><button type="button" class="passenger-price-details" data-flight-number="${number.replace(/\s/g, '')}">ⓘ Details per passenger</button>`;
   };
 
-  const currentCounts = () => ({
+  const currentCounts = () => typeof activePassengerCounts !== 'undefined' ? activePassengerCounts : ({
     adults: Math.max(1, Number(document.querySelector('#adults')?.value) || 1),
     children: Math.max(0, Number(document.querySelector('#children')?.value) || 0),
     infants: Math.max(0, Number(document.querySelector('#infants')?.value) || 0)
