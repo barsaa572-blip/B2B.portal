@@ -197,6 +197,49 @@ export async function getWalletDetails(profile) {
   return { wallet: wallets[0] || { balance_cny: 0 }, transactions };
 }
 
+const bookingAccessFilter = profile => {
+  if (profile.role === 'platform_admin') return '';
+  if (profile.role === 'office_manager') return `&agency_id=eq.${encodeURIComponent(profile.agency_id)}`;
+  return `&created_by=eq.${encodeURIComponent(profile.id)}`;
+};
+
+const newPortalPnr = () => `B2B${crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase()}`;
+
+export async function listPortalBookings(profile) {
+  return secretRequest(`/rest/v1/bookings?select=*&order=created_at.desc${bookingAccessFilter(profile)}`);
+}
+
+export async function createPortalBooking(profile, { totalCny, itinerary, passengers }) {
+  if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
+  if (!Array.isArray(passengers?.travellers) || !passengers.travellers.length) throw new Error('At least one passenger is required.');
+  const created = await secretRequest('/rest/v1/bookings', {
+    method: 'POST',
+    body: {
+      pnr: newPortalPnr(),
+      agency_id: profile.agency_id,
+      branch_id: profile.branch_id || null,
+      created_by: profile.id,
+      status: 'Reserved',
+      total_cny: Number(totalCny) || 0,
+      itinerary,
+      passengers
+    }
+  });
+  return created[0];
+}
+
+export async function updatePortalBooking(profile, pnr, status) {
+  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const booking = rows[0];
+  if (!booking) throw new Error('Booking not found.');
+  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  if (!allowed) throw new Error('You do not have access to this booking.');
+  if (booking.status === 'Cancelled') throw new Error('This booking has already been cancelled.');
+  if (status === 'Ticketed' && booking.status === 'Ticketed') throw new Error('This booking is already ticketed.');
+  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { status } });
+  return updated[0];
+}
+
 export async function getTopupInvoice(profile, id) {
   const rows = await secretRequest(`/rest/v1/topup_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
   const request = rows[0];

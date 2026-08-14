@@ -7,7 +7,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, createAgency, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -208,6 +208,21 @@ if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: '
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), supabase: getSupabaseStatus() });
 if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: error.message }); } }
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
+if (url.pathname.startsWith('/api/bookings')) { try {
+  const profile = await profileForAccessToken(bearer(req));
+  if (url.pathname === '/api/bookings' && req.method === 'GET') return send(res, 200, await listPortalBookings(profile));
+  if (url.pathname === '/api/bookings' && req.method === 'POST') {
+    const body = await readJson(req);
+    if (!body.itinerary || !body.passengers) throw new Error('Itinerary and passenger details are required.');
+    return send(res, 201, { booking: await createPortalBooking(profile, body) });
+  }
+  const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
+  if (match && req.method === 'POST') {
+    const status = match[2] === 'issue' ? 'Ticketed' : 'Cancelled';
+    return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
+  }
+  return send(res, 404, { error: 'Booking endpoint not found.' });
+} catch (error) { return send(res, 403, { error: error.message || 'Booking request is not allowed.' }); } }
 if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await profileForAccessToken(bearer(req)))); } catch (error) { return send(res, 403, { error: error.message || 'Wallet access is not allowed.' }); } }
 if (url.pathname === '/api/auth/login' && req.method === 'POST') { try { const { email, password } = await readJson(req);
 if (!email || !password) return send(res, 400, { error: 'Email and password are required.' });

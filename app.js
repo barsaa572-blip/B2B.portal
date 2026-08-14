@@ -42,6 +42,14 @@ const bookingFlightDetails = booking => {
   return `<div class="booking-flight-detail"><div><span>OUTBOUND</span><strong>${from || 'ULN'} â†’ ${to || 'PVG'}</strong><small>Spring Airlines Â· 9C 7058 Â· Economy</small></div><b>13:00 â†’ 17:00</b></div><div class="booking-flight-detail"><div><span>RETURN</span><strong>${to || 'PVG'} â†’ ${from || 'ULN'}</strong><small>Spring Airlines Â· 9C 7057 Â· Economy</small></div><b>08:10 â†’ 12:00</b></div>`;
 };
 const bookingFlightDetailsClean = booking => {
+  const storedFlights = booking.itinerary?.flights;
+  if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
+    const state = booking.status === 'Ticketed' ? 'ticketed' : booking.status === 'Cancelled' ? 'cancelled' : 'reserved';
+    const label = storedFlights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'OUTBOUND';
+    const route = `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`;
+    const times = `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`;
+    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small>${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'} &middot; ${flight.fare?.cabin || 'Economy'}</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state === 'ticketed' ? 'ticketed' : ''}">${state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : 'Reserved'}</em></div></div>`;
+  }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: 'active', return: 'active' };
   const flightRow = (label, route, number, times, date, state) => `<div class="booking-flight-detail ${state === 'flown' ? 'flown-flight' : ''}"><div><span>${label}</span><strong>${route}</strong><small>${date} &middot; Spring Airlines &middot; ${number} &middot; Economy</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state === 'flown' ? 'flown' : 'ticketed'}">${state === 'flown' ? 'Flown' : 'Ticketed'}</em></div></div>`;
@@ -57,17 +65,15 @@ const openBookingDetail = ref => {
   const allFlightsUsed = bookingLegs(booking).every(leg => leg.flown);
   const passengerDescription = `${booking.passengerCount || passengers.length} Adult${(booking.passengerCount || passengers.length) > 1 ? 's' : ''} &middot; Passport details verified before ticketing`;
   const passengerList = passengers.map((name, index) => {
-    const type = booking.passengerTypes?.[index] || 'ADT';
-    const passport = ['E1234567', 'E7654321', 'A8901234'][index] || `E${1234000 + index}`;
-    const birthDate = ['1988-04-12', '1991-09-23', '2016-01-08'][index] || '1990-01-01';
-    const expiryDate = ['2031-04-12', '2033-09-23', '2030-01-08'][index] || '2032-01-01';
-    const gender = ['Male', 'Female', 'Female'][index] || 'Male';
-    return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>Passport details verified</span><div class="passenger-document"><span>Passport number</span><b>${passport}</b><span>Date of birth</span><b>${birthDate}</b><span>Gender</span><b>${gender}</b><span>Nationality</span><b>Mongolia</b><span>Passport expiry</span><b>${expiryDate}</b></div></div>`;
+    const document = booking.documents?.[index] || {};
+    const type = document.type || booking.passengerTypes?.[index] || 'ADT';
+    return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>Passenger details</span><div class="passenger-document"><span>Passport number</span><b>${document.documentNumber || '—'}</b><span>Date of birth</span><b>${document.dateOfBirth || '—'}</b><span>Gender</span><b>${document.gender || '—'}</b><span>Nationality</span><b>${document.nationality || '—'}</b><span>Passport expiry</span><b>${document.documentExpiry || '—'}</b></div></div>`;
   }).join('');
-  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Issued ${booking.issued}</span></div><section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span></section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>Bayar Agency</strong><span>+976 8011 5627 &middot; booking@bayaragency.mn</span></section><section class="booking-detail-card booking-fare"><span>Total paid</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions"><button type="button" class="secondary cancel-ticket" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button></div>${allFlightsUsed ? '<p class="fully-used-note">This ticket has been fully used. Cancellation and changes are unavailable.</p>' : '<p class="booking-disclaimer">Fees shown before confirmation are estimates. The final amount is confirmed by the airline.</p>'}</section>`;
+  const canChangeStatus = !allFlightsUsed && !['Ticketed', 'Cancelled'].includes(booking.status);
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div><section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span></section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions"><button type="button" class="secondary cancel-portal-booking" ${canChangeStatus ? '' : 'disabled'}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${canChangeStatus ? '' : 'disabled'}>Issue ticket</button></div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">Issue ticket is a portal test action for now. It does not issue a live Spring Airlines ticket.</p>' : ''}</section>`;
   modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
-  modal.querySelector('.cancel-ticket').addEventListener('click', () => showCancelFlow(modal, booking));
-  modal.querySelector('.change-ticket').addEventListener('click', () => showChangeFlow(modal, booking));
+  modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
+  modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Booking ${booking.ref} marked as ticketed for testing.`); } catch (error) { event.currentTarget.disabled = false; toast(error.message); } });
   modal.showModal();
 };
 const showCancelEstimate = (modal, booking) => {
@@ -248,8 +254,8 @@ const mockSearchResults = (departure, arrival) => [mockFlight(departure, arrival
 const showMockSearch = (departure, arrival) => { const outbound = mockSearchResults(departure, arrival); if (tripType === 'round') { const returns = [mockFlight(arrival, departure, '9C 7057', '08:10', '12:00', 1960), mockFlight(arrival, departure, '9C 7011', '14:15', '18:05', 2150), mockFlight(arrival, departure, '9C 7025', '19:20', '23:15', 2290)]; renderRoundPairs(outbound.map((flight, index) => ({ outbound: flight, returnFlight: returns[index], sameAirline: true }))); } else renderFlights(outbound, 'outbound'); };
 const showItinerary = () => { resultArea.classList.remove('hidden'); resultArea.innerHTML = `<section class="final-itinerary"><div class="selected-title"><span>✓</span><div><p class="eyebrow">ROUND TRIP SELECTED</p><h2>Your selected itinerary</h2></div></div>${flightCard(selectedOutbound, 'OUTBOUND')} ${flightCard(selectedReturn, 'RETURN')}<div class="fare-total"><span>${passengerFareCaption()} · selected flights</span><strong>${totalPrice()}</strong></div><button class="primary continue-ticket">Continue to passenger details</button></section>`; document.querySelector('.continue-ticket').addEventListener('click', () => { document.querySelector('#ticket-modal-total').textContent = totalPrice(); document.querySelector('#ticket-modal').showModal(); }); };
 const checkoutFlight = (flight, label) => flight ? `<article class="checkout-flight"><div><span class="journey-tag ${label.toLowerCase()}">${label}</span><b>${flight.airline || 'Airline'} ${flight.number || ''}</b></div><div class="checkout-times"><strong>${(flight.departure?.time || '').slice(-5)}</strong><i></i><strong>${(flight.arrival?.time || '').slice(-5)}</strong></div><div class="checkout-airports"><span>${flight.departure?.name || flight.departure?.id || ''} (${flight.departure?.id || ''})</span><span>${flight.arrival?.name || flight.arrival?.id || ''} (${flight.arrival?.id || ''})</span></div></article>` : '';
-const passengerForm = (type, index) => `<section class="passenger-card"><div class="passenger-card-title"><h2>${index + 1} ${type}</h2></div><div class="passenger-fields"><label>Last name<input required placeholder="As shown on document" /></label><label>First name<input required placeholder="First and middle names" /></label><label>Date of birth<input type="date" required /></label><label>Document type<select><option>Passport</option><option>National ID</option></select></label><label>Document number<input required /></label><label>Issuing country / region<input required placeholder="e.g. Mongolia" /></label><label>Document expiry<input type="date" required /></label><label>Nationality / region<input required placeholder="e.g. Mongolia" /></label><label>Gender<select required><option value="">Select</option><option>Male</option><option>Female</option></select></label></div></section>`;
-const showCheckout = () => { const counts = [['Adult', Number(document.querySelector('#adults').value)], ['Child', Number(document.querySelector('#children').value)], ['Infant', Number(document.querySelector('#infants').value)]]; const passengers = counts.flatMap(([type, count]) => Array.from({ length: count }, (_, index) => passengerForm(type, index))); resultArea.classList.remove('hidden'); resultArea.innerHTML = `<section class="passenger-checkout"><div class="checkout-main"><div class="checkout-heading"><p class="eyebrow">PASSENGER DETAILS</p><h2>Enter passenger information</h2><p>Names must match the travel document exactly.</p></div><form id="passenger-form">${passengers.join('')}<section class="contact-card"><h2>Contact person</h2><div class="passenger-fields"><label>Full name<input required /></label><label>Contact number<input type="tel" required /></label><label>Email address<input type="email" required /></label></div><p>Booking confirmation and schedule changes will be sent to this contact.</p></section><button class="primary issue-ticket" type="submit">Continue to payment</button></form></div><aside class="order-summary"><h2>Order details</h2>${checkoutFlight(selectedOutbound, 'Departure')}${checkoutFlight(selectedReturn, 'Arrival')}<div class="summary-total"><span>${passengerFareCaption()}</span><strong>${totalPrice()}</strong><small>Final fare and tax are confirmed before ticket issuance.</small></div></aside></section>`; document.querySelector('#passenger-form').addEventListener('submit', event => { event.preventDefault(); document.querySelector('#ticket-modal-total').textContent = totalPrice(); document.querySelector('#ticket-modal').showModal(); }); resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+const passengerForm = (type, index) => `<section class="passenger-card" data-passenger-type="${type}"><div class="passenger-card-title"><h2>${index + 1} ${type}</h2></div><div class="passenger-fields"><label>Last name<input name="last-name" required placeholder="As shown on document" /></label><label>First name<input name="first-name" required placeholder="First and middle names" /></label><label>Date of birth<input name="date-of-birth" type="date" required /></label><label>Document type<select name="document-type"><option>Passport</option><option>National ID</option></select></label><label>Document number<input name="document-number" required /></label><label>Issuing country / region<input name="issuing-country" required placeholder="e.g. Mongolia" /></label><label>Document expiry<input name="document-expiry" type="date" required /></label><label>Nationality / region<input name="nationality" required placeholder="e.g. Mongolia" /></label><label>Gender<select name="gender" required><option value="">Select</option><option>Male</option><option>Female</option></select></label></div></section>`;
+const showCheckout = () => { const counts = [['Adult', Number(document.querySelector('#adults').value)], ['Child', Number(document.querySelector('#children').value)], ['Infant', Number(document.querySelector('#infants').value)]]; const passengers = counts.flatMap(([type, count]) => Array.from({ length: count }, (_, index) => passengerForm(type, index))); resultArea.classList.remove('hidden'); resultArea.innerHTML = `<section class="passenger-checkout"><div class="checkout-main"><div class="checkout-heading"><p class="eyebrow">PASSENGER DETAILS</p><h2>Enter passenger information</h2><p>Names must match the travel document exactly.</p></div><form id="passenger-form">${passengers.join('')}<section class="contact-card"><h2>Contact person</h2><div class="passenger-fields"><label>Full name<input name="contact-name" required /></label><label>Contact number<input name="contact-phone" type="tel" required /></label><label>Email address<input name="contact-email" type="email" required /></label></div><p>Booking confirmation and schedule changes will be sent to this contact.</p></section><button class="primary issue-ticket" type="submit">Book</button></form></div><aside class="order-summary"><h2>Order details</h2>${checkoutFlight(selectedOutbound, 'Departure')}${checkoutFlight(selectedReturn, 'Arrival')}<div class="summary-total"><span>${passengerFareCaption()}</span><strong>${totalPrice()}</strong><small>Final fare and tax are confirmed before ticket issuance.</small></div></aside></section>`; document.querySelector('#passenger-form').addEventListener('submit', createPortalBookingFromForm); resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair')) showCheckout(); });
 const airportCode = value => value.match(/\(([A-Z]{3})\)/i)?.[1] || value.trim().toUpperCase();
 const showToast = message => toast(message);
@@ -357,6 +363,73 @@ const topup = document.querySelector('#topup-modal'); topup.querySelector('.clos
 const toast = message => { const t=document.querySelector('#toast');t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400); };
 const portalSession = () => JSON.parse(sessionStorage.getItem('flightb2b-session') || '{}');
 const secureFetch = async (url, options = {}) => fetch(url, { ...options, headers: { authorization: `Bearer ${portalSession().accessToken}`, ...(options.headers || {}) } });
+const portalBookingFromRow = row => {
+  const itinerary = row.itinerary || {};
+  const travellers = row.passengers?.travellers || [];
+  return {
+    ref: row.pnr,
+    route: itinerary.route || '',
+    passenger: travellers.map(person => `${person.lastName} / ${person.firstName}`.trim()).filter(Boolean).join(', ') || 'Passenger',
+    passengers: travellers.map(person => `${person.lastName} / ${person.firstName}`.trim()),
+    passengerTypes: travellers.map(person => person.type || 'ADT'),
+    passengerCount: travellers.length,
+    issued: new Date(row.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    total: row.total_cny,
+    status: row.status,
+    oneWay: itinerary.trip === 'oneway',
+    itinerary,
+    contact: row.passengers?.contact || {},
+    documents: travellers
+  };
+};
+const loadBookings = async () => {
+  if (!portalSession().accessToken) return;
+  try {
+    const response = await secureFetch('/api/bookings');
+    const rows = await response.json();
+    if (!response.ok) throw new Error(rows.error || 'Bookings could not be loaded.');
+    bookings.splice(0, bookings.length, ...rows.map(portalBookingFromRow));
+    renderBookings();
+  } catch (error) { console.warn(error.message); }
+};
+const totalCnyForSelection = () => [selectedOutbound, selectedReturn].filter(Boolean).reduce((sum, flight) => sum + cnyAmount(flight.price), 0) * activePassengerCounts.adults;
+const createPortalBookingFromForm = async event => {
+  event.preventDefault();
+  const submit = event.currentTarget.querySelector('.issue-ticket');
+  const travellers = [...event.currentTarget.querySelectorAll('.passenger-card')].map(card => {
+    const get = name => card.querySelector(`[name="${name}"]`)?.value.trim() || '';
+    return { type: ({ Adult: 'ADT', Child: 'CHD', Infant: 'INF' })[card.dataset.passengerType] || 'ADT', lastName: get('last-name'), firstName: get('first-name'), dateOfBirth: get('date-of-birth'), documentType: get('document-type'), documentNumber: get('document-number'), nationality: get('nationality'), issuingCountry: get('issuing-country'), documentExpiry: get('document-expiry'), gender: get('gender') };
+  });
+  const route = `${selectedOutbound?.departure?.id || ''} → ${selectedOutbound?.arrival?.id || ''}`;
+  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', flights: [selectedOutbound, selectedReturn].filter(Boolean) };
+  const contact = { name: event.currentTarget.querySelector('[name="contact-name"]')?.value.trim(), phone: event.currentTarget.querySelector('[name="contact-phone"]')?.value.trim(), email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim() };
+  submit.disabled = true; submit.textContent = 'Creating booking…';
+  try {
+    const response = await secureFetch('/api/bookings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ totalCny: totalCnyForSelection(), itinerary, passengers: { travellers, contact } }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Booking could not be created.');
+    const booking = portalBookingFromRow(data.booking);
+    bookings.unshift(booking);
+    renderBookings();
+    const modal = document.querySelector('#ticket-modal');
+    modal.innerHTML = `<form method="dialog"><button class="close" value="cancel">×</button><div class="ticket-icon">✓</div><p class="eyebrow">BOOKING CREATED</p><h2>PNR ${booking.ref}</h2><p class="modal-copy">Your booking has been saved. It is not issued to Spring Airlines yet.</p><div class="booking-ref">TOTAL <strong>${quoteMnt(booking.total)}</strong></div><div class="booking-detail-actions"><button class="secondary copy-pnr" type="button">Copy PNR</button><button class="primary view-created-booking" type="button">View booking</button></div></form>`;
+    modal.querySelector('.copy-pnr').addEventListener('click', async () => { await navigator.clipboard?.writeText(booking.ref); toast(`PNR ${booking.ref} copied.`); });
+    modal.querySelector('.view-created-booking').addEventListener('click', () => { modal.close(); showView('bookings'); openBookingDetail(booking.ref); });
+    modal.showModal();
+  } catch (error) { toast(error.message || 'Booking could not be created.'); }
+  finally { submit.disabled = false; submit.textContent = 'Book'; }
+};
+const updatePortalBookingStatus = async (pnr, action) => {
+  const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${action}`, { method: 'POST' });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Booking could not be updated.');
+  const updated = portalBookingFromRow(data.booking);
+  const index = bookings.findIndex(item => item.ref === pnr);
+  if (index >= 0) bookings.splice(index, 1, updated);
+  else bookings.unshift(updated);
+  renderBookings();
+  return updated;
+};
 const cny = value => `¥ ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 const walletEntryLabel = entry => ({ credit: 'Credit', debit: 'Debit', adjustment: 'Adjustment' }[entry] || entry || 'Transaction');
 const loadWallet = async () => { const session = portalSession(); if (!session.accessToken) return; try { const response = await secureFetch('/api/wallet'); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Wallet could not be loaded.'); const balance = Number(data.wallet?.balance_cny || 0); document.querySelectorAll('#wallet-balance, .balance-copy').forEach(element => { element.textContent = balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }); const ledger = document.querySelector('#ledger'); if (!ledger) return; let runningBalance = balance; ledger.innerHTML = (data.transactions || []).map(item => { const balanceAfter = runningBalance; runningBalance -= Number(item.amount_cny || 0); const amount = Number(item.amount_cny || 0); return `<tr><td>${new Date(item.created_at).toLocaleString('en-GB')}</td><td>WLT-${String(item.id || '').slice(0, 8).toUpperCase()}</td><td>${item.reason || 'Wallet transaction'}</td><td>${walletEntryLabel(item.entry_type)}</td><td class="${amount >= 0 ? 'credit' : 'debit'}">${amount >= 0 ? '+' : '−'} ${cny(Math.abs(amount))}</td><td>${cny(balanceAfter)}</td></tr>`; }).join('') || '<tr><td colspan="6" class="no-bookings">No wallet transactions yet.</td></tr>'; } catch (error) { console.warn(error.message); } };
@@ -369,6 +442,7 @@ document.querySelector('#topup-form').addEventListener('submit', async e=>{ e.pr
 document.addEventListener('click', async event => { const view = event.target.closest('.view-invoice'); if (view) return viewInvoice(view.dataset.invoiceId, view.dataset.invoiceNumber); const download = event.target.closest('.download-invoice'); if (download) return downloadInvoice(download.dataset.invoiceId, download.dataset.invoiceNumber); const remove = event.target.closest('.delete-invoice'); if (!remove || !confirm('Delete this pending invoice?')) return; const response = await secureFetch(`/api/topups/${remove.dataset.invoiceId}`, { method: 'DELETE' }); const result = await response.json(); if (!response.ok) return toast(result.error || 'Invoice could not be deleted.'); await Promise.all([loadTopupInvoices(), loadWallet()]); toast('Pending invoice deleted.'); });
 window.loadTopupInvoices = loadTopupInvoices;
 window.loadWallet = loadWallet;
+window.loadBookings = loadBookings;
 loadPricingRate();
 loadTopupInvoices();
 loadWallet();
