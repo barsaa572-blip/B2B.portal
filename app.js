@@ -352,6 +352,24 @@ const combineCountryNationality = () => { document.querySelectorAll('.passenger-
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair') || (event.target.closest('.book-flight') && tripType !== 'round')) setTimeout(combineCountryNationality, 0); });
 const allCountryNames = () => { const codes = 'AF AX AL DZ AS AD AO AI AQ AG AR AM AW AU AT AZ BS BH BD BB BY BE BZ BJ BM BT BO BQ BA BW BV BR IO BN BG BF BI CV KH CM CA KY CF TD CL CN CX CC CO KM CG CD CK CR CI HR CU CW CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FK FO FJ FI FR GF PF TF GA GM GE DE GH GI GR GL GD GP GU GT GG GN GW GY HT HM VA HN HK HU IS IN ID IR IQ IE IM IL IT JM JP JE JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MO MG MW MY MV ML MT MQ MR MU YT MX FM MD MC MN ME MS MA MZ MM NA NR NP NL NC NZ NI NE NG NG NU NF MK MP NO OM PK PW PS PA PG PY PE PH PN PL PT PR QA RE RO RU RW BL SH KN LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SI SB SO ZA GS SS ES LK SD SR SJ SE CH SY TW TJ TZ TH TL TG TK TO TT TN TR TM TC TV UG UA AE GB US UM UY UZ VU VE VN VG VI WF EH YE ZM ZW XK'.split(' '); const names = new Intl.DisplayNames(['en'], { type: 'region' }); return [...new Set(codes.map(code => names.of(code)).filter(name => name && name.length > 2))].sort((a, b) => a.localeCompare(b)); };
 const enhanceCountryMenus = () => { const countries = allCountryNames(); const render = (menu, query) => { const matches = countries.filter(country => country.toLowerCase().includes(query.toLowerCase())); let letter = ''; menu.innerHTML = matches.map(country => { const first = country[0].toUpperCase(); const heading = first === letter ? '' : `<div class="country-letter">${first}</div>`; letter = first; return `${heading}<button type="button" data-country="${country}">${country}</button>`; }).join('') || '<div class="country-letter">No matching country</div>'; }; document.querySelectorAll('.passenger-card').forEach(card => { const labels = [...card.querySelectorAll('label')]; ['Issuing country', 'Nationality'].forEach(text => { const label = labels.find(item => item.textContent.includes(text)); const input = label?.querySelector('input'); if (!label || !input || input.dataset.countryMenuBound) return; input.removeAttribute('list'); input.dataset.countryMenuBound = 'true'; const menu = document.createElement('div'); menu.className = 'country-menu'; menu.hidden = true; label.append(menu); const open = () => { render(menu, input.value); menu.hidden = false; }; input.addEventListener('focus', open); input.addEventListener('input', open); menu.addEventListener('click', event => { const option = event.target.closest('[data-country]'); if (!option) return; input.value = option.dataset.country; input.dispatchEvent(new Event('change')); menu.hidden = true; }); document.addEventListener('click', event => { if (!label.contains(event.target)) menu.hidden = true; }); }); }); };
+const normalizeCountryEntry = value => {
+  const query = String(value || '').trim().toLowerCase();
+  if (!query) return '';
+  const countries = allCountryNames();
+  const exact = countries.find(country => country.toLowerCase() === query);
+  if (exact) return exact;
+  const matches = countries.filter(country => country.toLowerCase().startsWith(query));
+  return matches.length === 1 ? matches[0] : String(value || '').trim();
+};
+document.addEventListener('focusout', event => {
+  const input = event.target.matches('.passenger-card input[name="nationality"], .passenger-card input[name="issuing-country"]') ? event.target : null;
+  if (!input) return;
+  const normalized = normalizeCountryEntry(input.value);
+  if (normalized && normalized !== input.value) {
+    input.value = normalized;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+});
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair') || (event.target.closest('.book-flight') && tripType !== 'round')) queueMicrotask(bindCountryFields); });
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair') || (event.target.closest('.book-flight') && tripType !== 'round')) setTimeout(enhanceCountryMenus, 0); });
 const countryNames = ['Mongolia','Russia','China','Japan','South Korea','North Korea','Kazakhstan','United States','United Kingdom','Germany','France','Turkey','Thailand','Singapore','Vietnam','India','Australia','Canada'];
