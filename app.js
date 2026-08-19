@@ -498,18 +498,14 @@ const roundFeeSummary = (pair, type) => {
   return quoteMnt(total);
 };
 const sharedBaggageSummary = pair => {
-  // The card shows the allowance that is valid across the whole itinerary.
-  // When the two bounds differ, use the lower allowance rather than implying
-  // that the higher allowance applies to both flights.
-  const sharedAllowance = kind => {
-    const field = kind === 'cabin' ? 'cabinKg' : 'checkedKg';
-    const values = [pair.outbound?.baggage?.[field], pair.inbound?.baggage?.[field]];
-    if (values.some(value => value === null || value === undefined || value === '')) return kind === 'cabin' ? 'Not provided' : 'Not included';
-    const numeric = values.map(Number);
-    if (numeric.every(Number.isFinite)) return `1 × ${Math.min(...numeric)} kg per passenger`;
-    return String(values[0]);
-  };
-  return `Carry-on baggage: ${sharedAllowance('cabin')}<br>Checked baggage: ${sharedAllowance('checked')}`;
+  const outboundCabin = baggageAllowanceText(pair.outbound, 'cabin');
+  const outboundChecked = baggageAllowanceText(pair.outbound, 'checked');
+  const inboundCabin = baggageAllowanceText(pair.inbound, 'cabin');
+  const inboundChecked = baggageAllowanceText(pair.inbound, 'checked');
+  if (outboundCabin === inboundCabin && outboundChecked === inboundChecked) {
+    return `Carry-on baggage: ${outboundCabin}<br>Checked baggage: ${outboundChecked}`;
+  }
+  return `Departure · Carry-on: ${outboundCabin} · Checked: ${outboundChecked}<br>Return · Carry-on: ${inboundCabin} · Checked: ${inboundChecked}`;
 };
 const fareRuleTable = (fare, flight, title, type) => {
   const rule = (fare?.rules || []).find(item => Number(item.type) === type);
