@@ -449,18 +449,33 @@ const showFareOptions = (flight, phase) => {
 };
 const roundFareKey = fare => String(fare?.fareType || fare?.bookingClass || fare?.cabin || '').trim().toUpperCase();
 const buildSharedRoundFares = (outboundOptions, returnOptions) => {
-  const usedReturnIndexes = new Set();
-  const pairs = outboundOptions.map((outbound, outboundIndex) => {
-    const key = roundFareKey(outbound);
-    let returnIndex = returnOptions.findIndex((inbound, index) => !usedReturnIndexes.has(index) && roundFareKey(inbound) === key);
-    if (returnIndex < 0) return null;
-    usedReturnIndexes.add(returnIndex);
-    return { outbound, inbound: returnOptions[returnIndex], outboundIndex, returnIndex, label: outbound.fareType || outbound.bookingClass || outbound.cabin || 'Economy' };
-  }).filter(Boolean);
-  // Test inventory can occasionally expose different fare-family labels by direction.
-  // Keep one shared choice in that case by pairing the respective lowest available fares.
-  if (!pairs.length && outboundOptions.length && returnOptions.length) {
-    pairs.push({ outbound: outboundOptions[0], inbound: returnOptions[0], outboundIndex: 0, returnIndex: 0, label: 'Lowest available fare' });
+  if (!outboundOptions.length || !returnOptions.length) return [];
+  const pairs = []; const added = new Set();
+  const addPair = (outboundIndex, returnIndex) => {
+    if (outboundIndex < 0 || returnIndex < 0) return;
+    const id = `${outboundIndex}:${returnIndex}`;
+    if (added.has(id)) return;
+    const outbound = outboundOptions[outboundIndex]; const inbound = returnOptions[returnIndex];
+    const outboundName = roundFareKey(outbound) || 'Economy'; const inboundName = roundFareKey(inbound) || 'Economy';
+    added.add(id);
+    pairs.push({
+      outbound, inbound, outboundIndex, returnIndex,
+      label: outboundName === inboundName ? outboundName : `${outboundName} + ${inboundName}`,
+      subtitle: outboundName === inboundName ? 'Same fare family for departure and return' : `Departure ${outboundName} · Return ${inboundName}`
+    });
+  };
+  // Always put the cheapest live fare on each bound together first, even when
+  // Spring returns different booking classes (for example P outbound + R4 return).
+  addPair(0, 0);
+  const outboundFamilies = [...new Set(outboundOptions.map(roundFareKey).filter(Boolean))];
+  outboundFamilies.forEach(key => {
+    const outboundIndex = outboundOptions.findIndex(fare => roundFareKey(fare) === key);
+    const returnIndex = returnOptions.findIndex(fare => roundFareKey(fare) === key);
+    if (returnIndex >= 0) addPair(outboundIndex, returnIndex);
+  });
+  // Retain the remaining price tiers without making a large all-to-all matrix.
+  for (let index = 1; index < Math.max(outboundOptions.length, returnOptions.length); index += 1) {
+    addPair(Math.min(index, outboundOptions.length - 1), Math.min(index, returnOptions.length - 1));
   }
   return pairs;
 };
@@ -485,7 +500,10 @@ const roundFeeSummary = (pair, type) => {
 const sharedBaggageSummary = pair => {
   const outboundCabin = baggageAllowanceText(pair.outbound, 'cabin');
   const outboundChecked = baggageAllowanceText(pair.outbound, 'checked');
-  return `Carry-on baggage: ${outboundCabin}<br>Checked baggage: ${outboundChecked}`;
+  const inboundCabin = baggageAllowanceText(pair.inbound, 'cabin');
+  const inboundChecked = baggageAllowanceText(pair.inbound, 'checked');
+  if (outboundCabin === inboundCabin && outboundChecked === inboundChecked) return `Carry-on baggage: ${outboundCabin}<br>Checked baggage: ${outboundChecked}`;
+  return `Departure · Carry-on: ${outboundCabin} · Checked: ${outboundChecked}<br>Return · Carry-on: ${inboundCabin} · Checked: ${inboundChecked}`;
 };
 const fareRuleTable = (fare, flight, title, type) => {
   const rule = (fare?.rules || []).find(item => Number(item.type) === type);
@@ -520,7 +538,7 @@ const showSelectedFareDetails = () => {
 };
 const sharedRoundFareCard = (pair, index, selected) => {
   const total = cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total);
-  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>One fare family for departure and return</small>${selected ? '<em class="fare-recommended">Lowest shared fare</em>' : ''}<hr><strong>Baggage</strong><p>${sharedBaggageSummary(pair)}</p><strong>Flexibility</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-details" data-shared-fare-index="${index}">Details</button></div></div>`;
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${pair.subtitle}</small>${selected ? '<em class="fare-recommended">Lowest available pair</em>' : ''}<hr><strong>Baggage</strong><p>${sharedBaggageSummary(pair)}</p><strong>Flexibility</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-details" data-shared-fare-index="${index}">Details</button></div></div>`;
 };
 const showRoundFareOptions = () => {
   const outboundOptions = selectedOutbound?.fareOptions?.length ? selectedOutbound.fareOptions : [selectedOutbound?.fare].filter(Boolean);
@@ -532,7 +550,7 @@ const showRoundFareOptions = () => {
     const pair = pairs[selections.shared];
     const total = cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total);
     resultArea.classList.remove('hidden');
-    resultArea.innerHTML = `<section class="fare-choice-screen round-fare-choice"><header><p class="eyebrow">ROUND TRIP FARE SELECTION</p><h2>${selectedOutbound.departure?.id || ''} ⇄ ${selectedOutbound.arrival?.id || ''}</h2><p>Select one fare family. The same fare selection will be applied to both departure and return flights.</p></header><section class="bound-fare-picker"><header><p class="eyebrow">SHARED FARE FOR BOTH FLIGHTS</p><p>${selectedOutbound.number || 'Outbound'} · ${selectedReturn.number || 'Return'}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${pairs.map((pairOption, index) => sharedRoundFareCard(pairOption, index, selections.shared === index)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div></section><footer><strong>${passengerFareCaption()} · ${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</strong><button class="primary confirm-round-fares">Continue to passenger details</button></footer></section>`;
+    resultArea.innerHTML = `<section class="fare-choice-screen round-fare-choice"><header><p class="eyebrow">ROUND TRIP FARE SELECTION</p><h2>${selectedOutbound.departure?.id || ''} ⇄ ${selectedOutbound.arrival?.id || ''}</h2><p>Select one fare combination. The first option combines the lowest available departure and return fares.</p></header><section class="bound-fare-picker"><header><p class="eyebrow">FARE COMBINATION FOR BOTH FLIGHTS</p><p>${selectedOutbound.number || 'Outbound'} · ${selectedReturn.number || 'Return'}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${pairs.map((pairOption, index) => sharedRoundFareCard(pairOption, index, selections.shared === index)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div></section><footer><strong>${passengerFareCaption()} · ${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</strong><button class="primary confirm-round-fares">Continue to passenger details</button></footer></section>`;
     resultArea.querySelectorAll('[data-shared-fare-index]').forEach(button => button.addEventListener('click', event => {
       const index = Number(button.dataset.sharedFareIndex);
       if (button.classList.contains('shared-fare-details')) { event.stopPropagation(); return showSharedRoundFareDetails(pairs[index], 'baggage'); }
