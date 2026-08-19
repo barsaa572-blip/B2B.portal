@@ -417,6 +417,26 @@ const fareRuleText = (fare, type, emptyText, date, time) => {
 };
 const fareDetailButton = (fare, phase) => `<button type="button" class="text-btn fare-rule-details" data-fare-phase="${phase}" data-fare-index="${fare.index}">Details</button>`;
 let fareDetailsByBound = {};
+const priceBreakdownTooltip = ({ baseFare = 0, taxes = 0, total = 0 }) => {
+  const counts = activePassengerCounts;
+  const adultFare = baseFare * counts.adults;
+  const adultTaxes = taxes * counts.adults;
+  const adultTotal = total * counts.adults;
+  const typeBlock = (label, count, fare, tax, isLiveOnly = false) => {
+    if (!count) return '';
+    if (isLiveOnly) return `<section class="fare-price-type"><div><b>${label} ticket</b><span>× ${count}</span></div><p>Live verification required</p><small>Spring has not returned a separate ${label.toLowerCase()} price for this search.</small></section>`;
+    return `<section class="fare-price-type"><div><b>${label} ticket</b><span>${quoteMnt(total)} × ${count}</span></div><p><span>Fare</span><b>${quoteMnt(fare)}</b></p><p><span>Taxes & fees</span><b>${quoteMnt(tax)}</b></p></section>`;
+  };
+  const unpriced = hasUnpricedPassengers(counts);
+  return `<span class="fare-price-tooltip" role="tooltip"><b class="fare-price-tooltip-total">${quoteMnt(adultTotal)}<small>${unpriced ? 'adult subtotal' : 'total for all passengers'}</small></b>${typeBlock('Adult', counts.adults, adultFare, adultTaxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<footer><span>${unpriced ? 'Confirmed adult amount' : 'Total amount'}</span><b>${quoteMnt(adultTotal)}</b></footer></span>`;
+};
+const farePriceMarkup = (fare, multiplier = 1) => {
+  const baseFare = cnyAmount(fare?.baseFare ?? fare?.price ?? 0) * multiplier;
+  const taxes = cnyAmount(fare?.taxes ?? 0) * multiplier;
+  const total = cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier;
+  const adultTotal = total * activePassengerCounts.adults;
+  return `<div class="fare-family-price fare-price-trigger"><span>${passengerFareCaption()}</span><b>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'To be confirmed'}</b>${Number.isFinite(adultTotal) ? priceBreakdownTooltip({ baseFare, taxes, total }) : ''}</div>`;
+};
 const showFareRuleDetails = (fare, flight) => {
   let modal = document.querySelector('#fare-rule-modal');
   if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }
@@ -433,8 +453,7 @@ const showFareRuleDetails = (fare, flight) => {
 };
 const fareChoiceCard = (fare, index, phase, selected = false, flight = null, lowest = false) => {
   const date = fareDateForPhase(phase); const time = flight?.departure?.time || (phase === 'return' ? selectedReturn?.departure?.time : selectedOutbound?.departure?.time);
-  const total = cnyAmount(fare.total) * activePassengerCounts.adults;
-  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-fare-bound="${phase}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${lowest ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${oneWayBaggageSummary(fare)}</p><strong>Flexibility</strong><p>Cancellation: ${oneWayFeeSummary(fare, 1, date, time)}<br>Change: ${oneWayFeeSummary(fare, 2, date, time)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total) : 'To be confirmed'}</b></div></button>${fareDetailButton({ index }, phase)}</div>`;
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-fare-bound="${phase}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${lowest ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${oneWayBaggageSummary(fare)}</p><strong>Flexibility</strong><p>Cancellation: ${oneWayFeeSummary(fare, 1, date, time)}<br>Change: ${oneWayFeeSummary(fare, 2, date, time)}</p>${farePriceMarkup(fare)}</button>${fareDetailButton({ index }, phase)}</div>`;
 };
 const bindFareCarousel = (screen, selections, onSelect) => {
   screen.querySelectorAll('[data-fare-bound]').forEach(card => card.addEventListener('click', () => {
@@ -581,8 +600,12 @@ const showSelectedFareDetails = () => {
   }, 'baggage');
 };
 const sharedRoundFareCard = (pair, index, selected) => {
-  const total = cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total);
-  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${pair.subtitle}</small>${index === 0 ? '<em class="fare-recommended">Lowest available pair</em>' : ''}<hr><strong>Baggage</strong><p>${sharedBaggageSummary(pair)}</p><strong>Flexibility</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-details" data-shared-fare-index="${index}">Details</button></div></div>`;
+  const combinedFare = {
+    baseFare: cnyAmount(pair.outbound?.baseFare) + cnyAmount(pair.inbound?.baseFare),
+    taxes: cnyAmount(pair.outbound?.taxes) + cnyAmount(pair.inbound?.taxes),
+    total: cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total)
+  };
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${pair.subtitle}</small>${index === 0 ? '<em class="fare-recommended">Lowest available pair</em>' : ''}<hr><strong>Baggage</strong><p>${sharedBaggageSummary(pair)}</p><strong>Flexibility</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p>${farePriceMarkup(combinedFare)}</button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-details" data-shared-fare-index="${index}">Details</button></div></div>`;
 };
 const showRoundFareOptions = () => {
   const outboundOptions = selectedOutbound?.fareOptions?.length ? selectedOutbound.fareOptions : [selectedOutbound?.fare].filter(Boolean);

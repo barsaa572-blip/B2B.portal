@@ -91,7 +91,21 @@
 
 .fare-scroll:hover { border-color: #2461df; color: #2461df; }
 
-.fare-family-price span { max-width: 120px; line-height: 1.25; }
+.fare-family-price > span { max-width: 120px; line-height: 1.25; }
+.fare-price-trigger { position: relative; cursor: help; }
+.fare-price-tooltip { display: none; position: absolute; z-index: 20; right: -14px; bottom: calc(100% + 12px); width: 330px; padding: 14px; border: 1px solid #d8e1ee; border-radius: 9px; background: #fff; box-shadow: 0 13px 32px #152c5830; color: #263b5d; text-align: left; font-size: 12px; font-weight: 500; }
+.fare-price-trigger:hover .fare-price-tooltip { display: block; }
+.fare-price-tooltip::after { content: ''; position: absolute; right: 33px; top: 100%; border: 8px solid transparent; border-top-color: #fff; }
+.fare-price-tooltip-total { display: block; padding: 2px 0 10px; color: #1f60e6; font-size: 19px; text-align: right; }
+.fare-price-tooltip-total small { display: block; margin-top: 2px; color: #76859a; font-size: 11px; font-weight: 500; }
+.fare-price-type { padding: 10px 0; border-top: 1px dashed #d9e1eb; }
+.fare-price-type > div, .fare-price-type p, .fare-price-tooltip footer { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
+.fare-price-type > div { color: #1c304e; }
+.fare-price-type p { margin-top: 6px; color: #6b7890; }
+.fare-price-type p b { color: #526886; }
+.fare-price-type small { display: block; margin-top: 5px; color: #7a879a; line-height: 1.35; }
+.fare-price-tooltip footer { padding-top: 10px; border-top: 1px dashed #d9e1eb; color: #1b3151; font-weight: 800; }
+.fare-price-tooltip footer b { color: #1e60e7; }
 
 .bound-fare-picker { border-top: 1px solid #e2e8f1; }
 .bound-fare-picker > header { padding: 18px 24px 0; }
@@ -135,4 +149,6 @@
   .fare-family-choice, .fare-choice-item { flex-basis: min(270px, calc(100vw - 95px)); }
   .baggage-detail-row { grid-template-columns: 1fr; gap: 4px; }
   .fare-detail-tabs { margin-left: -16px; margin-right: -16px; padding: 0 16px; overflow-x: auto; }
+  .fare-price-tooltip { right: auto; left: -12px; width: min(330px, calc(100vw - 70px)); }
+  .fare-price-tooltip::after { right: auto; left: 28px; }
 }
