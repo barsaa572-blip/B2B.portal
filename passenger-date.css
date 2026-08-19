@@ -27,7 +27,8 @@
   outline: none;
 }
 
-.passenger-fields .split-date-control select {
+.passenger-fields .split-date-control select,
+.passenger-fields .split-date-control [data-date-part="month"] {
   border-right: 1px solid #dce4ef;
   border-left: 1px solid #dce4ef;
   cursor: pointer;
