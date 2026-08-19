@@ -794,15 +794,49 @@ const syncSplitDateControl = control => {
   const candidate = new Date(`${year}-${month}-${day.padStart(2, '0')}T12:00:00`);
   if (candidate.getFullYear() === Number(year) && candidate.getMonth() + 1 === Number(month) && candidate.getDate() === Number(day)) hidden.value = `${year}-${month}-${day.padStart(2, '0')}`;
 };
+const splitDateError = control => {
+  const day = control.querySelector('[data-date-part="day"]')?.value.replace(/\D/g, '') || '';
+  const month = control.querySelector('[data-date-part="month"]')?.value || '';
+  const year = control.querySelector('[data-date-part="year"]')?.value.replace(/\D/g, '') || '';
+  if (!day || !month || !year) return null;
+  const candidate = new Date(`${year}-${month}-${day.padStart(2, '0')}T12:00:00`);
+  const valid = day.length <= 2 && year.length === 4 && Number(year) > 0
+    && candidate.getFullYear() === Number(year)
+    && candidate.getMonth() + 1 === Number(month)
+    && candidate.getDate() === Number(day);
+  return valid ? null : 'Enter a valid calendar date for the selected month and year.';
+};
+const clearSplitDateError = control => {
+  control?.classList.remove('field-error');
+  control?.closest('label')?.querySelectorAll('.field-error-message').forEach(message => message.remove());
+};
+const validateSplitDateControls = form => {
+  const invalid = [...form.querySelectorAll('.split-date-control')].find(control => splitDateError(control));
+  if (!invalid) return null;
+  const hidden = invalid.querySelector('input[type="hidden"]');
+  setFieldError(hidden, splitDateError(invalid));
+  return hidden;
+};
 document.addEventListener('input', event => {
   const control = event.target.closest('.split-date-control');
   if (!control) return;
   if (event.target.matches('[data-date-part="day"], [data-date-part="year"]')) event.target.value = event.target.value.replace(/\D/g, '');
   syncSplitDateControl(control);
+  if (!splitDateError(control)) clearSplitDateError(control);
 });
 document.addEventListener('change', event => {
   const control = event.target.closest('.split-date-control');
-  if (control) syncSplitDateControl(control);
+  if (control) {
+    syncSplitDateControl(control);
+    if (!splitDateError(control)) clearSplitDateError(control);
+  }
+});
+document.addEventListener('focusout', event => {
+  const control = event.target.closest('.split-date-control');
+  if (!control || control.contains(event.relatedTarget)) return;
+  const error = splitDateError(control);
+  clearSplitDateError(control);
+  if (error) setFieldError(control.querySelector('input[type="hidden"]'), error);
 });
 document.addEventListener('focusout', event => {
   const field = event.target.closest('.passenger-card input[name="last-name"], .passenger-card input[name="first-name"], .passenger-card input[name="document-number"]');
@@ -812,6 +846,8 @@ const createPortalBookingFromForm = async event => {
   event.preventDefault();
   const submit = event.currentTarget.querySelector('.issue-ticket');
   clearFormErrors(event.currentTarget);
+  const invalidDate = validateSplitDateControls(event.currentTarget);
+  if (invalidDate) { invalidDate.closest('label')?.querySelector('[data-date-part]')?.focus(); toast('Correct the highlighted date.'); return; }
   const missing = validateRequiredFields(event.currentTarget);
   if (missing) { (missing.type === 'hidden' ? missing.closest('label')?.querySelector('[data-date-part]') : missing)?.focus(); toast('Complete the highlighted required field.'); return; }
   const cards = [...event.currentTarget.querySelectorAll('.passenger-card')];
