@@ -460,17 +460,48 @@ const buildSharedRoundFares = (outboundOptions, returnOptions) => {
   }
   return pairs;
 };
-const fareRulesMarkup = (fare, flight, title) => `<section class="fare-rule-direction"><p class="eyebrow">${title}</p><h3>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''} · ${fare?.fareType || fare?.bookingClass || 'Economy'}</h3>${(fare?.rules || []).map(rule => `<section class="fare-rule-block"><h3>${rule.label}</h3>${(rule.entries || []).map(entry => `<div><span>${ruleWindowText(entry)}</span><strong>${ruleValueText(entry)}</strong></div>`).join('') || '<p>Not provided for this fare.</p>'}</section>`).join('') || '<p>Fare rules are not provided for this fare.</p>'}</section>`;
-const showSharedRoundFareRules = pair => {
+const baggageAllowanceText = (fare, kind) => {
+  const value = fare?.baggage?.[kind === 'cabin' ? 'cabinKg' : 'checkedKg'];
+  if (value === null || value === undefined || value === '') return kind === 'cabin' ? 'Not provided' : 'Not included';
+  return `1 × ${value} kg per passenger`;
+};
+const activeRuleAmount = (fare, type, date, time) => {
+  const entry = activeRuleEntry(fare, type, date, time);
+  if (!entry || !Number.isFinite(Number(entry.value))) return null;
+  return Number(entry.valueType) === 2 ? cnyAmount(fare?.baseFare) * Number(entry.value) : Number(entry.value);
+};
+const roundFeeSummary = (pair, type) => {
+  const outbound = activeRuleAmount(pair.outbound, type, fareDateForPhase('outbound'), selectedOutbound?.departure?.time);
+  const inbound = activeRuleAmount(pair.inbound, type, fareDateForPhase('return'), selectedReturn?.departure?.time);
+  if (outbound === null && inbound === null) return 'Check fare rules';
+  const parts = [outbound, inbound].filter(value => value !== null);
+  const total = parts.reduce((sum, value) => sum + value, 0);
+  return `${quoteMnt(total)} (${outbound === null ? '—' : quoteMnt(outbound)} + ${inbound === null ? '—' : quoteMnt(inbound)})`;
+};
+const fareRuleTable = (fare, flight, title, type) => {
+  const rule = (fare?.rules || []).find(item => Number(item.type) === type);
+  const date = title === 'DEPARTURE' ? fareDateForPhase('outbound') : fareDateForPhase('return');
+  const active = activeRuleEntry(fare, type, date, flight?.departure?.time);
+  const rows = (rule?.entries || []).map(entry => `<tr class="${entry === active ? 'current-rule' : ''}"><td>${entry === active ? '<b>Current time period</b><br>' : ''}${ruleWindowText(entry)}</td><td>${ruleValueText(entry)}</td></tr>`).join('') || '<tr><td colspan="2">Not provided for this fare.</td></tr>';
+  return `<section class="fare-policy-direction"><h3><span>${title === 'DEPARTURE' ? 'Departure' : 'Return'}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><table class="fare-policy-table"><thead><tr><th>Request time</th><th>Per adult</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+};
+const baggageDetailMarkup = (fare, flight, title) => `<section class="baggage-detail-direction"><h3><span>${title === 'DEPARTURE' ? 'Departure' : 'Return'}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><div class="baggage-detail-row"><strong>Carry-on baggage</strong><p>${baggageAllowanceText(fare, 'cabin')}${fare?.baggage?.cabinSize ? `<br>Maximum size: ${fare.baggage.cabinSize} cm` : ''}</p></div><div class="baggage-detail-row"><strong>Checked baggage</strong><p>${baggageAllowanceText(fare, 'checked')}</p></div><small>Baggage allowance is per passenger. Final allowance is confirmed by Spring Airlines.</small></section>`;
+const showSharedRoundFareDetails = (pair, initialTab = 'rules') => {
   let modal = document.querySelector('#fare-rule-modal');
   if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }
-  modal.innerHTML = `<form method="dialog" class="fare-rule-modal"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">ROUND TRIP FARE CONDITIONS</p><h2>${pair.label} class</h2><p class="modal-copy">This fare family is selected for both flights. Rule periods are calculated by each flight's departure time.</p>${fareRulesMarkup(pair.outbound, selectedOutbound, 'DEPARTURE')}${fareRulesMarkup(pair.inbound, selectedReturn, 'RETURN')}<button class="primary" value="cancel">Close</button></form>`;
+  const baggage = `${baggageDetailMarkup(pair.outbound, selectedOutbound, 'DEPARTURE')}${baggageDetailMarkup(pair.inbound, selectedReturn, 'RETURN')}`;
+  const rules = `<h3 class="policy-title">Cancellation fee <small>Per adult ticket</small></h3>${fareRuleTable(pair.outbound, selectedOutbound, 'DEPARTURE', 1)}${fareRuleTable(pair.inbound, selectedReturn, 'RETURN', 1)}<h3 class="policy-title">Change fee <small>Per adult ticket</small></h3>${fareRuleTable(pair.outbound, selectedOutbound, 'DEPARTURE', 2)}${fareRuleTable(pair.inbound, selectedReturn, 'RETURN', 2)}`;
+  modal.innerHTML = `<form method="dialog" class="fare-rule-modal round-fare-modal"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">${pair.label} CLASS · ROUND TRIP</p><h2>Baggage allowance & fare policies</h2><p class="modal-copy">The highlighted row is the current time period for each flight. Fees are calculated per adult and may be confirmed again by the airline at ticket issue.</p><nav class="fare-detail-tabs"><button type="button" data-fare-tab="baggage" class="${initialTab === 'baggage' ? 'active' : ''}">Baggage allowance</button><button type="button" data-fare-tab="rules" class="${initialTab === 'rules' ? 'active' : ''}">Cancellation & change policies</button></nav><div class="fare-detail-pane ${initialTab === 'baggage' ? '' : 'hidden'}" data-fare-pane="baggage">${baggage}</div><div class="fare-detail-pane ${initialTab === 'rules' ? '' : 'hidden'}" data-fare-pane="rules">${rules}</div><button class="primary" value="cancel">Close</button></form>`;
+  modal.querySelectorAll('[data-fare-tab]').forEach(button => button.addEventListener('click', () => {
+    const tab = button.dataset.fareTab;
+    modal.querySelectorAll('[data-fare-tab]').forEach(item => item.classList.toggle('active', item === button));
+    modal.querySelectorAll('[data-fare-pane]').forEach(pane => pane.classList.toggle('hidden', pane.dataset.farePane !== tab));
+  }));
   modal.showModal();
 };
 const sharedRoundFareCard = (pair, index, selected) => {
-  const outboundDate = fareDateForPhase('outbound'); const returnDate = fareDateForPhase('return');
   const total = cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total);
-  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>One fare family for departure and return</small>${selected ? '<em class="fare-recommended">Lowest shared fare</em>' : ''}<hr><strong>Baggage</strong><p>Departure: ${fareBaggageText(pair.outbound)}<br>Return: ${fareBaggageText(pair.inbound)}</p><strong>Flexibility today</strong><p>Departure refund: ${fareRuleText(pair.outbound, 1, 'Check fare rules', outboundDate, selectedOutbound?.departure?.time)}<br>Return refund: ${fareRuleText(pair.inbound, 1, 'Check fare rules', returnDate, selectedReturn?.departure?.time)}<br>Change: ${fareRuleText(pair.outbound, 2, 'Check fare rules', outboundDate, selectedOutbound?.departure?.time)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><button type="button" class="text-btn shared-fare-rule-details" data-shared-fare-index="${index}">More details</button></div>`;
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>One fare family for departure and return</small>${selected ? '<em class="fare-recommended">Lowest shared fare</em>' : ''}<hr><strong>Baggage</strong><p>Departure: Carry-on ${baggageAllowanceText(pair.outbound, 'cabin')} · Checked ${baggageAllowanceText(pair.outbound, 'checked')}<br>Return: Carry-on ${baggageAllowanceText(pair.inbound, 'cabin')} · Checked ${baggageAllowanceText(pair.inbound, 'checked')}</p><strong>Flexibility today</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-baggage-details" data-shared-fare-index="${index}">Baggage details</button><button type="button" class="text-btn shared-fare-rule-details" data-shared-fare-index="${index}">Fare rules</button></div></div>`;
 };
 const showRoundFareOptions = () => {
   const outboundOptions = selectedOutbound?.fareOptions?.length ? selectedOutbound.fareOptions : [selectedOutbound?.fare].filter(Boolean);
@@ -485,7 +516,8 @@ const showRoundFareOptions = () => {
     resultArea.innerHTML = `<section class="fare-choice-screen round-fare-choice"><header><p class="eyebrow">ROUND TRIP FARE SELECTION</p><h2>${selectedOutbound.departure?.id || ''} ⇄ ${selectedOutbound.arrival?.id || ''}</h2><p>Select one fare family. The same fare selection will be applied to both departure and return flights.</p></header><section class="bound-fare-picker"><header><p class="eyebrow">SHARED FARE FOR BOTH FLIGHTS</p><p>${selectedOutbound.number || 'Outbound'} · ${selectedReturn.number || 'Return'}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${pairs.map((pairOption, index) => sharedRoundFareCard(pairOption, index, selections.shared === index)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div></section><footer><strong>${passengerFareCaption()} · ${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</strong><button class="primary confirm-round-fares">Continue to passenger details</button></footer></section>`;
     resultArea.querySelectorAll('[data-shared-fare-index]').forEach(button => button.addEventListener('click', event => {
       const index = Number(button.dataset.sharedFareIndex);
-      if (button.classList.contains('shared-fare-rule-details')) { event.stopPropagation(); return showSharedRoundFareRules(pairs[index]); }
+      if (button.classList.contains('shared-fare-rule-details')) { event.stopPropagation(); return showSharedRoundFareDetails(pairs[index], 'rules'); }
+      if (button.classList.contains('shared-fare-baggage-details')) { event.stopPropagation(); return showSharedRoundFareDetails(pairs[index], 'baggage'); }
       selections.shared = index; render();
     }));
     resultArea.querySelectorAll('.fare-scroll').forEach(button => button.addEventListener('click', () => {

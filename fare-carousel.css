@@ -41,6 +41,8 @@
 }
 
 .fare-choice-item .fare-rule-details { padding: 5px 2px; font-size: 12px; }
+.shared-fare-actions { display: flex; gap: 14px; padding: 5px 2px; }
+.shared-fare-actions .text-btn { padding: 4px 0; font-size: 12px; }
 
 .fare-family-top {
   min-height: 28px;
@@ -102,9 +104,28 @@
 .fare-rule-block h3 { margin: 0; padding: 11px 13px; background: #f3f6fb; color: #1b385f; font-size: 13px; }
 .fare-rule-block div { display: flex; justify-content: space-between; gap: 18px; padding: 9px 13px; border-top: 1px solid #edf1f6; color: #63728a; font-size: 12px; }
 .fare-rule-block strong { color: #173762; white-space: nowrap; }
+.round-fare-modal { width: min(920px, 92vw); max-width: 920px; max-height: 86vh; overflow: auto; }
+.fare-detail-tabs { display: flex; gap: 2px; border-bottom: 1px solid #dce4ef; margin: 20px -26px 20px; padding: 0 26px; }
+.fare-detail-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 13px; color: #536987; cursor: pointer; font-weight: 700; }
+.fare-detail-tabs button.active { color: #1c5ee8; border-bottom-color: #1c5ee8; }
+.fare-policy-direction, .baggage-detail-direction { border: 1px solid #dce5f0; border-radius: 9px; overflow: hidden; margin: 15px 0; }
+.fare-policy-direction > h3, .baggage-detail-direction > h3 { margin: 0; padding: 11px 14px; background: #f4f7fb; color: #193b68; font-size: 14px; }
+.fare-policy-direction > h3 span, .baggage-detail-direction > h3 span { display: inline-block; margin-right: 8px; padding: 3px 7px; border-radius: 4px; background: #2863e8; color: #fff; font-size: 11px; text-transform: uppercase; }
+.fare-policy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fare-policy-table th { padding: 9px 12px; color: #233f68; text-align: left; background: #fafbfd; }
+.fare-policy-table td { padding: 10px 12px; border-top: 1px solid #e2e8f0; color: #556a86; }
+.fare-policy-table th + th, .fare-policy-table td + td { border-left: 1px solid #e2e8f0; }
+.fare-policy-table tr.current-rule td { color: #075de7; background: #eef4ff; font-weight: 600; }
+.policy-title { margin: 25px 0 6px; color: #162f54; font-size: 16px; }
+.policy-title small { margin-left: 5px; color: #6d7d95; font-size: 12px; font-weight: 500; }
+.baggage-detail-row { display: grid; grid-template-columns: 170px 1fr; gap: 12px; padding: 12px 14px; border-top: 1px solid #e5ebf3; }
+.baggage-detail-row p { margin: 0; color: #526986; line-height: 1.55; }
+.baggage-detail-direction small { display: block; padding: 0 14px 13px; color: #6d7d95; }
 
 @media (max-width: 620px) {
   .fare-carousel { padding: 14px 10px; gap: 6px; }
   .fare-scroll { flex-basis: 32px; width: 32px; height: 32px; font-size: 27px; }
   .fare-family-choice, .fare-choice-item { flex-basis: min(270px, calc(100vw - 95px)); }
+  .baggage-detail-row { grid-template-columns: 1fr; gap: 4px; }
+  .fare-detail-tabs { margin-left: -16px; margin-right: -16px; padding: 0 16px; overflow-x: auto; }
 }
