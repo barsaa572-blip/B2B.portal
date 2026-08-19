@@ -415,20 +415,26 @@ const fareRuleText = (fare, type, emptyText, date, time) => {
   if (!entry) return emptyText;
   return `${rule?.label}: ${ruleValueText(entry)} · ${ruleWindowText(entry)}`;
 };
-const fareDetailButton = (fare, phase) => `<button type="button" class="text-btn fare-rule-details" data-fare-phase="${phase}" data-fare-index="${fare.index}">More details</button>`;
+const fareDetailButton = (fare, phase) => `<button type="button" class="text-btn fare-rule-details" data-fare-phase="${phase}" data-fare-index="${fare.index}">Details</button>`;
 let fareDetailsByBound = {};
 const showFareRuleDetails = (fare, flight) => {
   let modal = document.querySelector('#fare-rule-modal');
   if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }
-  modal.className = '';
-  const rules = (fare?.rules || []).map(rule => `<section class="fare-rule-block"><h3>${rule.label}</h3>${(rule.entries || []).map(entry => `<div><span>${ruleWindowText(entry)}</span><strong>${ruleValueText(entry)}</strong></div>`).join('') || '<p>Not provided for this fare.</p>'}</section>`).join('') || '<p>Fare rules are not provided for this fare.</p>';
-  modal.innerHTML = `<form method="dialog" class="fare-rule-modal"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">FARE CONDITIONS</p><h2>${fare?.fareType || fare?.bookingClass || 'Fare'} · ${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h2><p class="modal-copy">The applicable condition is based on the time when the request is made. All Spring Airlines rule periods are shown below.</p>${rules}<button class="primary" value="cancel">Close</button></form>`;
+  modal.className = 'fare-details-dialog';
+  const baggage = baggageDetailMarkup(fare, flight, 'FLIGHT');
+  const rules = `<h3 class="policy-title">Cancellation fee <small>Per adult ticket</small></h3>${fareRuleTable(fare, flight, 'FLIGHT', 1)}<h3 class="policy-title">Change fee <small>Per adult ticket</small></h3>${fareRuleTable(fare, flight, 'FLIGHT', 2)}`;
+  modal.innerHTML = `<form method="dialog" class="fare-rule-modal round-fare-modal"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">${fare?.fareType || fare?.bookingClass || 'FARE'} · ONE WAY</p><h2>Baggage allowance & fare policies</h2><p class="modal-copy">The highlighted row is the current time period for this flight. Fees are calculated per adult and may be confirmed again by the airline at ticket issue.</p><nav class="fare-detail-tabs"><button type="button" data-fare-tab="baggage" class="active">Baggage allowance</button><button type="button" data-fare-tab="rules">Cancellation & change policies</button></nav><div class="fare-detail-pane" data-fare-pane="baggage">${baggage}</div><div class="fare-detail-pane hidden" data-fare-pane="rules">${rules}</div><button class="primary" value="cancel">Close</button></form>`;
+  modal.querySelectorAll('[data-fare-tab]').forEach(button => button.addEventListener('click', () => {
+    const tab = button.dataset.fareTab;
+    modal.querySelectorAll('[data-fare-tab]').forEach(item => item.classList.toggle('active', item === button));
+    modal.querySelectorAll('[data-fare-pane]').forEach(pane => pane.classList.toggle('hidden', pane.dataset.farePane !== tab));
+  }));
   modal.showModal();
 };
 const fareChoiceCard = (fare, index, phase, selected = false, flight = null) => {
   const date = fareDateForPhase(phase); const time = flight?.departure?.time || (phase === 'return' ? selectedReturn?.departure?.time : selectedOutbound?.departure?.time);
   const total = cnyAmount(fare.total) * activePassengerCounts.adults;
-  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-fare-bound="${phase}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${selected ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${fareBaggageText(fare)}</p><strong>Flexibility today</strong><p>${fareRuleText(fare, 1, 'Refund: check fare rules', date, time)}<br>${fareRuleText(fare, 2, 'Change: check fare rules', date, time)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total) : 'To be confirmed'}</b></div></button>${fareDetailButton({ index }, phase)}</div>`;
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-fare-bound="${phase}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${selected ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${oneWayBaggageSummary(fare)}</p><strong>Flexibility</strong><p>Cancellation: ${oneWayFeeSummary(fare, 1, date, time)}<br>Change: ${oneWayFeeSummary(fare, 2, date, time)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total) : 'To be confirmed'}</b></div></button>${fareDetailButton({ index }, phase)}</div>`;
 };
 const bindFareCarousel = (screen, selections, onSelect) => {
   screen.querySelectorAll('[data-fare-bound]').forEach(card => card.addEventListener('click', () => {
@@ -516,6 +522,11 @@ const roundFeeSummary = (pair, type) => {
   const total = parts.reduce((sum, value) => sum + value, 0);
   return quoteMnt(total);
 };
+const oneWayBaggageSummary = fare => `Carry-on baggage: ${baggageAllowanceText(fare, 'cabin')}<br>Checked baggage: ${baggageAllowanceText(fare, 'checked')}`;
+const oneWayFeeSummary = (fare, type, date, time) => {
+  const amount = activeRuleAmount(fare, type, date, time);
+  return amount === null ? 'Check fare rules' : quoteMnt(amount);
+};
 const sharedBaggageSummary = pair => {
   const outboundCabin = baggageAllowanceText(pair.outbound, 'cabin');
   const outboundChecked = baggageAllowanceText(pair.outbound, 'checked');
@@ -528,12 +539,13 @@ const sharedBaggageSummary = pair => {
 };
 const fareRuleTable = (fare, flight, title, type) => {
   const rule = (fare?.rules || []).find(item => Number(item.type) === type);
-  const date = title === 'DEPARTURE' ? fareDateForPhase('outbound') : fareDateForPhase('return');
+  const date = title === 'RETURN' ? fareDateForPhase('return') : fareDateForPhase('outbound');
   const active = activeRuleEntry(fare, type, date, flight?.departure?.time);
   const rows = (rule?.entries || []).map(entry => `<tr class="${entry === active ? 'current-rule' : ''}"><td>${entry === active ? '<b>Current time period</b><br>' : ''}${ruleWindowText(entry)}</td><td>${ruleValueText(entry)}</td></tr>`).join('') || '<tr><td colspan="2">Not provided for this fare.</td></tr>';
-  return `<section class="fare-policy-direction"><h3><span>${title === 'DEPARTURE' ? 'Departure' : 'Return'}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><table class="fare-policy-table"><thead><tr><th>Request time</th><th>Per adult</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  const heading = title === 'RETURN' ? 'Return' : title === 'DEPARTURE' ? 'Departure' : 'Flight';
+  return `<section class="fare-policy-direction"><h3><span>${heading}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><table class="fare-policy-table"><thead><tr><th>Request time</th><th>Per adult</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 };
-const baggageDetailMarkup = (fare, flight, title) => `<section class="baggage-detail-direction"><h3><span>${title === 'DEPARTURE' ? 'Departure' : 'Return'}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><div class="baggage-detail-row"><strong>Carry-on baggage</strong><p>${baggageAllowanceText(fare, 'cabin')}${fare?.baggage?.cabinSize ? `<br>Maximum size: ${fare.baggage.cabinSize} cm` : ''}</p></div><div class="baggage-detail-row"><strong>Checked baggage</strong><p>${baggageAllowanceText(fare, 'checked')}</p></div><small>Baggage allowance is per passenger. Final allowance is confirmed by Spring Airlines.</small></section>`;
+const baggageDetailMarkup = (fare, flight, title) => { const heading = title === 'RETURN' ? 'Return' : title === 'DEPARTURE' ? 'Departure' : 'Flight'; return `<section class="baggage-detail-direction"><h3><span>${heading}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><div class="baggage-detail-row"><strong>Carry-on baggage</strong><p>${baggageAllowanceText(fare, 'cabin')}${fare?.baggage?.cabinSize ? `<br>Maximum size: ${fare.baggage.cabinSize} cm` : ''}</p></div><div class="baggage-detail-row"><strong>Checked baggage</strong><p>${baggageAllowanceText(fare, 'checked')}</p></div><small>Baggage allowance is per passenger. Final allowance is confirmed by Spring Airlines.</small></section>`; };
 const showSharedRoundFareDetails = (pair, initialTab = 'rules') => {
   let modal = document.querySelector('#fare-rule-modal');
   if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }
