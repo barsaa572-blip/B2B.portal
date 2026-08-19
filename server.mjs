@@ -280,17 +280,20 @@ const springPassenger = (traveller, contact, departureDate) => {
   const countryOfIssue = countryThreeCode(traveller.issuingCountry || traveller.nationality);
   const passportExpireDate = String(traveller.documentExpiry || '').trim();
   const phoneNo = String(contact.phone || '').replace(/[^\d]/g, '');
+  const areaCode = String(contact.areaCode || '').replace(/[^\d]/g, '');
   if (!passengerType || !gender || !cardTypeId) throw new Error('Passenger type, gender and document type are required for Spring booking.');
   if (!nationality) throw new Error(`${traveller.lastName || 'Passenger'}: choose a nationality supported by the country list.`);
   if (!countryOfIssue) throw new Error(`${traveller.lastName || 'Passenger'}: choose the document issuing country from the country list.`);
   if (!parseDateOnly(passportExpireDate)) throw new Error(`${traveller.lastName || 'Passenger'}: document expiry is required.`);
   if (!phoneNo) throw new Error('A valid contact phone number is required for Spring booking.');
+  if (!areaCode) throw new Error('A contact country calling code is required for Spring booking.');
   return {
     combXprodInfo: [],
     insuranceInfo: [],
     xprodInfo: [],
     passengerDetailInfo: {
       age: ageAtDeparture(parseDateOnly(traveller.dateOfBirth), parseDateOnly(departureDate)),
+      areaCode,
       birthdate: traveller.dateOfBirth,
       cardNo: String(traveller.documentNumber || '').toUpperCase(),
       cardTypeId,

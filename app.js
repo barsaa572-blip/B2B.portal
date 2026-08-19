@@ -926,7 +926,14 @@ const createPortalBookingFromForm = async event => {
   const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, flights: [selectedOutbound, selectedReturn].filter(Boolean).map(bookingFlightSnapshot) };
   const phoneCountryCode = event.currentTarget.querySelector('[name="contact-country-code"]')?.value.trim() || '';
   const phoneNumber = event.currentTarget.querySelector('[name="contact-phone"]')?.value.trim() || '';
-  const contact = { name: event.currentTarget.querySelector('[name="contact-name"]')?.value.trim(), phone: `${phoneCountryCode} ${phoneNumber}`.trim(), email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim() };
+  const contact = {
+    name: event.currentTarget.querySelector('[name="contact-name"]')?.value.trim(),
+    phone: `${phoneCountryCode} ${phoneNumber}`.trim(),
+    // Spring's passengerDetailInfo requires the country calling code as a
+    // separate areaCode value (for example, Mongolia is 976).
+    areaCode: phoneCountryCode.replace(/[^\d]/g, ''),
+    email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim()
+  };
   submit.disabled = true; submit.textContent = 'Creating booking…';
   try {
     const response = await secureFetch('/api/bookings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ totalCny: totalCnyForSelection(), itinerary, passengers: { travellers, contact } }) });
