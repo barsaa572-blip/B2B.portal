@@ -270,14 +270,6 @@ async function handleOfficeUsers(req, res, url) {
   }
 }
 
-const firstValue = (object, keys) => {
-  for (const key of keys) {
-    const value = object?.[key];
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
-  }
-  return null;
-};
-
 const springPassenger = (traveller, contact, departureDate) => {
   const passengerType = SPRING_PASSENGER_TYPE[traveller.type];
   const gender = SPRING_GENDER[String(traveller.gender || '').toLowerCase()];
@@ -354,9 +346,35 @@ const createSpringBookingPayload = body => {
   return payload;
 };
 
-const springOrderReference = response => firstValue(response, ['orderNo', 'orderNO', 'pnr', 'pnrNo', 'orderId'])
-  || firstValue(response?.orderResultDTO, ['orderNo', 'orderNO', 'pnr', 'pnrNo', 'orderId'])
-  || firstValue(response?.orderInfo, ['orderNo', 'orderNO', 'pnr', 'pnrNo', 'orderId']);
+const SPRING_ORDER_REFERENCE_KEYS = new Set([
+  'orderno', 'ordernumber', 'pnr', 'pnrno', 'pnrcode', 'orderid', 'ordercode', 'recordlocator'
+]);
+
+const springOrderReference = (response, depth = 0) => {
+  if (!response || depth > 7 || typeof response !== 'object') return null;
+  for (const [key, value] of Object.entries(response)) {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    if (SPRING_ORDER_REFERENCE_KEYS.has(normalizedKey) && (typeof value === 'string' || typeof value === 'number') && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  for (const value of Object.values(response)) {
+    if (value && typeof value === 'object') {
+      const found = springOrderReference(value, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+// Logs only field names and value types. This helps identify a new Spring response
+// format without placing passenger data or any booking values in the server journal.
+const springResponseShape = (value, depth = 0) => {
+  if (value === null || value === undefined) return String(value);
+  if (depth > 5 || typeof value !== 'object') return typeof value;
+  if (Array.isArray(value)) return value.length ? [springResponseShape(value[0], depth + 1)] : [];
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, springResponseShape(item, depth + 1)]));
+};
 
 async function createLiveSpringBooking(profile, body) {
   if (process.env.SPRING_BOOKING_ENABLED !== 'true') throw new Error('Spring test booking is disabled on this server. Set SPRING_BOOKING_ENABLED=true only after confirming the test environment.');
@@ -366,7 +384,10 @@ async function createLiveSpringBooking(profile, body) {
   const token = await client.getAccessToken();
   const result = await client.bookOrder(payload, token.accessToken);
   const pnr = springOrderReference(result);
-  if (!pnr) throw new Error('Spring returned a booking response without a PNR/order number. No local booking was created.');
+  if (!pnr) {
+    console.warn('Spring booking response has no recognised order reference:', JSON.stringify(springResponseShape(result)));
+    throw new Error('Spring returned a booking response without a PNR/order number. No local booking was created.');
+  }
   const itinerary = { ...body.itinerary, springOrder: { pnr, responseCode: result.errCode || null } };
   return createPortalBooking(profile, { ...body, itinerary, pnr, status: 'Reserved' });
 }
