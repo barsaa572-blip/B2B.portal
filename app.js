@@ -521,10 +521,10 @@ const sharedBaggageSummary = pair => {
   const outboundChecked = baggageAllowanceText(pair.outbound, 'checked');
   const inboundCabin = baggageAllowanceText(pair.inbound, 'cabin');
   const inboundChecked = baggageAllowanceText(pair.inbound, 'checked');
-  if (outboundCabin === inboundCabin && outboundChecked === inboundChecked) {
-    return `Carry-on baggage: ${outboundCabin}<br>Checked baggage: ${outboundChecked}`;
-  }
-  return `Departure · Carry-on: ${outboundCabin} · Checked: ${outboundChecked}<br>Return · Carry-on: ${inboundCabin} · Checked: ${inboundChecked}`;
+  const allowanceLines = (label, outboundValue, inboundValue) => outboundValue === inboundValue
+    ? `${label}: ${outboundValue}`
+    : `Departure · ${label}: ${outboundValue}<br>Return · ${label}: ${inboundValue}`;
+  return `${allowanceLines('Carry-on baggage', outboundCabin, inboundCabin)}<br>${allowanceLines('Checked baggage', outboundChecked, inboundChecked)}`;
 };
 const fareRuleTable = (fare, flight, title, type) => {
   const rule = (fare?.rules || []).find(item => Number(item.type) === type);
