@@ -7,7 +7,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingNoShow, requirePlatformAdmin, signInWithPassword, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -435,6 +435,53 @@ async function createLiveSpringBooking(profile, body) {
   return createPortalBooking(profile, { ...body, itinerary, pnr, status: 'Reserved' });
 }
 
+const findRefundCalculation = (value, depth = 0) => {
+  if (!value || depth > 7 || typeof value !== 'object') return null;
+  if (['retRealMoney', 'retNetMoney', 'retAllMoney', 'qxxFy'].some(key => Object.hasOwn(value, key))) return value;
+  for (const item of Object.values(value)) {
+    const found = findRefundCalculation(item, depth + 1);
+    if (found) return found;
+  }
+  return null;
+};
+
+const springAmount = (source, key) => {
+  const value = Number(source?.[key]);
+  return Number.isFinite(value) ? value : null;
+};
+
+async function calculateLiveSpringRefund(profile, pnr) {
+  const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
+  if (!booking) throw new Error('Booking not found or you do not have access to it.');
+  if (booking.status !== 'Ticketed') throw new Error('Only a ticketed booking can be calculated for cancellation.');
+  if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  // calcType O is Spring's full-order / full-PNR calculation. Partial refunds need
+  // orderHeadIds, which are fetched from the XML order-detail service next.
+  const result = await client.calculateRefund({ orderId: pnr, calcType: 'O' }, token.accessToken);
+  if (result?.success === false || result?.flag === false) {
+    throw new Error(result?.message || result?.errMsg || 'Spring did not accept the refund calculation.');
+  }
+  const quote = findRefundCalculation(result) || result;
+  return {
+    bookingRef: pnr,
+    calcType: 'O',
+    source: 'Spring Airlines',
+    amountsCny: {
+      ticketAmount: springAmount(quote, 'retAllMoney'),
+      refundableFare: springAmount(quote, 'retTktMoney'),
+      refundableTaxes: ['retPortMoney', 'retFuelMoney', 'retInsMoney', 'retXMoney', 'retOtherFy']
+        .map(key => springAmount(quote, key) || 0).reduce((sum, value) => sum + value, 0),
+      cancellationFee: springAmount(quote, 'qxxFy'),
+      nonRefundable: springAmount(quote, 'nrfndOtherFy'),
+      refund: springAmount(quote, 'retRealMoney') ?? springAmount(quote, 'retNetMoney') ?? springAmount(quote, 'retAllMoney')
+    },
+    message: typeof result?.message === 'string' ? result.message : null
+  };
+}
+
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), supabase: getSupabaseStatus() });
@@ -449,14 +496,14 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     validateBookingPassengers(body);
     return send(res, 201, { booking: await createLiveSpringBooking(profile, body) });
   }
+  const refundQuoteMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/refund-quote$/);
+  if (refundQuoteMatch && req.method === 'POST') {
+    return send(res, 200, { quote: await calculateLiveSpringRefund(profile, refundQuoteMatch[1]) });
+  }
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {
     const status = match[2] === 'issue' ? 'Ticketed' : 'Cancelled';
     return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
-  }
-  const noShowMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/no-show$/);
-  if (noShowMatch && req.method === 'POST') {
-    return send(res, 200, { booking: await recordPortalBookingNoShow(profile, noShowMatch[1], await readJson(req)) });
   }
   return send(res, 404, { error: 'Booking endpoint not found.' });
 } catch (error) { return send(res, 403, { error: error.message || 'Booking request is not allowed.' }); } }
