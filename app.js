@@ -254,15 +254,19 @@ const SPRING_AIRLINES_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/2/2
 const airlineLogoUrl = (airline, suppliedLogo) => suppliedLogo || (/spring/i.test(String(airline || '')) ? SPRING_AIRLINES_LOGO : null);
 const airlineLogo = (airline, suppliedLogo, alt = '') => { const logo = airlineLogoUrl(airline, suppliedLogo); return logo ? `<img src="${logo}" alt="${alt}" onerror="this.remove()" />` : '✈'; };
 const timeText = flight => `${(flight.departure.time || '').slice(-5)} ${flight.departure.id || ''} → ${(flight.arrival.time || '').slice(-5)} ${flight.arrival.id || ''}`;
-const flightCard = (flight, label) => `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main"><div><strong>${flight.airline}</strong><span>${flight.number || 'Flight'} · ${timeText(flight)}</span></div><div class="selection-duration">${formatMinutes(flight.duration || 0)} · ${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</div><b>${priceText(flight.price)}</b></div></article>`;
+const flightCard = (flight, label, { showPrice = true, phase = null } = {}) => {
+  const date = phase ? fareSelectionDate(phase) : '';
+  const detail = [flight.number || 'Flight', date, timeText(flight)].filter(Boolean).join(' · ');
+  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main"><div><strong>${flight.airline}</strong><span>${detail}</span></div><div class="selection-duration">${formatMinutes(flight.duration || 0)} · ${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
+};
 const fareSelectionDate = phase => {
   const value = fareDateForPhase(phase);
   if (!value) return '';
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 };
-const fareSelectionFlight = (flight, label, phase) => `<article class="selection-card fare-selection-card"><div class="selection-label">${label}</div><div class="selection-main"><div class="fare-selection-carrier"><strong>${flight?.airline || 'Airline'}</strong><span>Flight <b>${flight?.number || '—'}</b></span></div><div class="fare-selection-route"><strong>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</strong><span>${fareSelectionDate(phase)}</span><small>Departure ${(flight?.departure?.time || '').slice(-5)} · Arrival ${(flight?.arrival?.time || '').slice(-5)}</small></div><div class="selection-duration">${formatMinutes(flight?.duration || 0)} · ${flight?.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</div></div></article>`;
-const selectedOutboundPanel = () => selectedOutbound ? `<section class="selected-itinerary"><div class="selected-title"><span>✓</span><div><h2>Outbound flight selected</h2><p>Select your return flight below.</p></div></div>${flightCard(selectedOutbound, 'OUTBOUND')}</section>` : '';
+const fareSelectionFlight = (flight, label, phase) => flightCard(flight, label, { showPrice: false, phase });
+const selectedOutboundPanel = () => selectedOutbound ? `<section class="selected-itinerary"><div class="selected-title"><span>✓</span><div><h2>Outbound flight selected</h2><p>Select your return flight below.</p></div></div>${flightCard(selectedOutbound, 'OUTBOUND', { phase: 'outbound' })}</section>` : '';
 const totalPrice = () => {
   const numbers = [selectedOutbound, selectedReturn].map(f => cnyAmount(f?.price)).filter(Number.isFinite);
   if (!numbers.length) return 'Price unavailable';
