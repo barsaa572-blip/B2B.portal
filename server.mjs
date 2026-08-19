@@ -336,6 +336,10 @@ const createSpringBookingPayload = body => {
   if (!contact.name || !contact.phone || !contact.email) throw new Error('Contact name, phone and email are required.');
   const contactPhone = String(contact.phone).replace(/[^\d]/g, '');
   if (!contactPhone) throw new Error('Contact phone must contain digits.');
+  const remoteIp = String(process.env.SPRING_REMOTE_IP || '').trim();
+  // Spring marks remoteIp as NN (not-null) in the bookOrderC contract.
+  // Fail clearly before calling Spring if the VPS IP has not been configured.
+  if (!remoteIp) throw new Error('Spring booking is not configured: SPRING_REMOTE_IP (the whitelisted VPS IP) is required.');
   const passengerInfo = passengers.travellers.map(traveller => springPassenger(traveller, contact, itinerary.departureDate));
   const counts = passengers.travellers.reduce((total, traveller) => ({
     adults: total.adults + Number(traveller.type === 'ADT'),
@@ -352,7 +356,7 @@ const createSpringBookingPayload = body => {
     linkmanName: contact.name,
     linkmanWorkTel: contactPhone,
     moneyClassId: Number(outbound.spring?.moneyClassId ?? 0),
-    remoteIp: process.env.SPRING_REMOTE_IP || undefined,
+    remoteIp,
     ...springSegmentPayload('first', outbound, passengerInfo),
     // Explicit empty second/third segment values are required by Spring's
     // one-way schema. The inbound values below overwrite the second segment.
@@ -370,7 +374,6 @@ const createSpringBookingPayload = body => {
     thirdSegPassengerInfo: []
   };
   if (inbound) Object.assign(payload, springSegmentPayload('second', inbound, passengerInfo));
-  if (!payload.remoteIp) delete payload.remoteIp;
   return payload;
 };
 
