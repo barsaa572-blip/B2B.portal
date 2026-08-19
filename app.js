@@ -366,7 +366,7 @@ const segmentDetail = (flight, detailId) => { const segments = flight.segments?.
 const searchRow = (flight, label, detailId) => `<div class="round-leg"><span>${label}</span><div class="round-airline"><i>${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline} logo`)}</i><div><strong>${flight.airline}</strong><small>${flight.number || 'Flight'} · ${timeText(flight)}</small></div></div><button type="button" class="segment-toggle" data-detail-id="${detailId}" aria-expanded="false" aria-label="Show flight details">⌄</button></div>${segmentDetail(flight, detailId)}`;
 const pairTotal = pair => { const raw = [pair.outbound.price, pair.returnFlight.price]; if (raw.some(value => !String(value ?? '').match(/\d/))) return 'Price unavailable'; const values = raw.map(cnyAmount); if (!values.every(Number.isFinite)) return 'Price unavailable'; const adultTotal = values.reduce((a, b) => a + b, 0) * activePassengerCounts.adults; return quoteMnt(adultTotal); };
 const passengerTotal = () => activePassengerCounts.adults + activePassengerCounts.children + activePassengerCounts.infants;
-const passengerFareCaption = () => hasUnpricedPassengers(activePassengerCounts) ? `Adult subtotal · ${passengerTotal()} passengers` : `Total · ${passengerTotal()} passenger${passengerTotal() === 1 ? '' : 's'}`;
+const passengerFareCaption = () => `Total · ${passengerTotal()} passenger${passengerTotal() === 1 ? '' : 's'}`;
 const resultFare = price => {
   const adultTotal = cnyAmount(price) * activePassengerCounts.adults;
   return `<small>${passengerFareCaption()}</small><strong>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'Price unavailable'}</strong><span>Details per passenger</span>`;
@@ -442,8 +442,7 @@ const inlineFareBreakdown = ({ baseFare = 0, taxes = 0, total = 0 }) => {
     if (isLiveOnly) return `<div class="fare-breakdown-row pending"><span>${label} × ${count}</span><b>Live verification required</b></div>`;
     return `<div class="fare-breakdown-row"><span><b>${label} × ${count}</b><small>Fare ${quoteMnt(fare)} · Taxes & fees ${quoteMnt(tax)}</small></span><b>${quoteMnt(total)}</b></div>`;
   };
-  const unpriced = hasUnpricedPassengers(counts);
-  return `<div class="fare-price-breakdown"><span class="fare-breakdown-title">Price breakdown</span>${typeBlock('Adult', counts.adults, adultFare, adultTaxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<div class="fare-breakdown-total"><span>${unpriced ? 'Confirmed adult amount' : 'Total amount'}</span><b>${quoteMnt(adultTotal)}</b></div></div>`;
+  return `<div class="fare-price-breakdown"><span class="fare-breakdown-title">Price breakdown</span>${typeBlock('Adult', counts.adults, adultFare, adultTaxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<div class="fare-breakdown-total"><span>${passengerFareCaption()}</span><b>${quoteMnt(adultTotal)}</b></div></div>`;
 };
 const farePriceMarkup = (fare, multiplier = 1) => {
   const total = cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier;
