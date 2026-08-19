@@ -545,7 +545,18 @@ const fareRuleTable = (fare, flight, title, type) => {
   const heading = title === 'RETURN' ? 'Return' : title === 'DEPARTURE' ? 'Departure' : 'Flight';
   return `<section class="fare-policy-direction"><h3><span>${heading}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><table class="fare-policy-table"><thead><tr><th>Request time</th><th>Per adult</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 };
-const baggageDetailMarkup = (fare, flight, title) => { const heading = title === 'RETURN' ? 'Return' : title === 'DEPARTURE' ? 'Departure' : 'Flight'; return `<section class="baggage-detail-direction"><h3><span>${heading}</span>${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h3><div class="baggage-detail-row"><strong>Carry-on baggage</strong><p>${baggageAllowanceText(fare, 'cabin')}${fare?.baggage?.cabinSize ? `<br>Maximum size: ${fare.baggage.cabinSize} cm` : ''}</p></div><div class="baggage-detail-row"><strong>Checked baggage</strong><p>${baggageAllowanceText(fare, 'checked')}</p></div><small>Baggage allowance is per passenger. Final allowance is confirmed by Spring Airlines.</small></section>`; };
+const baggageDetailMarkup = (fare, flight, title) => {
+  const heading = title === 'RETURN' ? 'Return' : title === 'DEPARTURE' ? 'Departure' : 'Flight';
+  const cabinKg = fare?.baggage?.cabinKg;
+  const checkedKg = fare?.baggage?.checkedKg;
+  const cabinLines = cabinKg === null || cabinKg === undefined || cabinKg === ''
+    ? 'Not provided for this fare.'
+    : `• 1 piece per passenger, ${cabinKg} kg per piece.${fare?.baggage?.cabinSize ? `<br>• Each piece cannot exceed ${String(fare.baggage.cabinSize).replaceAll('X', ' × ')} cm in size.` : ''}`;
+  const checkedLines = checkedKg === null || checkedKg === undefined || checkedKg === ''
+    ? 'Not included for this fare.'
+    : `• Total weight limit per person: ${checkedKg} kg.`;
+  return `<section class="baggage-detail-direction"><h3><span>${heading}</span>${flight?.departure?.id || ''} – ${flight?.arrival?.id || ''}</h3><div class="baggage-allowance-item"><i aria-hidden="true">🧳</i><div><strong>Carry-on Baggage</strong><p>${cabinLines}</p></div></div><div class="baggage-allowance-item"><i aria-hidden="true">🧳</i><div><strong>Checked baggage</strong><p>${checkedLines}</p></div></div>${fare?.baggage?.cabinSize ? '<small class="baggage-dimension-note">*Baggage dimensions include wheels and handles</small>' : ''}</section>`;
+};
 const showSharedRoundFareDetails = (pair, initialTab = 'rules') => {
   let modal = document.querySelector('#fare-rule-modal');
   if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }

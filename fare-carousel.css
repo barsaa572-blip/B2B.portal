@@ -123,6 +123,11 @@
 .baggage-detail-row { display: grid; grid-template-columns: 170px 1fr; gap: 12px; padding: 12px 14px; border-top: 1px solid #e5ebf3; }
 .baggage-detail-row p { margin: 0; color: #526986; line-height: 1.55; }
 .baggage-detail-direction small { display: block; padding: 0 14px 13px; color: #6d7d95; }
+.baggage-allowance-item { display: grid; grid-template-columns: 48px 1fr; gap: 12px; padding: 15px 16px 0; }
+.baggage-allowance-item > i { display: grid; place-items: start center; color: #1d62e8; font-size: 28px; font-style: normal; line-height: 1; filter: saturate(.8); }
+.baggage-allowance-item strong { color: #162e52; font-size: 14px; }
+.baggage-allowance-item p { margin: 4px 0 0; color: #526986; line-height: 1.5; }
+.baggage-detail-direction .baggage-dimension-note { padding: 14px 16px; }
 
 @media (max-width: 620px) {
   .fare-carousel { padding: 14px 10px; gap: 6px; }
