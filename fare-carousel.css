@@ -1,0 +1,83 @@
+/* The first search row stays compact. Fare families are revealed only after
+   Select, and the choices intentionally scroll horizontally rather than wrap. */
+.fare-carousel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 56px;
+  background: #f6f8fc;
+}
+
+.fare-choice-grid {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding: 2px;
+  width: 100%;
+  scrollbar-width: thin;
+}
+
+.fare-family-choice {
+  flex: 0 0 min(290px, 84vw);
+  min-height: 300px;
+  scroll-snap-align: start;
+  position: relative;
+}
+
+.fare-family-top {
+  min-height: 28px;
+}
+
+.fare-radio {
+  width: 21px;
+  height: 21px;
+  border: 2px solid #8793a8;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.fare-family-choice.recommended .fare-radio {
+  border-color: #2362e9;
+  box-shadow: inset 0 0 0 4px #fff;
+  background: #2362e9;
+}
+
+.fare-recommended {
+  align-self: flex-start;
+  margin-top: 9px;
+  padding: 4px 7px;
+  border-radius: 4px;
+  color: #fff;
+  background: #03899c;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.fare-scroll {
+  z-index: 1;
+  flex: 0 0 39px;
+  width: 39px;
+  height: 39px;
+  border: 1px solid #dce4ef;
+  border-radius: 50%;
+  background: #fff;
+  color: #173965;
+  box-shadow: 0 3px 10px #152c5820;
+  cursor: pointer;
+  font-size: 32px;
+  line-height: 25px;
+}
+
+.fare-scroll:hover { border-color: #2461df; color: #2461df; }
+
+.fare-family-price span { max-width: 120px; line-height: 1.25; }
+
+@media (max-width: 620px) {
+  .fare-carousel { padding: 14px 10px; gap: 6px; }
+  .fare-scroll { flex-basis: 32px; width: 32px; height: 32px; font-size: 27px; }
+  .fare-family-choice { flex-basis: min(270px, calc(100vw - 95px)); }
+}

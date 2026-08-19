@@ -357,6 +357,14 @@ const fareBaggageText = fare => {
   const checked = baggage.checkedKg === null || baggage.checkedKg === undefined ? 'Checked baggage: not included' : `Checked baggage: ${baggage.checkedKg} kg`;
   return `${cabin} · ${checked}`;
 };
+const fareRuleText = (fare, type, emptyText) => {
+  const rule = (fare?.rules || []).find(item => Number(item.type) === type);
+  const entry = rule?.entries?.[0];
+  if (!entry || !Number.isFinite(Number(entry.value))) return emptyText;
+  const value = Number(entry.value);
+  if (Number(entry.valueType) === 2) return `${rule.label}: ${value}%`;
+  return `${rule.label}: ${quoteMnt(value)}`;
+};
 const continueWithFare = (flight, fare, phase) => {
   applyFareOption(flight, fare);
   if (phase === 'return') { selectedReturn = flight; return prepareBookingScreen(); }
@@ -370,8 +378,11 @@ const showFareOptions = (flight, phase) => {
   if (options.length < 2) return continueWithFare(flight, options[0] || { total: flight.price, baseFare: flight.price, taxes: 0, fareType: 'Public fare', cabin: 'Economy' }, phase);
   const leg = phase === 'return' ? 'Return' : 'Departure';
   resultArea.classList.remove('hidden');
-  resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT</p><h2>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</h2><p>${flight.airline || 'Airline'} ${flight.number || 'Flight'} · ${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</p></header><div class="fare-choice-grid">${options.map((fare, index) => `<button type="button" class="fare-family-choice ${index === 0 ? 'recommended' : ''}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.cabin || 'Economy'} class</b>${index === 0 ? '<em>Lowest fare</em>' : ''}</span><small>${fare.fareType || 'Public fare'}${fare.bookingClass ? ` · ${fare.bookingClass}` : ''}</small><hr><strong>Baggage</strong><p>${fareBaggageText(fare)}</p><strong>Flexibility</strong><p>${fare.rules?.length ? 'Refund and change conditions available' : 'Fare conditions confirmed before issue'}</p><div class="fare-family-price"><span>Per adult</span><b>${quoteMnt(fare.total)}</b></div></button>`).join('')}</div><footer><span>Select a fare to continue</span><strong>${leg} · ${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</strong></footer></section>`;
+  resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT</p><h2>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</h2><p>${flight.airline || 'Airline'} ${flight.number || 'Flight'} · ${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => `<button type="button" class="fare-family-choice ${index === 0 ? 'recommended' : ''}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${index === 0 ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${fareBaggageText(fare)}</p><strong>Flexibility</strong><p>${fareRuleText(fare, 1, 'Refund: check fare rules')}<br>${fareRuleText(fare, 2, 'Change: check fare rules')}</p><div class="fare-family-price"><span>Total · ${passengerTotal()} passenger${passengerTotal() === 1 ? '' : 's'}</span><b>${quoteMnt(cnyAmount(fare.total) * activePassengerCounts.adults)}</b></div></button>`).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer><span>Select one fare to continue</span><strong>${leg} · ${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</strong></footer></section>`;
   resultArea.querySelectorAll('[data-fare-index]').forEach(button => button.addEventListener('click', () => continueWithFare(flight, options[Number(button.dataset.fareIndex)], phase)));
+  const scroller = resultArea.querySelector('.fare-choice-grid');
+  resultArea.querySelector('.fare-scroll-back')?.addEventListener('click', () => scroller.scrollBy({ left: -Math.max(300, scroller.clientWidth * .8), behavior: 'smooth' }));
+  resultArea.querySelector('.fare-scroll-next')?.addEventListener('click', () => scroller.scrollBy({ left: Math.max(300, scroller.clientWidth * .8), behavior: 'smooth' }));
 };
 async function selectFlight(flight) {
   if (passengerSearchStale) return toast('Search again after changing passenger count before selecting a flight.');
