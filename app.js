@@ -804,6 +804,10 @@ document.addEventListener('change', event => {
   const control = event.target.closest('.split-date-control');
   if (control) syncSplitDateControl(control);
 });
+document.addEventListener('focusout', event => {
+  const field = event.target.closest('.passenger-card input[name="last-name"], .passenger-card input[name="first-name"], .passenger-card input[name="document-number"]');
+  if (field?.value) field.value = field.value.trim().toUpperCase();
+});
 const createPortalBookingFromForm = async event => {
   event.preventDefault();
   const submit = event.currentTarget.querySelector('.issue-ticket');
