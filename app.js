@@ -839,11 +839,12 @@ document.addEventListener('change', event => {
 });
 document.addEventListener('focusout', event => {
   const control = event.target.closest('.split-date-control');
-  if (!control || control.contains(event.relatedTarget)) return;
+  if (!control) return;
   const monthInput = control.querySelector('[data-date-part="month"]');
   const month = monthNumber(monthInput?.value);
-  if (monthInput && month) monthInput.value = monthOptions[month - 1];
+  if (event.target.matches('[data-date-part="month"]') && monthInput && month) monthInput.value = monthOptions[month - 1];
   syncSplitDateControl(control);
+  if (control.contains(event.relatedTarget)) return;
   const error = splitDateError(control);
   clearSplitDateError(control);
   if (error) setFieldError(control.querySelector('input[type="hidden"]'), error);
