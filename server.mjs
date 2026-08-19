@@ -275,8 +275,16 @@ const springPassenger = (traveller, contact, departureDate) => {
   const gender = SPRING_GENDER[String(traveller.gender || '').toLowerCase()];
   const cardTypeId = SPRING_DOCUMENT_TYPE[String(traveller.documentType || '').toLowerCase()];
   const nationality = countryThreeCode(traveller.nationality);
+  // Spring requires both nationality and document issuing country for
+  // international bookings, even when they are the same country.
+  const countryOfIssue = countryThreeCode(traveller.issuingCountry || traveller.nationality);
+  const passportExpireDate = String(traveller.documentExpiry || '').trim();
+  const phoneNo = String(contact.phone || '').replace(/[^\d]/g, '');
   if (!passengerType || !gender || !cardTypeId) throw new Error('Passenger type, gender and document type are required for Spring booking.');
   if (!nationality) throw new Error(`${traveller.lastName || 'Passenger'}: choose a nationality supported by the country list.`);
+  if (!countryOfIssue) throw new Error(`${traveller.lastName || 'Passenger'}: choose the document issuing country from the country list.`);
+  if (!parseDateOnly(passportExpireDate)) throw new Error(`${traveller.lastName || 'Passenger'}: document expiry is required.`);
+  if (!phoneNo) throw new Error('A valid contact phone number is required for Spring booking.');
   return {
     combXprodInfo: [],
     insuranceInfo: [],
@@ -284,14 +292,16 @@ const springPassenger = (traveller, contact, departureDate) => {
     passengerDetailInfo: {
       age: ageAtDeparture(parseDateOnly(traveller.dateOfBirth), parseDateOnly(departureDate)),
       birthdate: traveller.dateOfBirth,
-      cardNo: traveller.documentNumber,
+      cardNo: String(traveller.documentNumber || '').toUpperCase(),
       cardTypeId,
+      countryOfIssue,
       familyName: String(traveller.lastName || '').toUpperCase(),
       personalName: String(traveller.firstName || '').toUpperCase(),
       gender,
       nationality,
       passengerType,
-      phoneNo: contact.phone
+      passportExpireDate,
+      phoneNo
     }
   };
 };
@@ -321,6 +331,8 @@ const createSpringBookingPayload = body => {
   if (flights.length > 2) throw new Error('Connecting itinerary booking is not enabled yet.');
   const contact = passengers?.contact || {};
   if (!contact.name || !contact.phone || !contact.email) throw new Error('Contact name, phone and email are required.');
+  const contactPhone = String(contact.phone).replace(/[^\d]/g, '');
+  if (!contactPhone) throw new Error('Contact phone must contain digits.');
   const passengerInfo = passengers.travellers.map(traveller => springPassenger(traveller, contact, itinerary.departureDate));
   const counts = passengers.travellers.reduce((total, traveller) => ({
     adults: total.adults + Number(traveller.type === 'ADT'),
@@ -335,11 +347,24 @@ const createSpringBookingPayload = body => {
     lcType: inbound ? 'Y' : 'N',
     linkmanEmail: contact.email,
     linkmanName: contact.name,
-    linkmanWorkTel: contact.phone,
+    linkmanWorkTel: contactPhone,
     moneyClassId: Number(outbound.spring?.moneyClassId ?? 0),
     remoteIp: process.env.SPRING_REMOTE_IP || undefined,
     ...springSegmentPayload('first', outbound, passengerInfo),
-    secondSegPassengerInfo: []
+    // Explicit empty second/third segment values are required by Spring's
+    // one-way schema. The inbound values below overwrite the second segment.
+    secondSegId: 0,
+    thirdSegId: 0,
+    secondSegAdultCabin: '',
+    thirdSegAdultCabin: '',
+    secondCombId: null,
+    thirdCombId: null,
+    secondCombType: null,
+    thirdCombType: null,
+    secondCombPrice: null,
+    thirdCombPrice: null,
+    secondSegPassengerInfo: [],
+    thirdSegPassengerInfo: []
   };
   if (inbound) Object.assign(payload, springSegmentPayload('second', inbound, passengerInfo));
   if (!payload.remoteIp) delete payload.remoteIp;
