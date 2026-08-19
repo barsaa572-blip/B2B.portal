@@ -229,13 +229,19 @@ export async function createPortalBooking(profile, { totalCny, itinerary, passen
 }
 
 export async function updatePortalBooking(profile, pnr, status) {
-  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status,created_at&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
   const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
   if (!allowed) throw new Error('You do not have access to this booking.');
   if (booking.status === 'Cancelled') throw new Error('This booking has already been cancelled.');
   if (status === 'Ticketed' && booking.status === 'Ticketed') throw new Error('This booking is already ticketed.');
+  if (status === 'Ticketed' && booking.status === 'Reserved') {
+    const deadline = new Date(booking.created_at).getTime() + 30 * 60 * 1000;
+    if (!Number.isFinite(deadline) || Date.now() >= deadline) {
+      throw new Error('The 30-minute ticketing deadline has passed. Spring may have cancelled this reservation automatically.');
+    }
+  }
   const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { status } });
   return updated[0];
 }

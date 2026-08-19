@@ -37,6 +37,38 @@ const bookingDetailModal = () => {
   document.body.append(modal);
   return modal;
 };
+let bookingDeadlineTimer = null;
+const formatCountdown = milliseconds => {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+};
+const bookingTicketingDeadline = booking => {
+  if (booking.status !== 'Reserved' || !booking.createdAt) return '';
+  const deadline = new Date(booking.createdAt).getTime() + 30 * 60 * 1000;
+  if (!Number.isFinite(deadline)) return '';
+  const expired = Date.now() >= deadline;
+  return `<section class="ticketing-deadline ${expired ? 'expired' : ''}" data-ticketing-deadline="${deadline}"><div><span>Ticketing deadline</span><strong>${expired ? 'Expired' : formatCountdown(deadline - Date.now())}</strong></div><small>${expired ? 'The 30-minute ticketing window has ended. Confirm the PNR status in Spring before taking any action.' : 'Complete payment and ticket issuance before the countdown ends.'}</small></section>`;
+};
+const startBookingDeadlineTimer = modal => {
+  clearInterval(bookingDeadlineTimer);
+  const timer = modal.querySelector('[data-ticketing-deadline]');
+  if (!timer) return;
+  const deadline = Number(timer.dataset.ticketingDeadline);
+  const refresh = () => {
+    const remaining = deadline - Date.now();
+    const target = timer.querySelector('strong');
+    if (remaining <= 0) {
+      target.textContent = 'Expired'; timer.classList.add('expired');
+      const note = timer.querySelector('small');
+      if (note) note.textContent = 'The 30-minute ticketing window has ended. Confirm the PNR status in Spring before taking any action.';
+      const issue = modal.querySelector('.issue-portal-booking');
+      if (issue) { issue.disabled = true; issue.title = 'Ticketing deadline expired'; }
+      clearInterval(bookingDeadlineTimer); return;
+    }
+    target.textContent = formatCountdown(remaining);
+  };
+  refresh(); bookingDeadlineTimer = setInterval(refresh, 1000);
+};
 const bookingFlightDetails = booking => {
   const [from, to] = booking.route.split('â†’').map(value => value.trim());
   return `<div class="booking-flight-detail"><div><span>OUTBOUND</span><strong>${from || 'ULN'} â†’ ${to || 'PVG'}</strong><small>Spring Airlines Â· 9C 7058 Â· Economy</small></div><b>13:00 â†’ 17:00</b></div><div class="booking-flight-detail"><div><span>RETURN</span><strong>${to || 'PVG'} â†’ ${from || 'ULN'}</strong><small>Spring Airlines Â· 9C 7057 Â· Economy</small></div><b>08:10 â†’ 12:00</b></div>`;
@@ -74,10 +106,11 @@ const openBookingDetail = ref => {
     const noShow = passengerHasNoShow(booking, index);
     return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>${noShow ? 'No-show recorded' : 'Passenger details'}</span><div class="passenger-document"><span>Passport number</span><b>${document.documentNumber || '—'}</b><span>Date of birth</span><b>${document.dateOfBirth || '—'}</b><span>Gender</span><b>${document.gender || '—'}</b><span>Nationality</span><b>${document.nationality || '—'}</b><span>Passport expiry</span><b>${document.documentExpiry || '—'}</b></div></div>`;
   }).join('');
-  const reservedActions = `<button type="button" class="secondary cancel-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Issue ticket</button>`;
+  const ticketingExpired = booking.createdAt && Date.now() >= new Date(booking.createdAt).getTime() + 30 * 60 * 1000;
+  const reservedActions = `<button type="button" class="secondary cancel-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' || ticketingExpired ? 'disabled' : ''} ${ticketingExpired ? 'title="Ticketing deadline expired"' : ''}>Issue ticket</button>`;
   const ticketedActions = `<button type="button" class="secondary cancel-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button>`;
-  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div><section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span></section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">Issue ticket is a portal test action for now. It does not issue a live Spring Airlines ticket.</p>' : booking.status === 'Ticketed' ? '<p class="booking-disclaimer">Cancellation quotes are calculated by Spring Airlines. Change and final refund submission will be connected after Spring order-detail IDs are synchronised.</p>' : ''}</section>`;
-  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div>${bookingTicketingDeadline(booking)}<section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span>${booking.status === 'Reserved' ? '<small class="passenger-lock-note">Passenger details are locked after the Spring PNR is created. Editing can be enabled only after Spring supplies its supported passenger/order modification API.</small>' : ''}</section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">The reservation was created in Spring. Ticket issue remains a portal test action until the payment/issue API is connected.</p>' : booking.status === 'Ticketed' ? '<p class="booking-disclaimer">Cancellation quotes are calculated by Spring Airlines. Change and final refund submission will be connected after Spring order-detail IDs are synchronised.</p>' : ''}</section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => { clearInterval(bookingDeadlineTimer); modal.close(); });
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
   modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Booking ${booking.ref} marked as ticketed for testing.`); } catch (error) { event.currentTarget.disabled = false; toast(error.message); } });
   modal.querySelector('.cancel-ticket-flow')?.addEventListener('click', () => showCancelFlow(modal, booking));
@@ -540,6 +573,7 @@ const showFareRuleDetails = (fare, flight) => {
     modal.querySelectorAll('[data-fare-pane]').forEach(pane => pane.classList.toggle('hidden', pane.dataset.farePane !== tab));
   }));
   modal.showModal();
+  startBookingDeadlineTimer(modal);
 };
 const fareChoiceCard = (fare, index, phase, selected = false, flight = null, lowest = false) => {
   const date = fareDateForPhase(phase); const time = flight?.departure?.time || (phase === 'return' ? selectedReturn?.departure?.time : selectedOutbound?.departure?.time);
@@ -794,6 +828,7 @@ const portalBookingFromRow = row => {
     passengerTypes: travellers.map(person => person.type || 'ADT'),
     passengerCount: travellers.length,
     issued: new Date(row.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    createdAt: row.created_at,
     total: row.total_cny,
     status: row.status,
     oneWay: itinerary.trip === 'oneway',
