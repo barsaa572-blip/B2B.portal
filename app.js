@@ -429,26 +429,29 @@ const fareRuleText = (fare, type, emptyText, date, time) => {
 };
 const fareDetailButton = (fare, phase) => `<button type="button" class="text-btn fare-rule-details" data-fare-phase="${phase}" data-fare-index="${fare.index}">Details</button>`;
 let fareDetailsByBound = {};
-const priceBreakdownTooltip = ({ baseFare = 0, taxes = 0, total = 0 }) => {
+const inlineFareBreakdown = ({ baseFare = 0, taxes = 0, total = 0 }) => {
   const counts = activePassengerCounts;
   const adultFare = baseFare * counts.adults;
   const adultTaxes = taxes * counts.adults;
   const adultTotal = total * counts.adults;
   const typeBlock = (label, count, fare, tax, isLiveOnly = false) => {
     if (!count) return '';
-    if (isLiveOnly) return `<section class="fare-price-type"><div><b>${label} ticket</b><span>× ${count}</span></div><p>Live verification required</p><small>Spring has not returned a separate ${label.toLowerCase()} price for this search.</small></section>`;
-    return `<section class="fare-price-type"><div><b>${label} ticket</b><span>${quoteMnt(total)} × ${count}</span></div><p><span>Fare</span><b>${quoteMnt(fare)}</b></p><p><span>Taxes & fees</span><b>${quoteMnt(tax)}</b></p></section>`;
+    if (isLiveOnly) return `<div class="fare-breakdown-row pending"><span>${label} × ${count}</span><b>Live verification required</b></div>`;
+    return `<div class="fare-breakdown-row"><span><b>${label} × ${count}</b><small>Fare ${quoteMnt(fare)} · Taxes & fees ${quoteMnt(tax)}</small></span><b>${quoteMnt(total)}</b></div>`;
   };
   const unpriced = hasUnpricedPassengers(counts);
-  return `<span class="fare-price-tooltip" role="tooltip"><b class="fare-price-tooltip-total">${quoteMnt(adultTotal)}<small>${unpriced ? 'adult subtotal' : 'total for all passengers'}</small></b>${typeBlock('Adult', counts.adults, adultFare, adultTaxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<footer><span>${unpriced ? 'Confirmed adult amount' : 'Total amount'}</span><b>${quoteMnt(adultTotal)}</b></footer></span>`;
+  return `<div class="fare-price-breakdown"><span class="fare-breakdown-title">Price breakdown</span>${typeBlock('Adult', counts.adults, adultFare, adultTaxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<div class="fare-breakdown-total"><span>${unpriced ? 'Confirmed adult amount' : 'Total amount'}</span><b>${quoteMnt(adultTotal)}</b></div></div>`;
 };
 const farePriceMarkup = (fare, multiplier = 1) => {
-  const baseFare = cnyAmount(fare?.baseFare ?? fare?.price ?? 0) * multiplier;
-  const taxes = cnyAmount(fare?.taxes ?? 0) * multiplier;
   const total = cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier;
   const adultTotal = total * activePassengerCounts.adults;
-  return `<div class="fare-family-price fare-price-trigger"><span>${passengerFareCaption()}</span><b>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'To be confirmed'}</b>${Number.isFinite(adultTotal) ? priceBreakdownTooltip({ baseFare, taxes, total }) : ''}</div>`;
+  return `<div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'To be confirmed'}</b></div>`;
 };
+const fareBreakdownMarkup = (fare, multiplier = 1) => inlineFareBreakdown({
+  baseFare: cnyAmount(fare?.baseFare ?? fare?.price ?? 0) * multiplier,
+  taxes: cnyAmount(fare?.taxes ?? 0) * multiplier,
+  total: cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier
+});
 const showFareRuleDetails = (fare, flight) => {
   let modal = document.querySelector('#fare-rule-modal');
   if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }
@@ -497,7 +500,9 @@ const showFareOptions = (flight, phase) => {
   const selections = { [phase]: 0 };
   fareDetailsByBound = { [phase]: { flight, fares: options } };
   const render = () => {
-    resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT · FARE SELECTION</p><h2>Select your fare</h2><div class="fare-selected-flights one-way-fare-selection">${fareSelectionFlight(flight, leg, phase)}</div></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => fareChoiceCard(fare, index, phase, selections[phase] === index, flight, index === 0)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer><span>Select one fare to continue</span><button class="primary confirm-single-fare">Continue</button></footer></section>`;
+    const selectedFare = options[selections[phase]];
+    const selectedTotal = cnyAmount(selectedFare?.total ?? selectedFare?.price ?? 0) * activePassengerCounts.adults;
+    resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT · FARE SELECTION</p><h2>Select your fare</h2><div class="fare-selected-flights one-way-fare-selection">${fareSelectionFlight(flight, leg, phase)}</div></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => fareChoiceCard(fare, index, phase, selections[phase] === index, flight, index === 0)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer class="fare-choice-footer"><div><strong>${passengerFareCaption()} · ${Number.isFinite(selectedTotal) ? quoteMnt(selectedTotal) : 'To be confirmed'}</strong>${fareBreakdownMarkup(selectedFare)}</div><button class="primary confirm-single-fare">Continue</button></footer></section>`;
     bindFareCarousel(resultArea, selections, render);
     resultArea.querySelector('.confirm-single-fare').addEventListener('click', () => continueWithFare(flight, options[selections[phase]], phase));
   };
@@ -629,7 +634,8 @@ const showRoundFareOptions = () => {
     const pair = pairs[selections.shared];
     const total = cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total);
     resultArea.classList.remove('hidden');
-    resultArea.innerHTML = `<section class="fare-choice-screen round-fare-choice"><header><p class="eyebrow">ROUND TRIP · FARE SELECTION</p><div class="fare-selected-flights">${fareSelectionFlight(selectedOutbound, 'Departure', 'outbound')}${fareSelectionFlight(selectedReturn, 'Return', 'return')}</div></header><section class="bound-fare-picker"><header><p class="eyebrow">FARE COMBINATION FOR BOTH FLIGHTS</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${pairs.map((pairOption, index) => sharedRoundFareCard(pairOption, index, selections.shared === index)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div></section><footer><strong>${passengerFareCaption()} · ${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</strong><button class="primary confirm-round-fares">Continue to passenger details</button></footer></section>`;
+    const combinedFare = { baseFare: cnyAmount(pair.outbound?.baseFare) + cnyAmount(pair.inbound?.baseFare), taxes: cnyAmount(pair.outbound?.taxes) + cnyAmount(pair.inbound?.taxes), total };
+    resultArea.innerHTML = `<section class="fare-choice-screen round-fare-choice"><header><p class="eyebrow">ROUND TRIP · FARE SELECTION</p><div class="fare-selected-flights">${fareSelectionFlight(selectedOutbound, 'Departure', 'outbound')}${fareSelectionFlight(selectedReturn, 'Return', 'return')}</div></header><section class="bound-fare-picker"><header><p class="eyebrow">FARE COMBINATION FOR BOTH FLIGHTS</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${pairs.map((pairOption, index) => sharedRoundFareCard(pairOption, index, selections.shared === index)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div></section><footer class="fare-choice-footer"><div><strong>${passengerFareCaption()} · ${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</strong>${fareBreakdownMarkup(combinedFare)}</div><button class="primary confirm-round-fares">Continue to passenger details</button></footer></section>`;
     resultArea.querySelectorAll('[data-shared-fare-index]').forEach(button => button.addEventListener('click', event => {
       const index = Number(button.dataset.sharedFareIndex);
       if (button.classList.contains('shared-fare-details')) { event.stopPropagation(); return showSharedRoundFareDetails(pairs[index], 'baggage'); }

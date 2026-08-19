@@ -112,20 +112,17 @@
 .fare-selected-duration { color: #2760dc; text-align: center; font-size: 10px; }
 .fare-selected-duration i { display: block; position: relative; height: 1px; margin: 6px 0; background: #a9bfeb; }
 .fare-selected-duration i::after { content: '›'; position: absolute; right: -1px; top: -9px; color: #2760dc; font-size: 16px; font-style: normal; }
-.fare-price-trigger { position: relative; cursor: help; }
-.fare-price-tooltip { display: none; position: absolute; z-index: 20; right: -14px; bottom: calc(100% + 12px); width: 330px; padding: 14px; border: 1px solid #d8e1ee; border-radius: 9px; background: #fff; box-shadow: 0 13px 32px #152c5830; color: #263b5d; text-align: left; font-size: 12px; font-weight: 500; }
-.fare-price-trigger:hover .fare-price-tooltip { display: block; }
-.fare-price-tooltip::after { content: ''; position: absolute; right: 33px; top: 100%; border: 8px solid transparent; border-top-color: #fff; }
-.fare-price-tooltip-total { display: block; padding: 2px 0 10px; color: #1f60e6; font-size: 19px; text-align: right; }
-.fare-price-tooltip-total small { display: block; margin-top: 2px; color: #76859a; font-size: 11px; font-weight: 500; }
-.fare-price-type { padding: 10px 0; border-top: 1px dashed #d9e1eb; }
-.fare-price-type > div, .fare-price-type p, .fare-price-tooltip footer { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
-.fare-price-type > div { color: #1c304e; }
-.fare-price-type p { margin-top: 6px; color: #6b7890; }
-.fare-price-type p b { color: #526886; }
-.fare-price-type small { display: block; margin-top: 5px; color: #7a879a; line-height: 1.35; }
-.fare-price-tooltip footer { padding-top: 10px; border-top: 1px dashed #d9e1eb; color: #1b3151; font-weight: 800; }
-.fare-price-tooltip footer b { color: #1e60e7; }
+.fare-choice-screen > footer.fare-choice-footer { align-items: flex-start; }
+.fare-choice-footer > div { width: min(500px, 100%); }
+.fare-choice-footer > .primary { align-self: center; white-space: nowrap; }
+.fare-price-breakdown { display: grid; gap: 0; width: min(480px, 100%); margin-top: 10px; overflow: hidden; border: 1px solid #dce5f0; border-radius: 8px; background: #fafcff; }
+.fare-breakdown-title { padding: 8px 11px; color: #71819a; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.fare-breakdown-row, .fare-breakdown-total { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 9px 11px; border-top: 1px solid #e3e9f1; color: #233a5b; font-size: 12px; }
+.fare-breakdown-row small { display: block; margin-top: 3px; color: #718099; font-size: 11px; font-weight: 500; }
+.fare-breakdown-row > b { color: #183f91; white-space: nowrap; }
+.fare-breakdown-row.pending > b { color: #6f7d92; font-size: 11px; font-weight: 600; }
+.fare-breakdown-total { background: #f2f6fd; font-weight: 800; }
+.fare-breakdown-total b { color: #1960e6; }
 
 .bound-fare-picker { border-top: 1px solid #e2e8f1; }
 .bound-fare-picker > header { padding: 18px 24px 0; }
@@ -169,8 +166,8 @@
   .fare-family-choice, .fare-choice-item { flex-basis: min(270px, calc(100vw - 95px)); }
   .baggage-detail-row { grid-template-columns: 1fr; gap: 4px; }
   .fare-detail-tabs { margin-left: -16px; margin-right: -16px; padding: 0 16px; overflow-x: auto; }
-  .fare-price-tooltip { right: auto; left: -12px; width: min(330px, calc(100vw - 70px)); }
-  .fare-price-tooltip::after { right: auto; left: 28px; }
+  .fare-choice-screen > footer.fare-choice-footer { align-items: stretch; }
+  .fare-choice-footer > .primary { align-self: stretch; }
   .fare-selected-flight { grid-template-columns: auto 1fr 1fr; }
   .fare-selected-route { grid-column: 2 / -1; }
   .fare-selected-duration { display: none; }
