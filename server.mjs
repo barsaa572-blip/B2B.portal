@@ -26,6 +26,20 @@ const ageAtDeparture = (birth, departure) => {
   return age;
 };
 const addMonths = (date, months) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, date.getUTCDate()));
+const SPRING_PASSENGER_TYPE = { ADT: 1, CHD: 2, INF: 3 };
+const SPRING_GENDER = { male: 1, female: 2 };
+const SPRING_DOCUMENT_TYPE = { passport: 2, 'national id': 1 };
+const COUNTRY_THREE_CODES = {
+  mongolia: 'MNG', china: 'CHN', russia: 'RUS', japan: 'JPN', 'south korea': 'KOR',
+  'north korea': 'PRK', kazakhstan: 'KAZ', 'united states': 'USA', 'united kingdom': 'GBR',
+  germany: 'DEU', france: 'FRA', turkey: 'TUR', thailand: 'THA', singapore: 'SGP',
+  vietnam: 'VNM', india: 'IND', australia: 'AUS', canada: 'CAN'
+};
+const countryThreeCode = value => {
+  const text = String(value || '').trim();
+  if (/^[A-Za-z]{3}$/.test(text)) return text.toUpperCase();
+  return COUNTRY_THREE_CODES[text.toLowerCase()] || null;
+};
 const validateBookingPassengers = ({ itinerary, passengers }) => {
   const departure = parseDateOnly(itinerary?.departureDate);
   if (!departure) throw new Error('A valid departure date is required.');
@@ -106,7 +120,10 @@ const normaliseFareRules = allowance => {
 const normaliseSpring = async item => {
   const basic = item.flightBasicInfo ?? item;
   const [departure, arrival] = await Promise.all([springAirport(basic.oriEndPoint), springAirport(basic.destEndPoint)]);
-  const seats = [...(item.normSeatPriceList ?? basic.normSeatPriceList ?? [])].filter(seat => Number(seat.remSeatNum ?? seat.remainSeatNum ?? 1) > 0).sort((a, b) => Number(a.seatPrice ?? a.price ?? Infinity) - Number(b.seatPrice ?? b.price ?? Infinity));
+  // cSeatPriceList contains the combination IDs that bookOrderC needs. Fall
+  // back to normSeatPriceList only if a legacy search response omits it.
+  const bookingSeats = item.cSeatPriceList ?? basic.cSeatPriceList ?? [];
+  const seats = [...(bookingSeats.length ? bookingSeats : (item.normSeatPriceList ?? basic.normSeatPriceList ?? []))].filter(seat => Number(seat.remSeatNum ?? seat.remainSeatNum ?? 1) > 0).sort((a, b) => Number(a.seatPrice ?? a.price ?? Infinity) - Number(b.seatPrice ?? b.price ?? Infinity));
   const taxes = Number(basic.fuelFee ?? 0) + Number(basic.portPay ?? 0) + Number(basic.otherFeeSum ?? 0);
   const duration = Number(basic.flightDuration ?? basic.duration ?? minutesBetween(departure.time, arrival.time));
   const toFareOption = (seat, index) => {
@@ -127,14 +144,22 @@ const normaliseSpring = async item => {
       total: baseFare + taxes,
       remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null,
       baggage,
-      rules: normaliseFareRules(allowance)
+      rules: normaliseFareRules(allowance),
+      spring: {
+        segHeadId: basic.segHeadId ?? null,
+        combId: seat.combId ?? null,
+        combType: seat.combType ?? null,
+        combPrice: baseFare,
+        adultCabin: seat.seatName ?? seat.cabinCode ?? null,
+        moneyClassId: seat.moneyClassId ?? 0
+      }
     };
   };
   const fareOptions = (seats.length ? seats : [{}]).map(toFareOption);
   const fare = fareOptions[0];
   const baggage = fare.baggage;
   const airline = springText(basic.airlineName || 'Spring Airlines');
-  return { airline, airlineLogo: SPRING_AIRLINES_LOGO, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { segHeadId: basic.segHeadId, seatName: fare.fareType, seatPrice: fare.baseFare, taxes, baggage, fare }, fare, fareOptions, segments: [{ number: basic.flightNo || 'Flight', airline, airlineLogo: SPRING_AIRLINES_LOGO, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
+  return { airline, airlineLogo: SPRING_AIRLINES_LOGO, airlineCode: String(basic.flightNo || '9C').slice(0, 2), number: basic.flightNo || 'Flight', departure, arrival, duration, stops: 0, price: fare.total, source: 'spring', spring: { ...fare.spring, seatName: fare.fareType, seatPrice: fare.baseFare, taxes, baggage, fare }, fare, fareOptions, segments: [{ number: basic.flightNo || 'Flight', airline, airlineLogo: SPRING_AIRLINES_LOGO, departure, arrival, duration, airplane: springText(basic.acType || '' ) || null, travelClass: fare.cabin, baggage, fare }] };
 };
 const validateFlightSearch = ({ departure, arrival, date, trip, returnDate }) => {
   if (!/^[A-Z]{3}$/.test(departure || '') || !/^[A-Z]{3}$/.test(arrival || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('departure, arrival and date are required.');
@@ -230,6 +255,107 @@ async function handleOfficeUsers(req, res, url) {
   }
 }
 
+const firstValue = (object, keys) => {
+  for (const key of keys) {
+    const value = object?.[key];
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+  }
+  return null;
+};
+
+const springPassenger = (traveller, contact, departureDate) => {
+  const passengerType = SPRING_PASSENGER_TYPE[traveller.type];
+  const gender = SPRING_GENDER[String(traveller.gender || '').toLowerCase()];
+  const cardTypeId = SPRING_DOCUMENT_TYPE[String(traveller.documentType || '').toLowerCase()];
+  const nationality = countryThreeCode(traveller.nationality);
+  if (!passengerType || !gender || !cardTypeId) throw new Error('Passenger type, gender and document type are required for Spring booking.');
+  if (!nationality) throw new Error(`${traveller.lastName || 'Passenger'}: choose a nationality supported by the country list.`);
+  return {
+    combXprodInfo: [],
+    insuranceInfo: [],
+    xprodInfo: [],
+    passengerDetailInfo: {
+      age: ageAtDeparture(parseDateOnly(traveller.dateOfBirth), parseDateOnly(departureDate)),
+      birthdate: traveller.dateOfBirth,
+      cardNo: traveller.documentNumber,
+      cardTypeId,
+      familyName: String(traveller.lastName || '').toUpperCase(),
+      personalName: String(traveller.firstName || '').toUpperCase(),
+      gender,
+      nationality,
+      passengerType,
+      phoneNo: contact.phone
+    }
+  };
+};
+
+const springSegmentPayload = (prefix, flight, passengerInfo) => {
+  const spring = flight?.spring || {};
+  const missing = [
+    ['segment ID', spring.segHeadId], ['fare combination ID', spring.combId],
+    ['fare combination type', spring.combType], ['adult cabin', spring.adultCabin]
+  ].find(([, value]) => value === null || value === undefined || value === '');
+  if (missing) throw new Error(`The selected ${prefix} flight is missing Spring ${missing[0]}. Search again and select its fare.`);
+  return {
+    [`${prefix}SegId`]: Number(spring.segHeadId),
+    [`${prefix}CombId`]: Number(spring.combId),
+    [`${prefix}CombType`]: Number(spring.combType),
+    [`${prefix}CombPrice`]: Number(spring.combPrice ?? spring.seatPrice ?? flight.fare?.baseFare ?? 0),
+    [`${prefix}SegAdultCabin`]: String(spring.adultCabin),
+    [`${prefix}SegPassengerInfo`]: passengerInfo
+  };
+};
+
+const createSpringBookingPayload = body => {
+  const { itinerary, passengers } = body;
+  const flights = itinerary?.flights || [];
+  const [outbound, inbound] = flights;
+  if (!outbound) throw new Error('Select an outbound flight before booking.');
+  if (flights.length > 2) throw new Error('Connecting itinerary booking is not enabled yet.');
+  const contact = passengers?.contact || {};
+  if (!contact.name || !contact.phone || !contact.email) throw new Error('Contact name, phone and email are required.');
+  const passengerInfo = passengers.travellers.map(traveller => springPassenger(traveller, contact, itinerary.departureDate));
+  const counts = passengers.travellers.reduce((total, traveller) => ({
+    adults: total.adults + Number(traveller.type === 'ADT'),
+    children: total.children + Number(traveller.type === 'CHD'),
+    infants: total.infants + Number(traveller.type === 'INF')
+  }), { adults: 0, children: 0, infants: 0 });
+  const payload = {
+    adultNum: counts.adults,
+    childNum: counts.children,
+    infantNum: counts.infants,
+    lang: 'zh_cn',
+    lcType: inbound ? 'Y' : 'N',
+    linkmanEmail: contact.email,
+    linkmanName: contact.name,
+    linkmanWorkTel: contact.phone,
+    moneyClassId: Number(outbound.spring?.moneyClassId ?? 0),
+    remoteIp: process.env.SPRING_REMOTE_IP || undefined,
+    ...springSegmentPayload('first', outbound, passengerInfo),
+    secondSegPassengerInfo: []
+  };
+  if (inbound) Object.assign(payload, springSegmentPayload('second', inbound, passengerInfo));
+  if (!payload.remoteIp) delete payload.remoteIp;
+  return payload;
+};
+
+const springOrderReference = response => firstValue(response, ['orderNo', 'orderNO', 'pnr', 'pnrNo', 'orderId'])
+  || firstValue(response?.orderResultDTO, ['orderNo', 'orderNO', 'pnr', 'pnrNo', 'orderId'])
+  || firstValue(response?.orderInfo, ['orderNo', 'orderNO', 'pnr', 'pnrNo', 'orderId']);
+
+async function createLiveSpringBooking(profile, body) {
+  if (process.env.SPRING_BOOKING_ENABLED !== 'true') throw new Error('Spring test booking is disabled on this server. Set SPRING_BOOKING_ENABLED=true only after confirming the test environment.');
+  if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+  const payload = createSpringBookingPayload(body);
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const result = await client.bookOrder(payload, token.accessToken);
+  const pnr = springOrderReference(result);
+  if (!pnr) throw new Error('Spring returned a booking response without a PNR/order number. No local booking was created.');
+  const itinerary = { ...body.itinerary, springOrder: { pnr, responseCode: result.errCode || null } };
+  return createPortalBooking(profile, { ...body, itinerary, pnr, status: 'Reserved' });
+}
+
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), supabase: getSupabaseStatus() });
@@ -242,7 +368,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     const body = await readJson(req);
     if (!body.itinerary || !body.passengers) throw new Error('Itinerary and passenger details are required.');
     validateBookingPassengers(body);
-    return send(res, 201, { booking: await createPortalBooking(profile, body) });
+    return send(res, 201, { booking: await createLiveSpringBooking(profile, body) });
   }
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {

@@ -209,17 +209,17 @@ export async function listPortalBookings(profile) {
   return secretRequest(`/rest/v1/bookings?select=*&order=created_at.desc${bookingAccessFilter(profile)}`);
 }
 
-export async function createPortalBooking(profile, { totalCny, itinerary, passengers }) {
+export async function createPortalBooking(profile, { totalCny, itinerary, passengers, pnr = newPortalPnr(), status = 'Reserved' }) {
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
   if (!Array.isArray(passengers?.travellers) || !passengers.travellers.length) throw new Error('At least one passenger is required.');
   const created = await secretRequest('/rest/v1/bookings', {
     method: 'POST',
     body: {
-      pnr: newPortalPnr(),
+      pnr,
       agency_id: profile.agency_id,
       branch_id: profile.branch_id || null,
       created_by: profile.id,
-      status: 'Reserved',
+      status,
       total_cny: Number(totalCny) || 0,
       itinerary,
       passengers

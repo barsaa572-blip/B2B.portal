@@ -347,7 +347,7 @@ const renderFlights = (results, phase = 'outbound', sameAirline = true) => {
 };
 const applyFareOption = (flight, fare) => {
   flight.fare = fare; flight.price = fare.total;
-  flight.spring = { ...(flight.spring || {}), seatName: fare.fareType, seatPrice: fare.baseFare, taxes: fare.taxes, baggage: fare.baggage, fare };
+  flight.spring = { ...(flight.spring || {}), ...(fare.spring || {}), seatName: fare.fareType, seatPrice: fare.baseFare, taxes: fare.taxes, baggage: fare.baggage, fare };
   flight.segments = (flight.segments || []).map(segment => ({ ...segment, travelClass: fare.cabin || segment.travelClass, baggage: fare.baggage || segment.baggage, fare }));
   return flight;
 };
@@ -531,7 +531,7 @@ const createPortalBookingFromForm = async event => {
     bookings.unshift(booking);
     renderBookings();
     const modal = document.querySelector('#ticket-modal');
-    modal.innerHTML = `<form method="dialog"><button class="close" value="cancel">×</button><div class="ticket-icon">✓</div><p class="eyebrow">BOOKING CREATED</p><h2>PNR ${booking.ref}</h2><p class="modal-copy">Your booking has been saved. It is not issued to Spring Airlines yet.</p><div class="booking-ref">TOTAL <strong>${quoteMnt(booking.total)}</strong></div><div class="booking-detail-actions"><button class="secondary copy-pnr" type="button">Copy PNR</button><button class="primary view-created-booking" type="button">View booking</button></div></form>`;
+    modal.innerHTML = `<form method="dialog"><button class="close" value="cancel">×</button><div class="ticket-icon">✓</div><p class="eyebrow">SPRING BOOKING CREATED</p><h2>PNR ${booking.ref}</h2><p class="modal-copy">The reservation was created in Spring Airlines. Issue the ticket from the booking details when you are ready.</p><div class="booking-ref">TOTAL <strong>${quoteMnt(booking.total)}</strong></div><div class="booking-detail-actions"><button class="secondary copy-pnr" type="button">Copy PNR</button><button class="primary view-created-booking" type="button">View booking</button></div></form>`;
     modal.querySelector('.copy-pnr').addEventListener('click', async () => { await navigator.clipboard?.writeText(booking.ref); toast(`PNR ${booking.ref} copied.`); });
     modal.querySelector('.view-created-booking').addEventListener('click', () => { modal.close(); showView('bookings'); openBookingDetail(booking.ref); });
     modal.showModal();
