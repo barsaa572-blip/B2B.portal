@@ -44,11 +44,14 @@ const bookingFlightDetails = booking => {
 const bookingFlightDetailsClean = booking => {
   const storedFlights = booking.itinerary?.flights;
   if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
-    const state = booking.status === 'Ticketed' ? 'ticketed' : booking.status === 'Cancelled' ? 'cancelled' : 'reserved';
+    const legKey = index ? 'return' : 'outbound';
+    const noShowCount = (booking.itinerary?.noShow?.[legKey] || []).length;
+    const state = booking.status === 'Cancelled' ? 'cancelled' : noShowCount ? 'no-show' : booking.status === 'Ticketed' ? 'ticketed' : 'reserved';
     const label = storedFlights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'OUTBOUND';
     const route = `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`;
     const times = `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`;
-    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small>${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'} &middot; ${flight.fare?.cabin || 'Economy'}</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state === 'ticketed' ? 'ticketed' : ''}">${state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : 'Reserved'}</em></div></div>`;
+    const stateText = state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
+    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small>${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'} &middot; ${flight.fare?.cabin || 'Economy'}</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state}">${stateText}</em></div></div>`;
   }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: 'active', return: 'active' };
@@ -62,18 +65,26 @@ const openBookingDetail = ref => {
   if (!booking) return;
   const modal = bookingDetailModal();
   const passengers = booking.passengers || [booking.passenger];
-  const allFlightsUsed = bookingLegs(booking).every(leg => leg.flown);
+  const activeLegs = bookingLegs(booking).filter(leg => !leg.flown && !leg.allNoShow);
+  const allFlightsUsed = !activeLegs.length;
+  const role = portalSession().profile?.role;
+  const canRecordNoShow = ['office_manager', 'platform_admin'].includes(role) && booking.status === 'Ticketed' && activeLegs.length;
   const passengerDescription = `${booking.passengerCount || passengers.length} Adult${(booking.passengerCount || passengers.length) > 1 ? 's' : ''} &middot; Passport details verified before ticketing`;
   const passengerList = passengers.map((name, index) => {
     const document = booking.documents?.[index] || {};
     const type = document.type || booking.passengerTypes?.[index] || 'ADT';
-    return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>Passenger details</span><div class="passenger-document"><span>Passport number</span><b>${document.documentNumber || '—'}</b><span>Date of birth</span><b>${document.dateOfBirth || '—'}</b><span>Gender</span><b>${document.gender || '—'}</b><span>Nationality</span><b>${document.nationality || '—'}</b><span>Passport expiry</span><b>${document.documentExpiry || '—'}</b></div></div>`;
+    const noShow = passengerHasNoShow(booking, index);
+    return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>${noShow ? 'No-show recorded' : 'Passenger details'}</span><div class="passenger-document"><span>Passport number</span><b>${document.documentNumber || '—'}</b><span>Date of birth</span><b>${document.dateOfBirth || '—'}</b><span>Gender</span><b>${document.gender || '—'}</b><span>Nationality</span><b>${document.nationality || '—'}</b><span>Passport expiry</span><b>${document.documentExpiry || '—'}</b></div></div>`;
   }).join('');
-  const canChangeStatus = !allFlightsUsed && !['Ticketed', 'Cancelled'].includes(booking.status);
-  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div><section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span></section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions"><button type="button" class="secondary cancel-portal-booking" ${canChangeStatus ? '' : 'disabled'}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${canChangeStatus ? '' : 'disabled'}>Issue ticket</button></div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">Issue ticket is a portal test action for now. It does not issue a live Spring Airlines ticket.</p>' : ''}</section>`;
+  const reservedActions = `<button type="button" class="secondary cancel-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Issue ticket</button>`;
+  const ticketedActions = `<button type="button" class="secondary cancel-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button>${canRecordNoShow ? '<button type="button" class="secondary no-show-ticket-flow">Record no-show</button>' : ''}`;
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div><section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span></section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">Issue ticket is a portal test action for now. It does not issue a live Spring Airlines ticket.</p>' : booking.status === 'Ticketed' ? '<p class="booking-disclaimer">Cancellation, change and no-show are portal workflows until their corresponding Spring APIs are enabled.</p>' : ''}</section>`;
   modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
   modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Booking ${booking.ref} marked as ticketed for testing.`); } catch (error) { event.currentTarget.disabled = false; toast(error.message); } });
+  modal.querySelector('.cancel-ticket-flow')?.addEventListener('click', () => showCancelFlow(modal, booking));
+  modal.querySelector('.change-ticket-flow')?.addEventListener('click', () => showChangeFlow(modal, booking));
+  modal.querySelector('.no-show-ticket-flow')?.addEventListener('click', () => showNoShowFlow(modal, booking));
   modal.showModal();
 };
 const showCancelEstimate = (modal, booking) => {
@@ -90,14 +101,22 @@ const showChangeEstimate = (modal, booking) => {
   modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} created. Estimated additional payment: Â¥ 330.00.`); });
 };
 const bookingLegs = booking => {
+  const storedFlights = booking.itinerary?.flights;
+  const noShow = booking.itinerary?.noShow || {};
+  if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
+    const key = index ? 'return' : 'outbound'; const passengers = booking.passengers || [booking.passenger];
+    const noShowPassengers = (noShow[key] || []).map(Number).filter(Number.isInteger);
+    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, flown: flight.status === 'flown', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length };
+  });
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
-  const legs = [{ key: 'outbound', route: `${from} &rarr; ${to}`, flight: 'Spring Airlines &middot; 9C 7058', time: '13:00 &rarr; 17:00', flown: states.outbound === 'flown' }];
-  if (!booking.oneWay) legs.push({ key: 'return', route: `${to} &rarr; ${from}`, flight: 'Spring Airlines &middot; 9C 7057', time: '08:10 &rarr; 12:00', flown: states.return === 'flown' });
+  const legs = [{ key: 'outbound', route: `${from} &rarr; ${to}`, flight: 'Spring Airlines &middot; 9C 7058', time: '13:00 &rarr; 17:00', flown: states.outbound === 'flown', noShowPassengers: [], allNoShow: false }];
+  if (!booking.oneWay) legs.push({ key: 'return', route: `${to} &rarr; ${from}`, flight: 'Spring Airlines &middot; 9C 7057', time: '08:10 &rarr; 12:00', flown: states.return === 'flown', noShowPassengers: [], allNoShow: false });
   return legs;
 };
-const flightChoice = (leg, mode, checked = false) => `<label class="flight-choice ${leg.flown ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !leg.flown ? 'checked' : ''} ${leg.flown ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : 'Select'}</i></label>`;
-const passengerChoices = (booking, mode) => (booking.passengers || [booking.passenger]).map((passenger, index) => `<label class="passenger-choice"><input type="checkbox" name="${mode}-passenger" value="${index}" checked /><span><strong>${index + 1}. ${passenger}</strong><small>Adult passenger</small></span></label>`).join('');
+const passengerHasNoShow = (booking, index) => Object.values(booking.itinerary?.noShow || {}).some(list => (list || []).map(Number).includes(index));
+const flightChoice = (leg, mode, checked = false) => { const locked = leg.flown || leg.allNoShow; return `<label class="flight-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : leg.allNoShow ? 'NO-SHOW' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : leg.allNoShow ? 'No-show' : 'Select'}</i></label>`; };
+const passengerChoices = (booking, mode, { checked = true, disableNoShow = true } = {}) => (booking.passengers || [booking.passenger]).map((passenger, index) => { const noShow = passengerHasNoShow(booking, index); const locked = disableNoShow && noShow; return `<label class="passenger-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-passenger" value="${index}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span><strong>${index + 1}. ${passenger}</strong><small>${locked ? 'No-show recorded' : 'Adult passenger'}</small></span></label>`; }).join('');
 const yen = value => quoteMnt(value);
 const showCancelSelection = (modal, booking) => {
   const legs = bookingLegs(booking);
@@ -165,7 +184,7 @@ const showCancelFlow = (modal, booking) => {
     modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Cancellation summary</h2><section class="summary-selection"><h3>Flights to cancel</h3>${selectedLegs.map(leg => `<div><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div>`).join('')}<h3>Passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="fee-summary"><div><span>Selected ticket amount</span><b>${yen(ticketAmount)}</b></div><div><span>Airline cancellation fee</span><b>− ${yen(airlineFee)}</b></div><div><span>Service fee</span><b>− ${yen(serviceFee)}</b></div><div class="fee-total"><span>Refund</span><strong>${yen(refund)}</strong></div></section><p class="booking-warning">The final refund is subject to airline fare rules and approval.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel">Confirm cancellation</button></div></section>`;
     modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
     modal.querySelector('.back-booking').addEventListener('click', () => showCancelFlow(modal, booking));
-    modal.querySelector('.confirm-cancel').addEventListener('click', () => { modal.close(); toast(`Cancellation request for ${booking.ref} created.`); });
+    modal.querySelector('.confirm-cancel').addEventListener('click', () => { modal.close(); toast(`Cancellation request for ${booking.ref} is prepared. Spring submission will be enabled next.`); });
   });
 };
 const showChangeFlow = (modal, booking) => {
@@ -217,7 +236,25 @@ const showChangeFlow = (modal, booking) => {
     modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Change summary</h2><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${yen(changeFee)}</b></div><div><span>Fare difference</span><b>${yen(fareDifference)}</b></div><div class="fee-total"><span>Additional payment</span><strong>${yen(additional)}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm change request</button></div></section>`;
     modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
     modal.querySelector('.back-booking').addEventListener('click', () => showChangeFlow(modal, booking));
-    modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} created.`); });
+    modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} is prepared. Spring submission will be enabled next.`); });
+  });
+};
+const showNoShowFlow = (modal, booking) => {
+  const legs = bookingLegs(booking).filter(leg => !leg.flown && !leg.allNoShow);
+  if (!legs.length) return toast('There are no active flights available for no-show recording.');
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">RECORD NO-SHOW</p><h2>Select flights and passengers</h2><p class="modal-copy">Record a no-show only after confirming the passenger did not board. This is an internal portal status until Spring no-show synchronisation is enabled.</p><section class="selection-group"><h3>Flights</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'no-show', false)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'no-show', { checked: false, disableNoShow: false })}</section></section><p class="booking-warning">A recorded no-show cannot be changed or cancelled from this portal until it is reviewed by an office manager.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-no-show">Record no-show</button></div></section>`;
+  modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+  modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
+  modal.querySelector('.confirm-no-show').addEventListener('click', async event => {
+    const selectedLegs = [...modal.querySelectorAll('[name="no-show-leg"]:checked')].map(input => input.value);
+    const passengerIndexes = [...modal.querySelectorAll('[name="no-show-passenger"]:checked')].map(input => Number(input.value));
+    if (!selectedLegs.length || !passengerIndexes.length) return toast('Select at least one flight and one passenger.');
+    event.currentTarget.disabled = true;
+    try {
+      await updatePortalBookingStatus(booking.ref, 'no-show', { legs: selectedLegs, passengerIndexes });
+      openBookingDetail(booking.ref);
+      toast(`No-show recorded for ${booking.ref}.`);
+    } catch (error) { event.currentTarget.disabled = false; toast(error.message); }
   });
 };
 document.addEventListener('click', event => { const button = event.target.closest('.view-booking'); if (button) openBookingDetail(button.dataset.bookingRef); });
@@ -960,8 +997,8 @@ document.addEventListener('click', event => {
   const book = event.target.closest('.issue-ticket');
   if (book?.form) book.form.noValidate = true;
 });
-const updatePortalBookingStatus = async (pnr, action) => {
-  const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${action}`, { method: 'POST' });
+const updatePortalBookingStatus = async (pnr, action, payload) => {
+  const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${action}`, { method: 'POST', headers: payload ? { 'content-type': 'application/json' } : undefined, body: payload ? JSON.stringify(payload) : undefined });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Booking could not be updated.');
   const updated = portalBookingFromRow(data.booking);

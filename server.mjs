@@ -7,7 +7,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingNoShow, requirePlatformAdmin, signInWithPassword, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -453,6 +453,10 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   if (match && req.method === 'POST') {
     const status = match[2] === 'issue' ? 'Ticketed' : 'Cancelled';
     return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
+  }
+  const noShowMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/no-show$/);
+  if (noShowMatch && req.method === 'POST') {
+    return send(res, 200, { booking: await recordPortalBookingNoShow(profile, noShowMatch[1], await readJson(req)) });
   }
   return send(res, 404, { error: 'Booking endpoint not found.' });
 } catch (error) { return send(res, 403, { error: error.message || 'Booking request is not allowed.' }); } }

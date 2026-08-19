@@ -240,6 +240,26 @@ export async function updatePortalBooking(profile, pnr, status) {
   return updated[0];
 }
 
+export async function recordPortalBookingNoShow(profile, pnr, { legs, passengerIndexes }) {
+  if (!['office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Only an office manager or platform administrator can record a no-show.');
+  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,status,itinerary,passengers&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const booking = rows[0];
+  if (!booking) throw new Error('Booking not found.');
+  if (profile.role !== 'platform_admin' && booking.agency_id !== profile.agency_id) throw new Error('You do not have access to this booking.');
+  if (booking.status !== 'Ticketed') throw new Error('A no-show can only be recorded for a ticketed booking.');
+  const flights = booking.itinerary?.flights || [];
+  const allowedLegs = flights.map((_, index) => index ? 'return' : 'outbound');
+  const validLegs = [...new Set((legs || []).filter(leg => allowedLegs.includes(leg)))];
+  const travellerCount = booking.passengers?.travellers?.length || 0;
+  const validPassengers = [...new Set((passengerIndexes || []).map(Number).filter(index => Number.isInteger(index) && index >= 0 && index < travellerCount))];
+  if (!validLegs.length || !validPassengers.length) throw new Error('Select at least one valid flight and passenger.');
+  const noShow = { ...(booking.itinerary?.noShow || {}) };
+  validLegs.forEach(leg => { noShow[leg] = [...new Set([...(noShow[leg] || []).map(Number), ...validPassengers])]; });
+  const itinerary = { ...booking.itinerary, noShow, noShowRecordedAt: new Date().toISOString(), noShowRecordedBy: profile.id };
+  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { itinerary } });
+  return updated[0];
+}
+
 export async function getTopupInvoice(profile, id) {
   const rows = await secretRequest(`/rest/v1/topup_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
   const request = rows[0];

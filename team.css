@@ -9,3 +9,4 @@
 .agency-access-list span { color: #71809a; font-size: 12px; }
 .agency-access-list b { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 .tag.cancelled { background: #eef1f5; color: #687386; }
+.tag.no-show { background: #fff1df; color: #a95d00; }
