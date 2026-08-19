@@ -132,7 +132,10 @@ const normaliseSpring = async item => {
     const baggage = {
       checkedKg: allowance.bag ?? allowance.checkedBag ?? allowance.checkedBaggage ?? null,
       cabinKg: allowance.handbag ?? allowance.cabinBag ?? allowance.handBaggage ?? null,
-      cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null
+      cabinSize: allowance.handbagSize ?? allowance.cabinBagSize ?? null,
+      // Optional fields are kept only when Spring sends them. The frontend
+      // deliberately does not invent a "personal item" allowance.
+      personalItem: allowance.personalItem ?? allowance.personalBag ?? allowance.smallBag ?? null
     };
     return {
       id: String(seat.seatId ?? seat.seatCode ?? seat.cabinCode ?? `fare-${index}`),
