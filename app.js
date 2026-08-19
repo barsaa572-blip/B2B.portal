@@ -283,7 +283,9 @@ const mockSearchResults = (departure, arrival) => [mockFlight(departure, arrival
 const showMockSearch = (departure, arrival) => { const outbound = mockSearchResults(departure, arrival); if (tripType === 'round') { const returns = [mockFlight(arrival, departure, '9C 7057', '08:10', '12:00', 1960), mockFlight(arrival, departure, '9C 7011', '14:15', '18:05', 2150), mockFlight(arrival, departure, '9C 7025', '19:20', '23:15', 2290)]; renderRoundPairs(outbound.map((flight, index) => ({ outbound: flight, returnFlight: returns[index], sameAirline: true }))); } else renderFlights(outbound, 'outbound'); };
 const showItinerary = () => { resultArea.classList.remove('hidden'); resultArea.innerHTML = `<section class="final-itinerary"><div class="selected-title"><span>✓</span><div><p class="eyebrow">ROUND TRIP SELECTED</p><h2>Your selected itinerary</h2></div></div>${flightCard(selectedOutbound, 'OUTBOUND')} ${flightCard(selectedReturn, 'RETURN')}<div class="fare-total"><span>${passengerFareCaption()} · selected flights</span><strong>${totalPrice()}</strong></div><button class="primary continue-ticket">Continue to passenger details</button></section>`; document.querySelector('.continue-ticket').addEventListener('click', () => { document.querySelector('#ticket-modal-total').textContent = totalPrice(); document.querySelector('#ticket-modal').showModal(); }); };
 const checkoutFlight = (flight, label) => flight ? `<article class="checkout-flight"><div><span class="journey-tag ${label.toLowerCase()}">${label}</span><b>${flight.airline || 'Airline'} ${flight.number || ''}</b></div><div class="checkout-times"><strong>${(flight.departure?.time || '').slice(-5)}</strong><i></i><strong>${(flight.arrival?.time || '').slice(-5)}</strong></div><div class="checkout-airports"><span>${flight.departure?.name || flight.departure?.id || ''} (${flight.departure?.id || ''})</span><span>${flight.arrival?.name || flight.arrival?.id || ''} (${flight.arrival?.id || ''})</span></div></article>` : '';
-const passengerForm = (type, index) => `<section class="passenger-card" data-passenger-type="${type}"><div class="passenger-card-title"><h2>${index + 1} ${type}</h2></div><div class="passenger-fields"><label>Last name<input name="last-name" required placeholder="As shown on document" /></label><label>First name<input name="first-name" required placeholder="First and middle names" /></label><label>Date of birth<input name="date-of-birth" type="date" required /></label><label>Document type<select name="document-type"><option>Passport</option><option>National ID</option></select></label><label>Document number<input name="document-number" required /></label><label>Issuing country / region<input name="issuing-country" required placeholder="e.g. Mongolia" /></label><label>Document expiry<input name="document-expiry" type="date" required /></label><label>Nationality / region<input name="nationality" required placeholder="e.g. Mongolia" /></label><label>Gender<select name="gender" required><option value="">Select</option><option>Male</option><option>Female</option></select></label></div></section>`;
+const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const splitDateField = (label, name) => `<label class="split-date-field">${label}<span class="split-date-control"><input type="text" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="DD" aria-label="Day" data-date-part="day" /><select aria-label="Month" data-date-part="month"><option value="">Month</option>${monthOptions.map((month, index) => `<option value="${String(index + 1).padStart(2, '0')}">${month}</option>`).join('')}</select><input type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="YYYY" aria-label="Year" data-date-part="year" /><input type="hidden" name="${name}" required /></span></label>`;
+const passengerForm = (type, index) => `<section class="passenger-card" data-passenger-type="${type}"><div class="passenger-card-title"><h2>${index + 1} ${type}</h2></div><div class="passenger-fields"><label>Last name<input name="last-name" required placeholder="As shown on document" /></label><label>First name<input name="first-name" required placeholder="First and middle names" /></label>${splitDateField('Date of birth', 'date-of-birth')}<label>Document type<select name="document-type"><option>Passport</option><option>National ID</option></select></label><label>Document number<input name="document-number" required /></label><label>Issuing country / region<input name="issuing-country" required placeholder="e.g. Mongolia" /></label>${splitDateField('Document expiry', 'document-expiry')}<label>Nationality / region<input name="nationality" required placeholder="e.g. Mongolia" /></label><label>Gender<select name="gender" required><option value="">Select</option><option>Male</option><option>Female</option></select></label></div></section>`;
 const selectedReviewFares = () => {
   const flights = [selectedOutbound, selectedReturn].filter(Boolean);
   const adults = activePassengerCounts.adults;
@@ -766,7 +768,8 @@ const clearFormErrors = form => form.querySelectorAll('.field-error, .field-erro
 });
 const setFieldError = (field, message) => {
   if (!field) return;
-  field.classList.add('field-error');
+  const visibleField = field.type === 'hidden' ? field.closest('label')?.querySelector('.split-date-control') : field;
+  visibleField?.classList.add('field-error');
   const label = field.closest('label');
   if (!label) return;
   const help = document.createElement('small');
@@ -780,12 +783,33 @@ const validateRequiredFields = form => {
   missing.forEach(field => setFieldError(field, 'This field is required.'));
   return missing[0] || null;
 };
+const syncSplitDateControl = control => {
+  const day = control.querySelector('[data-date-part="day"]')?.value.replace(/\D/g, '') || '';
+  const month = control.querySelector('[data-date-part="month"]')?.value || '';
+  const year = control.querySelector('[data-date-part="year"]')?.value.replace(/\D/g, '') || '';
+  const hidden = control.querySelector('input[type="hidden"]');
+  if (!hidden) return;
+  hidden.value = '';
+  if (day.length < 1 || !month || year.length !== 4) return;
+  const candidate = new Date(`${year}-${month}-${day.padStart(2, '0')}T12:00:00`);
+  if (candidate.getFullYear() === Number(year) && candidate.getMonth() + 1 === Number(month) && candidate.getDate() === Number(day)) hidden.value = `${year}-${month}-${day.padStart(2, '0')}`;
+};
+document.addEventListener('input', event => {
+  const control = event.target.closest('.split-date-control');
+  if (!control) return;
+  if (event.target.matches('[data-date-part="day"], [data-date-part="year"]')) event.target.value = event.target.value.replace(/\D/g, '');
+  syncSplitDateControl(control);
+});
+document.addEventListener('change', event => {
+  const control = event.target.closest('.split-date-control');
+  if (control) syncSplitDateControl(control);
+});
 const createPortalBookingFromForm = async event => {
   event.preventDefault();
   const submit = event.currentTarget.querySelector('.issue-ticket');
   clearFormErrors(event.currentTarget);
   const missing = validateRequiredFields(event.currentTarget);
-  if (missing) { missing.focus(); toast('Complete the highlighted required field.'); return; }
+  if (missing) { (missing.type === 'hidden' ? missing.closest('label')?.querySelector('[data-date-part]') : missing)?.focus(); toast('Complete the highlighted required field.'); return; }
   const cards = [...event.currentTarget.querySelectorAll('.passenger-card')];
   const travellers = cards.map(card => {
     const get = name => card.querySelector(`[name="${name}"]`)?.value.trim() || '';
@@ -798,7 +822,7 @@ const createPortalBookingFromForm = async event => {
   if (invalidPassenger) {
     const field = cards[invalidPassenger.index]?.querySelector(`[name="${invalidPassenger.error.field}"]`);
     setFieldError(field, invalidPassenger.error.message);
-    field?.focus();
+    (field?.type === 'hidden' ? field.closest('label')?.querySelector('[data-date-part]') : field)?.focus();
     toast(invalidPassenger.error.message);
     return;
   }

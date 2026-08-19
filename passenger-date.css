@@ -1,0 +1,42 @@
+.split-date-field { position: relative; }
+
+.split-date-control {
+  display: grid;
+  grid-template-columns: 48px minmax(74px, 1fr) 62px;
+  align-items: center;
+  min-height: 39px;
+  overflow: hidden;
+  border: 1px solid #cdd9ea;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.passenger-fields .split-date-control input,
+.passenger-fields .split-date-control select {
+  height: 38px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #1c3152;
+  font-size: 14px;
+  font-weight: 650;
+  outline: none;
+}
+
+.passenger-fields .split-date-control select {
+  border-right: 1px solid #dce4ef;
+  border-left: 1px solid #dce4ef;
+  cursor: pointer;
+}
+
+.passenger-fields .split-date-control input::placeholder { color: #91a0b5; font-weight: 500; }
+.split-date-control:focus-within { border-color: #245de0; box-shadow: 0 0 0 2px #245de018; }
+.split-date-control.field-error { border: 2px solid #dc3545; background: #fff4f5; }
+
+@media (max-width: 540px) {
+  .split-date-control { grid-template-columns: 54px minmax(96px, 1fr) 72px; }
+}
