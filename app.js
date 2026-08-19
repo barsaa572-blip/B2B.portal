@@ -286,11 +286,30 @@ const reviewFlight = (flight, date) => {
   return `<article class="review-flight"><div class="review-airline-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</div><div class="review-flight-copy"><div class="review-flight-route"><span>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</span><span class="route-separator"></span><small>${date || ''}</small><small>${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</small><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><div class="review-flight-detail"><div class="review-times"><span>${(first.departure?.time || '').slice(-5)}</span><span>${(last.arrival?.time || '').slice(-5)}</span></div><div class="review-airport-line"><b>${first.departure?.id || ''} ${reviewAirportName(first.departure)}</b><span>${first.airline || flight.airline || 'Airline'} ${first.number || flight.number || 'Flight'} · ${aircraft || 'Economy'}</span><b>${last.arrival?.id || ''} ${reviewAirportName(last.arrival)}</b></div></div><div class="review-meta"><span>${flight.airline || 'Airline'}</span><span>${flight.number || 'Flight'}</span><span>${formatMinutes(flight.duration || first.duration || 0)}</span></div></div></article>`;
 };
 const baggageSummary = () => {
-  const baggage = selectedOutbound?.fare?.baggage || (selectedOutbound?.segments?.[0] || selectedOutbound)?.baggage || {};
-  const rows = [];
-  if (baggage.personalItem !== null && baggage.personalItem !== undefined && baggage.personalItem !== '') rows.push(['Personal item', baggage.personalItem === true ? 'Included' : String(baggage.personalItem)]);
-  if (baggage.cabinKg !== null && baggage.cabinKg !== undefined && baggage.cabinKg !== '') rows.push(['Carry-on baggage', `1 × ${baggage.cabinKg} kg`]);
-  if (baggage.checkedKg !== null && baggage.checkedKg !== undefined && baggage.checkedKg !== '') rows.push(['Checked baggage', `1 × ${baggage.checkedKg} kg included`]);
+  const outbound = selectedOutbound?.fare?.baggage || (selectedOutbound?.segments?.[0] || selectedOutbound)?.baggage || {};
+  const inbound = selectedReturn?.fare?.baggage || (selectedReturn?.segments?.[0] || selectedReturn)?.baggage || null;
+  const hasValue = value => value !== null && value !== undefined && value !== '';
+  const regularRows = baggage => {
+    const rows = [];
+    if (hasValue(baggage.personalItem)) rows.push(['Personal item', baggage.personalItem === true ? 'Included' : String(baggage.personalItem)]);
+    if (hasValue(baggage.cabinKg)) rows.push(['Carry-on baggage', `1 × ${baggage.cabinKg} kg`]);
+    if (hasValue(baggage.checkedKg)) rows.push(['Checked baggage', `1 × ${baggage.checkedKg} kg included`]);
+    return rows;
+  };
+  let rows = regularRows(outbound);
+  if (inbound) {
+    const rowsForAllowance = (label, field, missing) => {
+      const same = outbound[field] === inbound[field];
+      if (same) return hasValue(outbound[field]) ? [[label, `1 × ${outbound[field]} kg${field === 'checkedKg' ? ' included' : ''}`]] : [];
+      const display = (name, baggage) => [`${name} · ${label}`, hasValue(baggage[field]) ? `1 × ${baggage[field]} kg${field === 'checkedKg' ? ' included' : ''}` : missing];
+      return [display('Departure', outbound), display('Return', inbound)];
+    };
+    rows = [
+      ...(hasValue(outbound.personalItem) ? [['Personal item', outbound.personalItem === true ? 'Included' : String(outbound.personalItem)]] : []),
+      ...rowsForAllowance('Carry-on baggage', 'cabinKg', 'Not provided'),
+      ...rowsForAllowance('Checked baggage', 'checkedKg', 'Not included')
+    ];
+  }
   if (!rows.length) return '';
   return `<section class="price-section"><div class="price-section-heading"><span>Baggage</span></div><div class="baggage-list">${rows.map(([name, value]) => `<button type="button" class="selected-fare-details"><span>${name}</span><span>${value}</span></button>`).join('')}</div></section>`;
 };
