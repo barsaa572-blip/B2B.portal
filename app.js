@@ -357,17 +357,73 @@ const fareBaggageText = fare => {
   const checked = baggage.checkedKg === null || baggage.checkedKg === undefined ? 'Checked baggage: not included' : `Checked baggage: ${baggage.checkedKg} kg`;
   return `${cabin} · ${checked}`;
 };
-const fareRuleText = (fare, type, emptyText) => {
-  const rule = (fare?.rules || []).find(item => Number(item.type) === type);
-  const entry = rule?.entries?.[0];
-  if (!entry || !Number.isFinite(Number(entry.value))) return emptyText;
+const ruleValueText = entry => {
+  if (!entry || !Number.isFinite(Number(entry.value))) return 'Not provided';
   const value = Number(entry.value);
-  if (Number(entry.valueType) === 2) return `${rule.label}: ${value}%`;
-  return `${rule.label}: ${quoteMnt(value)}`;
+  return Number(entry.valueType) === 2 ? `${Math.round(value * 100)}% of applicable fare` : quoteMnt(value);
+};
+const ruleBoundaryHours = value => {
+  const match = String(value || '').match(/^(-?)(\d+(?:\.\d+)?)([HD])$/i);
+  if (!match) return null;
+  return Number(match[2]) * (match[3].toUpperCase() === 'D' ? 24 : 1) * (match[1] === '-' ? -1 : 1);
+};
+const ruleWindowText = entry => {
+  const start = ruleBoundaryHours(entry?.start); const end = ruleBoundaryHours(entry?.end);
+  const before = hours => `${Math.abs(hours) % 24 === 0 ? Math.abs(hours) / 24 : Math.abs(hours)}${Math.abs(hours) % 24 === 0 ? ' day' : ' hour'}${Math.abs(hours) === 24 || Math.abs(hours) % 24 === 0 && Math.abs(hours) / 24 !== 1 ? 's' : ''} before departure`;
+  if (start === null && end !== null && end < 0) return `More than ${before(end)}`;
+  if (start !== null && end !== null && start < 0 && end <= 0) return `${before(start)} to ${end === 0 ? 'departure time' : before(end)}`;
+  if (start !== null && start < 0 && end === null) return `Within ${before(start)}`;
+  if (start === 0 && end === null) return 'After departure / no-show';
+  return 'Applicable time window';
+};
+const fareDateForPhase = phase => document.querySelector(phase === 'return' ? '#return-date' : '#outbound-date')?.value;
+const activeRuleEntry = (fare, type, date, time) => {
+  const rule = (fare?.rules || []).find(item => Number(item.type) === type);
+  const departure = new Date(`${date || ''}T${time || '00:00'}:00`);
+  if (!rule || Number.isNaN(departure.getTime())) return null;
+  const relativeHours = (Date.now() - departure.getTime()) / 3_600_000;
+  return rule.entries.find(entry => {
+    const start = ruleBoundaryHours(entry.start); const end = ruleBoundaryHours(entry.end);
+    return (start === null || relativeHours >= start) && (end === null || relativeHours < end);
+  }) || rule.entries[0] || null;
+};
+const fareRuleText = (fare, type, emptyText, date, time) => {
+  const rule = (fare?.rules || []).find(item => Number(item.type) === type);
+  const entry = activeRuleEntry(fare, type, date, time);
+  if (!entry) return emptyText;
+  return `${rule?.label}: ${ruleValueText(entry)} · ${ruleWindowText(entry)}`;
+};
+const fareDetailButton = (fare, phase) => `<button type="button" class="text-btn fare-rule-details" data-fare-phase="${phase}" data-fare-index="${fare.index}">More details</button>`;
+let fareDetailsByBound = {};
+const showFareRuleDetails = (fare, flight) => {
+  let modal = document.querySelector('#fare-rule-modal');
+  if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rule-modal'; document.body.append(modal); }
+  const rules = (fare?.rules || []).map(rule => `<section class="fare-rule-block"><h3>${rule.label}</h3>${(rule.entries || []).map(entry => `<div><span>${ruleWindowText(entry)}</span><strong>${ruleValueText(entry)}</strong></div>`).join('') || '<p>Not provided for this fare.</p>'}</section>`).join('') || '<p>Fare rules are not provided for this fare.</p>';
+  modal.innerHTML = `<form method="dialog" class="fare-rule-modal"><button class="close" value="cancel" aria-label="Close">×</button><p class="eyebrow">FARE CONDITIONS</p><h2>${fare?.fareType || fare?.bookingClass || 'Fare'} · ${flight?.departure?.id || ''} → ${flight?.arrival?.id || ''}</h2><p class="modal-copy">The applicable condition is based on the time when the request is made. All Spring Airlines rule periods are shown below.</p>${rules}<button class="primary" value="cancel">Close</button></form>`;
+  modal.showModal();
+};
+const fareChoiceCard = (fare, index, phase, selected = false, flight = null) => {
+  const date = fareDateForPhase(phase); const time = flight?.departure?.time || (phase === 'return' ? selectedReturn?.departure?.time : selectedOutbound?.departure?.time);
+  const total = cnyAmount(fare.total) * activePassengerCounts.adults;
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-fare-bound="${phase}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${selected ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${fareBaggageText(fare)}</p><strong>Flexibility today</strong><p>${fareRuleText(fare, 1, 'Refund: check fare rules', date, time)}<br>${fareRuleText(fare, 2, 'Change: check fare rules', date, time)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total) : 'To be confirmed'}</b></div></button>${fareDetailButton({ index }, phase)}</div>`;
+};
+const bindFareCarousel = (screen, selections, onSelect) => {
+  screen.querySelectorAll('[data-fare-bound]').forEach(card => card.addEventListener('click', () => {
+    selections[card.dataset.fareBound] = Number(card.dataset.fareIndex); onSelect();
+  }));
+  screen.querySelectorAll('.fare-scroll').forEach(button => button.addEventListener('click', () => {
+    const scroller = button.parentElement.querySelector('.fare-choice-grid');
+    scroller.scrollBy({ left: (button.classList.contains('fare-scroll-back') ? -1 : 1) * Math.max(300, scroller.clientWidth * .8), behavior: 'smooth' });
+  }));
+  screen.querySelectorAll('.fare-rule-details').forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const source = fareDetailsByBound[button.dataset.farePhase];
+    if (source) showFareRuleDetails(source.fares[Number(button.dataset.fareIndex)], source.flight);
+  }));
 };
 const continueWithFare = (flight, fare, phase) => {
   applyFareOption(flight, fare);
-  if (phase === 'return') { selectedReturn = flight; return prepareBookingScreen(); }
+  if (phase === 'return') { selectedReturn = flight; return tripType === 'round' ? showRoundFareOptions() : prepareBookingScreen(); }
   selectedOutbound = flight;
   if (tripType !== 'round') { selectedReturn = null; return prepareBookingScreen(); }
   if (roundReturnFlights.length) return renderFlights(roundReturnFlights, 'return', true);
@@ -378,14 +434,38 @@ const showFareOptions = (flight, phase) => {
   if (options.length < 2) return continueWithFare(flight, options[0] || { total: flight.price, baseFare: flight.price, taxes: 0, fareType: 'Public fare', cabin: 'Economy' }, phase);
   const leg = phase === 'return' ? 'Return' : 'Departure';
   resultArea.classList.remove('hidden');
-  resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT</p><h2>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</h2><p>${flight.airline || 'Airline'} ${flight.number || 'Flight'} · ${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => `<button type="button" class="fare-family-choice ${index === 0 ? 'recommended' : ''}" data-fare-index="${index}"><span class="fare-family-top"><b>${fare.fareType || fare.bookingClass || 'Economy'} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${fare.bookingClass ? `Booking class ${fare.bookingClass}` : fare.cabin || 'Economy'}</small>${index === 0 ? '<em class="fare-recommended">Lowest fare</em>' : ''}<hr><strong>Baggage</strong><p>${fareBaggageText(fare)}</p><strong>Flexibility</strong><p>${fareRuleText(fare, 1, 'Refund: check fare rules')}<br>${fareRuleText(fare, 2, 'Change: check fare rules')}</p><div class="fare-family-price"><span>Total · ${passengerTotal()} passenger${passengerTotal() === 1 ? '' : 's'}</span><b>${quoteMnt(cnyAmount(fare.total) * activePassengerCounts.adults)}</b></div></button>`).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer><span>Select one fare to continue</span><strong>${leg} · ${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</strong></footer></section>`;
-  resultArea.querySelectorAll('[data-fare-index]').forEach(button => button.addEventListener('click', () => continueWithFare(flight, options[Number(button.dataset.fareIndex)], phase)));
-  const scroller = resultArea.querySelector('.fare-choice-grid');
-  resultArea.querySelector('.fare-scroll-back')?.addEventListener('click', () => scroller.scrollBy({ left: -Math.max(300, scroller.clientWidth * .8), behavior: 'smooth' }));
-  resultArea.querySelector('.fare-scroll-next')?.addEventListener('click', () => scroller.scrollBy({ left: Math.max(300, scroller.clientWidth * .8), behavior: 'smooth' }));
+  const selections = { [phase]: 0 };
+  fareDetailsByBound = { [phase]: { flight, fares: options } };
+  const render = () => {
+    resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT</p><h2>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</h2><p>${flight.airline || 'Airline'} ${flight.number || 'Flight'} · ${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => fareChoiceCard(fare, index, phase, selections[phase] === index, flight)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer><span>Select one fare to continue</span><button class="primary confirm-single-fare">Continue</button></footer></section>`;
+    bindFareCarousel(resultArea, selections, render);
+    resultArea.querySelector('.confirm-single-fare').addEventListener('click', () => continueWithFare(flight, options[selections[phase]], phase));
+  };
+  render();
+};
+const showRoundFareOptions = () => {
+  const outboundOptions = selectedOutbound?.fareOptions?.length ? selectedOutbound.fareOptions : [selectedOutbound?.fare].filter(Boolean);
+  const returnOptions = selectedReturn?.fareOptions?.length ? selectedReturn.fareOptions : [selectedReturn?.fare].filter(Boolean);
+  const selections = { outbound: 0, return: 0 };
+  fareDetailsByBound = { outbound: { flight: selectedOutbound, fares: outboundOptions }, return: { flight: selectedReturn, fares: returnOptions } };
+  const carousel = (title, flight, fares, phase) => `<section class="bound-fare-picker"><header><p class="eyebrow">${title}</p><h2>${flight.departure?.id || ''} → ${flight.arrival?.id || ''}</h2><p>${flight.airline || 'Airline'} ${flight.number || 'Flight'} · ${(flight.departure?.time || '').slice(-5)} – ${(flight.arrival?.time || '').slice(-5)}</p></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${fares.map((fare, index) => fareChoiceCard(fare, index, phase, selections[phase] === index, flight)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div></section>`;
+  const render = () => {
+    const total = cnyAmount(outboundOptions[selections.outbound]?.total) + cnyAmount(returnOptions[selections.return]?.total);
+    resultArea.classList.remove('hidden');
+    resultArea.innerHTML = `<section class="fare-choice-screen round-fare-choice"><header><p class="eyebrow">ROUND TRIP FARE SELECTION</p><h2>${selectedOutbound.departure?.id || ''} ⇄ ${selectedOutbound.arrival?.id || ''}</h2><p>Select a fare for each bound. Current refund and change conditions are calculated from today until the flight departure.</p></header>${carousel('DEPARTURE FARE', selectedOutbound, outboundOptions, 'outbound')}${carousel('RETURN FARE', selectedReturn, returnOptions, 'return')}<footer><strong>${passengerFareCaption()} · ${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</strong><button class="primary confirm-round-fares">Continue to passenger details</button></footer></section>`;
+    bindFareCarousel(resultArea, selections, render);
+    resultArea.querySelector('.confirm-round-fares').addEventListener('click', () => {
+      applyFareOption(selectedOutbound, outboundOptions[selections.outbound]);
+      applyFareOption(selectedReturn, returnOptions[selections.return]);
+      prepareBookingScreen();
+    });
+  };
+  render();
 };
 async function selectFlight(flight) {
   if (passengerSearchStale) return toast('Search again after changing passenger count before selecting a flight.');
+  if (tripType === 'round' && searchPhase === 'outbound') { selectedOutbound = flight; return renderFlights(roundReturnFlights, 'return', true); }
+  if (tripType === 'round' && searchPhase === 'return') { selectedReturn = flight; return showRoundFareOptions(); }
   showFareOptions(flight, searchPhase);
 }
 document.querySelectorAll('[data-trip]').forEach(button => button.addEventListener('click', () => { tripType = button.dataset.trip; document.querySelectorAll('[data-trip]').forEach(b => b.classList.toggle('selected', b === button)); document.querySelector('.return-date').hidden = tripType !== 'round'; resultArea.classList.add('hidden'); }));
@@ -581,23 +661,3 @@ loadPricingRate();
 loadTopupInvoices();
 loadWallet();
 
-// Add an expandable detail card to one-way result rows too.
-const addInlineFlightDetails = () => {
-  document.querySelectorAll('#flight-results .flight').forEach((card, index) => {
-    if (card.dataset.detailsBound || !visibleFlights[index]) return;
-    const detailId = `inline-flight-detail-${Date.now()}-${index}`;
-    card.insertAdjacentHTML('beforeend', `<button type="button" class="segment-toggle inline-detail-toggle" data-detail-id="${detailId}" aria-expanded="false" aria-label="Show flight details">⌄</button>${segmentDetail(visibleFlights[index], detailId)}`);
-    card.dataset.detailsBound = 'true';
-  });
-};
-new MutationObserver(addInlineFlightDetails).observe(resultArea, { childList: true, subtree: true });
-resultArea.addEventListener('click', event => {
-  const button = event.target.closest('.inline-detail-toggle');
-  if (!button) return;
-  const detail = document.querySelector(`#${button.dataset.detailId}`);
-  if (!detail) return;
-  const open = detail.hidden;
-  detail.hidden = !open;
-  button.textContent = open ? '⌃' : '⌄';
-  button.setAttribute('aria-expanded', String(open));
-});

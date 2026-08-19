@@ -27,6 +27,21 @@
   position: relative;
 }
 
+.fare-choice-item {
+  flex: 0 0 min(290px, 84vw);
+  scroll-snap-align: start;
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+}
+
+.fare-choice-item .fare-family-choice {
+  width: 100%;
+  min-height: 300px;
+}
+
+.fare-choice-item .fare-rule-details { padding: 5px 2px; font-size: 12px; }
+
 .fare-family-top {
   min-height: 28px;
 }
@@ -76,8 +91,20 @@
 
 .fare-family-price span { max-width: 120px; line-height: 1.25; }
 
+.bound-fare-picker { border-top: 1px solid #e2e8f1; }
+.bound-fare-picker > header { padding: 18px 24px 0; }
+.bound-fare-picker > header h2 { margin: 3px 0; color: #173661; }
+.bound-fare-picker > header p:last-child { margin: 0; color: #6d7d95; font-size: 12px; }
+.round-fare-choice > footer { align-items: center; }
+.fare-rule-modal { padding: 26px; position: relative; max-width: 680px; }
+.fare-rule-modal h2 { margin: 5px 0 10px; font-size: 20px; }
+.fare-rule-block { margin: 16px 0; border: 1px solid #e0e7f1; border-radius: 8px; overflow: hidden; }
+.fare-rule-block h3 { margin: 0; padding: 11px 13px; background: #f3f6fb; color: #1b385f; font-size: 13px; }
+.fare-rule-block div { display: flex; justify-content: space-between; gap: 18px; padding: 9px 13px; border-top: 1px solid #edf1f6; color: #63728a; font-size: 12px; }
+.fare-rule-block strong { color: #173762; white-space: nowrap; }
+
 @media (max-width: 620px) {
   .fare-carousel { padding: 14px 10px; gap: 6px; }
   .fare-scroll { flex-basis: 32px; width: 32px; height: 32px; font-size: 27px; }
-  .fare-family-choice { flex-basis: min(270px, calc(100vw - 95px)); }
+  .fare-family-choice, .fare-choice-item { flex-basis: min(270px, calc(100vw - 95px)); }
 }
