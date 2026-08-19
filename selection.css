@@ -16,6 +16,9 @@
 .selection-label { padding: 7px 12px; background: #f3f6fb; color: #70809a; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .selection-main { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(280px, 1.25fr) minmax(145px, .6fr) auto; gap: 22px; align-items: center; padding: 14px 16px; }
 .selection-main.without-price { grid-template-columns: minmax(180px, .9fr) minmax(280px, 1.25fr) minmax(145px, .6fr); }
+.selection-carrier { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.selection-airline-logo { display: grid; flex: 0 0 31px; width: 31px; height: 31px; place-items: center; overflow: hidden; border-radius: 50%; background: #f0f5ff; color: #245fd7; font-size: 17px; font-style: normal; }
+.selection-airline-logo img { width: 24px; max-height: 24px; object-fit: contain; }
 .selection-carrier strong,
 .selection-schedule strong { display: block; color: #142e57; font-size: 14px; line-height: 1.2; }
 .selection-carrier span,

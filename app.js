@@ -261,7 +261,7 @@ const flightCard = (flight, label, { showPrice = true, phase = null } = {}) => {
   const times = `Departure ${(flight.departure?.time || '').slice(-5)} · Arrival ${(flight.arrival?.time || '').slice(-5)}`;
   const duration = formatMinutes(flight.duration || 0);
   const stops = flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop';
-  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main ${showPrice ? '' : 'without-price'}"><div class="selection-carrier"><strong>${flight.airline}</strong><span>Flight <b>${flightNumber}</b></span></div><div class="selection-schedule"><strong>${route}</strong>${date ? `<span class="selection-date">${date}</span>` : ''}<span class="selection-times">${times}</span></div><div class="selection-duration"><b>${duration}</b><span>${stops}</span></div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
+  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main ${showPrice ? '' : 'without-price'}"><div class="selection-carrier"><i class="selection-airline-logo">${airlineLogo(flight.airline, flight.logo, `${flight.airline || 'Airline'} logo`)}</i><div><strong>${flight.airline}</strong><span>Flight <b>${flightNumber}</b></span></div></div><div class="selection-schedule"><strong>${route}</strong>${date ? `<span class="selection-date">${date}</span>` : ''}<span class="selection-times">${times}</span></div><div class="selection-duration"><b>${duration}</b><span>${stops}</span></div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
 };
 const fareSelectionDate = phase => {
   const value = fareDateForPhase(phase);
