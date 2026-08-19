@@ -94,6 +94,9 @@
 .fare-family-price > span { max-width: 120px; line-height: 1.25; }
 .fare-choice-screen > header { display: block; }
 .fare-selected-flights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; margin-top: 16px; }
+.fare-selection-card { margin-top: 0; background: #fff; }
+.fare-selection-route strong { display: block; color: #19355f; font-size: 12px; }
+.fare-selection-route span { display: block; margin-top: 4px; color: #68758c; font-size: 11px; }
 .fare-selected-flight { display: grid; grid-template-columns: 92px minmax(150px, 1fr) minmax(205px, 1.25fr) minmax(120px, .7fr); align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid #dce5f1; border-radius: 8px; background: #fafcff; }
 .fare-selected-label { align-self: start; padding: 4px 7px; border-radius: 4px; background: #2863e8; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .fare-selected-carrier { display: flex; min-width: 0; align-items: center; gap: 8px; }
@@ -167,4 +170,5 @@
   .fare-selected-flight { grid-template-columns: auto 1fr 1fr; }
   .fare-selected-route { grid-column: 2 / -1; }
   .fare-selected-duration { display: none; }
+  .fare-selection-card .selection-main { grid-template-columns: 1fr; gap: 8px; }
 }
