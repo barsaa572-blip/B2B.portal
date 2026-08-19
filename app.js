@@ -903,7 +903,13 @@ const createPortalBookingFromForm = async event => {
   submit.disabled = true; submit.textContent = 'Creating booking…';
   try {
     const response = await secureFetch('/api/bookings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ totalCny: totalCnyForSelection(), itinerary, passengers: { travellers, contact } }) });
-    const data = await response.json();
+    const rawResponse = await response.text();
+    let data;
+    try { data = rawResponse ? JSON.parse(rawResponse) : {}; }
+    catch {
+      const status = response.status ? ` (HTTP ${response.status})` : '';
+      throw new Error(`Booking service is temporarily unavailable${status}. No PNR or ticket was created. Please try again shortly.`);
+    }
     if (!response.ok) throw new Error(data.error || 'Booking could not be created.');
     const booking = portalBookingFromRow(data.booking);
     bookings.unshift(booking);
