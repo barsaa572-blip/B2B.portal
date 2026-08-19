@@ -476,7 +476,17 @@ const roundFeeSummary = (pair, type) => {
   if (outbound === null && inbound === null) return 'Check fare rules';
   const parts = [outbound, inbound].filter(value => value !== null);
   const total = parts.reduce((sum, value) => sum + value, 0);
-  return `${quoteMnt(total)} (${outbound === null ? '—' : quoteMnt(outbound)} + ${inbound === null ? '—' : quoteMnt(inbound)})`;
+  return quoteMnt(total);
+};
+const sharedBaggageSummary = pair => {
+  const outboundCabin = baggageAllowanceText(pair.outbound, 'cabin');
+  const inboundCabin = baggageAllowanceText(pair.inbound, 'cabin');
+  const outboundChecked = baggageAllowanceText(pair.outbound, 'checked');
+  const inboundChecked = baggageAllowanceText(pair.inbound, 'checked');
+  if (outboundCabin === inboundCabin && outboundChecked === inboundChecked) {
+    return `Carry-on: ${outboundCabin}<br>Checked baggage: ${outboundChecked}`;
+  }
+  return `Departure · Carry-on: ${outboundCabin} · Checked: ${outboundChecked}<br>Return · Carry-on: ${inboundCabin} · Checked: ${inboundChecked}`;
 };
 const fareRuleTable = (fare, flight, title, type) => {
   const rule = (fare?.rules || []).find(item => Number(item.type) === type);
@@ -501,7 +511,7 @@ const showSharedRoundFareDetails = (pair, initialTab = 'rules') => {
 };
 const sharedRoundFareCard = (pair, index, selected) => {
   const total = cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total);
-  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>One fare family for departure and return</small>${selected ? '<em class="fare-recommended">Lowest shared fare</em>' : ''}<hr><strong>Baggage</strong><p>Departure: Carry-on ${baggageAllowanceText(pair.outbound, 'cabin')} · Checked ${baggageAllowanceText(pair.outbound, 'checked')}<br>Return: Carry-on ${baggageAllowanceText(pair.inbound, 'cabin')} · Checked ${baggageAllowanceText(pair.inbound, 'checked')}</p><strong>Flexibility today</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-baggage-details" data-shared-fare-index="${index}">Baggage details</button><button type="button" class="text-btn shared-fare-rule-details" data-shared-fare-index="${index}">Fare rules</button></div></div>`;
+  return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>One fare family for departure and return</small>${selected ? '<em class="fare-recommended">Lowest shared fare</em>' : ''}<hr><strong>Baggage</strong><p>${sharedBaggageSummary(pair)}</p><strong>Flexibility</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p><div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(total) ? quoteMnt(total * activePassengerCounts.adults) : 'To be confirmed'}</b></div></button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-baggage-details" data-shared-fare-index="${index}">Baggage details</button><button type="button" class="text-btn shared-fare-rule-details" data-shared-fare-index="${index}">Fare rules</button></div></div>`;
 };
 const showRoundFareOptions = () => {
   const outboundOptions = selectedOutbound?.fareOptions?.length ? selectedOutbound.fareOptions : [selectedOutbound?.fare].filter(Boolean);

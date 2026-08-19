@@ -104,7 +104,8 @@
 .fare-rule-block h3 { margin: 0; padding: 11px 13px; background: #f3f6fb; color: #1b385f; font-size: 13px; }
 .fare-rule-block div { display: flex; justify-content: space-between; gap: 18px; padding: 9px 13px; border-top: 1px solid #edf1f6; color: #63728a; font-size: 12px; }
 .fare-rule-block strong { color: #173762; white-space: nowrap; }
-.round-fare-modal { width: min(920px, 92vw); max-width: 920px; max-height: 86vh; overflow: auto; }
+.round-fare-modal { width: min(1180px, calc(100vw - 36px)); max-width: 1180px; max-height: calc(100vh - 36px); overflow: auto; }
+.round-fare-modal::after { content: ''; display: block; height: 2px; }
 .fare-detail-tabs { display: flex; gap: 2px; border-bottom: 1px solid #dce4ef; margin: 20px -26px 20px; padding: 0 26px; }
 .fare-detail-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 13px; color: #536987; cursor: pointer; font-weight: 700; }
 .fare-detail-tabs button.active { color: #1c5ee8; border-bottom-color: #1c5ee8; }
