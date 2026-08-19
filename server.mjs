@@ -352,6 +352,10 @@ const SPRING_ORDER_REFERENCE_KEYS = new Set([
 
 const springOrderReference = (response, depth = 0) => {
   if (!response || depth > 7 || typeof response !== 'object') return null;
+  // The booking gateway can return a successful reference directly in `content`.
+  if (response.success === true && (typeof response.content === 'string' || typeof response.content === 'number') && String(response.content).trim()) {
+    return String(response.content).trim();
+  }
   for (const [key, value] of Object.entries(response)) {
     const normalizedKey = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
     if (SPRING_ORDER_REFERENCE_KEYS.has(normalizedKey) && (typeof value === 'string' || typeof value === 'number') && String(value).trim()) {
@@ -383,6 +387,14 @@ async function createLiveSpringBooking(profile, body) {
   const client = createSpringClient();
   const token = await client.getAccessToken();
   const result = await client.bookOrder(payload, token.accessToken);
+  if (result?.success === false || result?.flag === false) {
+    const code = typeof result.code === 'string' || typeof result.code === 'number' ? ` (${result.code})` : '';
+    const message = typeof result.message === 'string' && result.message.trim()
+      ? result.message.trim()
+      : 'Spring did not accept this booking request.';
+    console.warn(`Spring booking rejected${code}: ${message}`);
+    throw new Error(`Spring booking rejected${code}: ${message}`);
+  }
   const pnr = springOrderReference(result);
   if (!pnr) {
     console.warn('Spring booking response has no recognised order reference:', JSON.stringify(springResponseShape(result)));
