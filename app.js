@@ -256,8 +256,9 @@ const airlineLogo = (airline, suppliedLogo, alt = '') => { const logo = airlineL
 const timeText = flight => `${(flight.departure.time || '').slice(-5)} ${flight.departure.id || ''} → ${(flight.arrival.time || '').slice(-5)} ${flight.arrival.id || ''}`;
 const flightCard = (flight, label, { showPrice = true, phase = null } = {}) => {
   const date = phase ? fareSelectionDate(phase) : '';
-  const detail = [flight.number || 'Flight', date, timeText(flight)].filter(Boolean).join(' · ');
-  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main"><div><strong>${flight.airline}</strong><span>${detail}</span></div><div class="selection-duration">${formatMinutes(flight.duration || 0)} · ${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
+  const flightNumber = flight.number || '—';
+  const schedule = `${(flight.departure?.time || '').slice(-5)} ${flight.departure?.id || ''} → ${(flight.arrival?.time || '').slice(-5)} ${flight.arrival?.id || ''}`;
+  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main ${showPrice ? '' : 'without-price'}"><div class="selection-carrier"><strong>${flight.airline}</strong><span>Flight ${flightNumber}</span></div><div class="selection-schedule"><strong>${schedule}</strong>${date ? `<span>${date}</span>` : ''}</div><div class="selection-duration">${formatMinutes(flight.duration || 0)} · ${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
 };
 const fareSelectionDate = phase => {
   const value = fareDateForPhase(phase);
