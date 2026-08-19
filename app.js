@@ -257,8 +257,11 @@ const timeText = flight => `${(flight.departure.time || '').slice(-5)} ${flight.
 const flightCard = (flight, label, { showPrice = true, phase = null } = {}) => {
   const date = phase ? fareSelectionDate(phase) : '';
   const flightNumber = flight.number || '—';
-  const schedule = `${(flight.departure?.time || '').slice(-5)} ${flight.departure?.id || ''} → ${(flight.arrival?.time || '').slice(-5)} ${flight.arrival?.id || ''}`;
-  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main ${showPrice ? '' : 'without-price'}"><div class="selection-carrier"><strong>${flight.airline}</strong><span>Flight ${flightNumber}</span></div><div class="selection-schedule"><strong>${schedule}</strong>${date ? `<span>${date}</span>` : ''}</div><div class="selection-duration">${formatMinutes(flight.duration || 0)} · ${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
+  const route = `${flight.departure?.id || ''} → ${flight.arrival?.id || ''}`;
+  const times = `Departure ${(flight.departure?.time || '').slice(-5)} · Arrival ${(flight.arrival?.time || '').slice(-5)}`;
+  const duration = formatMinutes(flight.duration || 0);
+  const stops = flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop';
+  return `<article class="selection-card"><div class="selection-label">${label}</div><div class="selection-main ${showPrice ? '' : 'without-price'}"><div class="selection-carrier"><strong>${flight.airline}</strong><span>Flight <b>${flightNumber}</b></span></div><div class="selection-schedule"><strong>${route}</strong>${date ? `<span class="selection-date">${date}</span>` : ''}<span class="selection-times">${times}</span></div><div class="selection-duration"><b>${duration}</b><span>${stops}</span></div>${showPrice ? `<b>${priceText(flight.price)}</b>` : ''}</div></article>`;
 };
 const fareSelectionDate = phase => {
   const value = fareDateForPhase(phase);
@@ -267,7 +270,7 @@ const fareSelectionDate = phase => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 };
 const fareSelectionFlight = (flight, label, phase) => flightCard(flight, label, { showPrice: false, phase });
-const selectedOutboundPanel = () => selectedOutbound ? `<section class="selected-itinerary"><div class="selected-title"><span>✓</span><div><h2>Outbound flight selected</h2><p>Select your return flight below.</p></div></div>${flightCard(selectedOutbound, 'OUTBOUND', { phase: 'outbound' })}</section>` : '';
+const selectedOutboundPanel = () => selectedOutbound ? `<section class="selected-itinerary"><div class="selected-title"><span>✓</span><div><h2>Outbound flight selected</h2><p>Select your return flight below.</p></div></div>${flightCard(selectedOutbound, 'OUTBOUND', { showPrice: false, phase: 'outbound' })}</section>` : '';
 const totalPrice = () => {
   const numbers = [selectedOutbound, selectedReturn].map(f => cnyAmount(f?.price)).filter(Number.isFinite);
   if (!numbers.length) return 'Price unavailable';
