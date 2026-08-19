@@ -13,8 +13,20 @@ const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 const send = (res, status, data, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' }); res.end(Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data)); };
-const readJson = req => new Promise((resolve, reject) => { let raw = ''; req.on('data', chunk => { raw += chunk;
-if (raw.length > 20_000) req.destroy(); }); req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('Invalid JSON request.')); } }); req.on('error', reject); });
+const readJson = req => new Promise((resolve, reject) => {
+  let raw = ''; let tooLarge = false;
+  req.on('data', chunk => {
+    if (tooLarge) return;
+    raw += chunk;
+    if (raw.length > 100_000) { tooLarge = true; raw = ''; }
+  });
+  req.on('end', () => {
+    if (tooLarge) return reject(new Error('Request is too large.'));
+    try { resolve(raw ? JSON.parse(raw) : {}); }
+    catch { reject(new Error('Invalid JSON request.')); }
+  });
+  req.on('error', reject);
+});
 const bearer = req => req.headers.authorization?.replace(/^Bearer\s+/i, '');
 const requiredText = (value, label) => { const text = String(value || '').trim();
 if (!text && label === 'Payment reference') return 'Not provided';

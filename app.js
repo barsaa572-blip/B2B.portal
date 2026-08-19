@@ -895,8 +895,35 @@ const createPortalBookingFromForm = async event => {
     toast(invalidPassenger.error.message);
     return;
   }
+  const bookingFlightSnapshot = flight => {
+    const fare = flight?.fare || {};
+    const spring = flight?.spring || {};
+    return {
+      airline: flight?.airline,
+      airlineCode: flight?.airlineCode,
+      airlineLogo: flight?.airlineLogo,
+      number: flight?.number,
+      duration: flight?.duration,
+      stops: flight?.stops || 0,
+      departure: { id: flight?.departure?.id, name: flight?.departure?.name, time: flight?.departure?.time, terminal: flight?.departure?.terminal || null },
+      arrival: { id: flight?.arrival?.id, name: flight?.arrival?.name, time: flight?.arrival?.time, terminal: flight?.arrival?.terminal || null },
+      fare: {
+        id: fare.id,
+        fareType: fare.fareType,
+        bookingClass: fare.bookingClass,
+        cabin: fare.cabin,
+        baseFare: fare.baseFare,
+        taxes: fare.taxes,
+        total: fare.total,
+        baggage: fare.baggage,
+        rules: fare.rules,
+        spring: { segHeadId: fare.spring?.segHeadId, combId: fare.spring?.combId, combType: fare.spring?.combType, combPrice: fare.spring?.combPrice, adultCabin: fare.spring?.adultCabin, moneyClassId: fare.spring?.moneyClassId }
+      },
+      spring: { segHeadId: spring.segHeadId, combId: spring.combId, combType: spring.combType, combPrice: spring.combPrice, adultCabin: spring.adultCabin, moneyClassId: spring.moneyClassId }
+    };
+  };
   const route = `${selectedOutbound?.departure?.id || ''} → ${selectedOutbound?.arrival?.id || ''}`;
-  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, flights: [selectedOutbound, selectedReturn].filter(Boolean) };
+  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, flights: [selectedOutbound, selectedReturn].filter(Boolean).map(bookingFlightSnapshot) };
   const phoneCountryCode = event.currentTarget.querySelector('[name="contact-country-code"]')?.value.trim() || '';
   const phoneNumber = event.currentTarget.querySelector('[name="contact-phone"]')?.value.trim() || '';
   const contact = { name: event.currentTarget.querySelector('[name="contact-name"]')?.value.trim(), phone: `${phoneCountryCode} ${phoneNumber}`.trim(), email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim() };
