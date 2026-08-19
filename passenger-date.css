@@ -2,7 +2,7 @@
 
 .split-date-control {
   display: grid;
-  grid-template-columns: 48px minmax(74px, 1fr) 62px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   min-height: 39px;
   overflow: hidden;
@@ -36,7 +36,3 @@
 .passenger-fields .split-date-control input::placeholder { color: #91a0b5; font-weight: 500; }
 .split-date-control:focus-within { border-color: #245de0; box-shadow: 0 0 0 2px #245de018; }
 .split-date-control.field-error { border: 2px solid #dc3545; background: #fff4f5; }
-
-@media (max-width: 540px) {
-  .split-date-control { grid-template-columns: 54px minmax(96px, 1fr) 72px; }
-}
