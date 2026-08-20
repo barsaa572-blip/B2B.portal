@@ -98,6 +98,36 @@ const bookingFlightDetailsClean = booking => {
   const returnFlight = booking.oneWay ? '' : flightRow('RETURN', `${to} &rarr; ${from}`, '9C 7057', '08:10 &rarr; 12:00', states.return === 'flown' ? 'Thu, 06 Aug 2026' : 'Thu, 27 Aug 2026', states.return);
   return `${outbound}${returnFlight}`;
 };
+const bookingFareBreakdown = booking => {
+  const flights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
+  const total = cnyAmount(booking.total);
+  const base = flights.reduce((sum, flight) => sum + cnyAmount(flight?.fare?.baseFare), 0);
+  const taxes = flights.reduce((sum, flight) => sum + cnyAmount(flight?.fare?.taxes), 0);
+  const known = base + taxes;
+  // A booking total can include a live passenger mix. Preserve the exact
+  // booked total, allocating the display breakdown in Spring's fare/tax ratio.
+  const fareAmount = known > 0 ? total * (base / known) : total;
+  const taxAmount = Math.max(0, total - fareAmount);
+  const types = (booking.documents || []).map(item => item.type || 'ADT');
+  const typeSummary = ['ADT', 'CHD', 'INF'].map(type => {
+    const count = types.filter(item => item === type).length;
+    return count ? `${count} ${type}` : '';
+  }).filter(Boolean).join(' · ');
+  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3><div><span>Fare</span><b>${quoteMnt(fareAmount)}</b></div><div><span>Taxes &amp; fees</span><b>${quoteMnt(taxAmount)}</b></div><div class="booking-fare-total"><span>Total${typeSummary ? ` · ${typeSummary}` : ''}</span><strong>${quoteMnt(total)}</strong></div></section>`;
+};
+const downloadBookingDocument = async (pnr, type) => {
+  const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${type}.pdf`);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `Unable to generate ${type}.`);
+  }
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href; link.download = `${pnr}-${type}.pdf`;
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1_000);
+};
 const openBookingDetail = ref => {
   const booking = bookings.find(item => item.ref === ref);
   if (!booking) return;
@@ -115,13 +145,16 @@ const openBookingDetail = ref => {
   const ticketingExpired = booking.createdAt && Date.now() >= new Date(booking.createdAt).getTime() + 30 * 60 * 1000;
   const reservedActions = `<button type="button" class="secondary cancel-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' || ticketingExpired ? 'disabled' : ''} ${ticketingExpired ? 'title="Ticketing deadline expired"' : ''}>Issue ticket</button>`;
   const ticketedActions = `<button type="button" class="secondary cancel-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button>`;
+  const documentActions = booking.status === 'Ticketed' ? `<div class="booking-document-actions"><button type="button" class="secondary download-ticket">Print ticket (PDF)</button><button type="button" class="secondary download-receipt">Receipt (PDF)</button></div>` : '';
   const springConfirmed = booking.itinerary?.springOrder?.lastSyncedAt ? '<span class="tag ticketed">Spring confirmed</span>' : '';
-  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span>${springConfirmed}<span>Created ${booking.issued}</span></div>${bookingTicketingDeadline(booking)}<section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span>${booking.status === 'Reserved' ? '<small class="passenger-lock-note">Passenger details are locked after the Spring PNR is created. Editing can be enabled only after Spring supplies its supported passenger/order modification API.</small>' : ''}</section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section><div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">The reservation was created in Spring. Ticket issue remains a portal test action until the payment/issue API is connected.</p>' : booking.status === 'Ticketed' ? '<p class="booking-disclaimer">Cancellation quotes are calculated by Spring Airlines. Change and final refund submission will be connected after Spring order-detail IDs are synchronised.</p>' : ''}</section>`;
+  modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span>${springConfirmed}<span>Created ${booking.issued}</span></div>${bookingTicketingDeadline(booking)}<section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}<span class="passenger-summary">${passengerDescription}</span>${booking.status === 'Reserved' ? '<small class="passenger-lock-note">Passenger details are locked after the Spring PNR is created. Editing can be enabled only after Spring supplies its supported passenger/order modification API.</small>' : ''}</section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section><section class="booking-detail-card booking-fare"><span>Total fare</span><strong>${quoteMnt(booking.total)}</strong><small>Fare and taxes included</small></section>${bookingFareBreakdown(booking)}${documentActions}<div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div>${booking.status === 'Reserved' ? '<p class="booking-disclaimer">The reservation was created in Spring. Ticket issue remains a portal test action until the payment/issue API is connected.</p>' : booking.status === 'Ticketed' ? '<p class="booking-disclaimer">Cancellation quotes are calculated by Spring Airlines. Change and final refund submission will be connected after Spring order-detail IDs are synchronised.</p>' : ''}</section>`;
   modal.querySelector('.booking-close').addEventListener('click', () => { clearInterval(bookingDeadlineTimer); modal.close(); });
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
   modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Booking ${booking.ref} marked as ticketed for testing.`); } catch (error) { event.currentTarget.disabled = false; toast(error.message); } });
   modal.querySelector('.cancel-ticket-flow')?.addEventListener('click', () => showCancelFlow(modal, booking));
   modal.querySelector('.change-ticket-flow')?.addEventListener('click', () => showChangeFlow(modal, booking));
+  modal.querySelector('.download-ticket')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'ticket'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
+  modal.querySelector('.download-receipt')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'receipt'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
   modal.showModal();
   startBookingDeadlineTimer(modal);
   // Warm Spring's one-day-at-a-time change availability while the agent is
