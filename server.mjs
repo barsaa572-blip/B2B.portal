@@ -484,6 +484,63 @@ async function calculateLiveSpringRefund(profile, pnr) {
   };
 }
 
+// `orderRetrieve` is an OTA order document and Spring may nest segment data
+// differently by product type.  Read the common date/time fields recursively
+// so an older portal booking can still display the real Spring travel date
+// after it is synchronised.
+const springDateOnly = value => {
+  if (value === null || value === undefined || value === '') return '';
+  const text = String(value).trim();
+  const matched = text.match(/(20\d{2})[-\/]?(\d{2})[-\/]?(\d{2})/);
+  if (matched) return `${matched[1]}-${matched[2]}-${matched[3]}`;
+  if (/^\d{12,13}$/.test(text)) {
+    const date = new Date(Number(text));
+    if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+  }
+  return '';
+};
+
+const springClock = value => {
+  if (value === null || value === undefined || value === '') return '';
+  const text = String(value).trim();
+  const matched = text.match(/(?:T|\s)(\d{2}:\d{2})(?::\d{2})?/);
+  if (matched) return matched[1];
+  return /^\d{2}:\d{2}$/.test(text) ? text : '';
+};
+
+const collectSpringSegmentFields = value => {
+  const fields = [];
+  const visit = (node, path = '') => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach((item, index) => visit(item, `${path}[${index}]`));
+    Object.entries(node).forEach(([key, item]) => {
+      const nextPath = `${path}.${key}`.toLowerCase();
+      if (item && typeof item === 'object') visit(item, nextPath);
+      else fields.push({ key: nextPath, value: item });
+    });
+  };
+  visit(value);
+  return fields;
+};
+
+const firstSpringField = (fields, pattern) => fields.find(field => pattern.test(field.key))?.value;
+
+const springItemSchedule = item => {
+  const fields = collectSpringSegmentFields(item);
+  const departureDateValue = firstSpringField(fields, /(?:ori|departure|depart|start).*(?:time|date)|(?:time|date).*(?:ori|departure|depart|start)/);
+  const arrivalDateValue = firstSpringField(fields, /(?:dest|arrival|arrive|end).*(?:time|date)|(?:time|date).*(?:dest|arrival|arrive|end)/);
+  const departureCode = firstSpringField(fields, /(?:ori|departure|depart).*(?:airport|city)?code$/);
+  const arrivalCode = firstSpringField(fields, /(?:dest|arrival|arrive).*(?:airport|city)?code$/);
+  const travelDate = springDateOnly(departureDateValue);
+  return travelDate ? {
+    travelDate,
+    departureTime: springClock(departureDateValue),
+    arrivalTime: springClock(arrivalDateValue),
+    departureCode: departureCode ? portalAirportCode(departureCode) : '',
+    arrivalCode: arrivalCode ? portalAirportCode(arrivalCode) : ''
+  } : null;
+};
+
 const springOrderSummary = result => {
   const order = Array.isArray(result?.response?.order) ? result.response.order[0] : null;
   if (!order) throw new Error('Spring order query returned no order data.');
@@ -499,11 +556,13 @@ const springOrderSummary = result => {
     }
   };
   collectTickets(result?.response?.ticketDocInfo);
+  const schedules = orderItems.map(springItemSchedule).filter(Boolean);
   return {
     status,
     ticketed: status === 'PAID' && orderItems.length > 0 && orderItems.every(item => String(item.statusCode || '').toUpperCase() === 'SOLDTICKET'),
     orderItemIds: orderItems.map(item => String(item.orderItemID || '')).filter(Boolean),
-    ticketNumbers: [...new Set(ticketNumbers)]
+    ticketNumbers: [...new Set(ticketNumbers)],
+    schedules
   };
 };
 

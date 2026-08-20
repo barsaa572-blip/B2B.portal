@@ -255,8 +255,31 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
   if (!booking) throw new Error('Booking not found.');
   const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
   if (!allowed) throw new Error('You do not have access to this booking.');
+  const existingFlights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
+  const schedules = Array.isArray(springOrder.schedules) ? springOrder.schedules : [];
+  const flights = existingFlights.map((flight, index) => {
+    const schedule = schedules[index];
+    if (!schedule) return flight;
+    return {
+      ...flight,
+      travelDate: schedule.travelDate || flight.travelDate,
+      departure: {
+        ...(flight.departure || {}),
+        id: schedule.departureCode || flight.departure?.id,
+        time: schedule.departureTime || flight.departure?.time
+      },
+      arrival: {
+        ...(flight.arrival || {}),
+        id: schedule.arrivalCode || flight.arrival?.id,
+        time: schedule.arrivalTime || flight.arrival?.time
+      }
+    };
+  });
   const itinerary = {
     ...(booking.itinerary || {}),
+    ...(schedules[0]?.travelDate ? { departureDate: schedules[0].travelDate } : {}),
+    ...(schedules[1]?.travelDate ? { returnDate: schedules[1].travelDate } : {}),
+    ...(flights.length ? { flights } : {}),
     springOrder: {
       ...(booking.itinerary?.springOrder || {}),
       pnr,
