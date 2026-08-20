@@ -260,7 +260,15 @@ const showChangeFlow = (modal, booking) => {
     const renderMonth = async () => {
       const first = new Date(shownDate.getFullYear(), shownDate.getMonth(), 1); const start = (first.getDay() + 6) % 7; const totalDays = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
       calendar.querySelector('.availability-head strong').textContent = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-      calendar.querySelector('.availability-days').innerHTML = '<span class="availability-blank"></span>'.repeat(start) + '<span class="availability-blank"></span>'.repeat(totalDays);
+      // Spring calculates availability one date at a time. Show the full
+      // calendar immediately so the user never sees an empty panel while the
+      // live requests are still running.
+      const initialBlanks = '<span class="availability-blank"></span>'.repeat(start);
+      const initialDays = Array.from({ length: totalDays }, (_, index) => {
+        const day = index + 1;
+        return `<button type="button" class="availability-day loading" disabled><strong>${day}</strong><span>Loading…</span></button>`;
+      }).join('');
+      calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${initialDays}`;
       try {
         const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}`);
         const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
@@ -269,7 +277,12 @@ const showChangeFlow = (modal, booking) => {
         const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); const difference = Number(item?.fareDifferenceCny || 0); return `<button type="button" class="availability-day ${available ? '' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? (difference > 0 ? `+ ${yen(difference)}` : 'Available') : '–'}</span></button>`; }).join('');
         calendar.querySelector('.availability-days').innerHTML = `${blanks}${buttons}`;
         calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', () => { const item = byDate.get(button.dataset.date); section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected')); button.classList.add('selected'); trigger.textContent = `${button.dataset.date} · ${Number(item.fareDifferenceCny || 0) > 0 ? `+ ${yen(item.fareDifferenceCny)}` : 'available'}`; calendar.hidden = true; renderDailyFlights(button.dataset.date, item.flights || []); }));
-      } catch (error) { calendar.querySelector('.availability-days').innerHTML = `<p class="selection-hint">${error.message}</p>`; }
+      } catch (error) {
+        // Keep the month grid visible even if Spring is temporarily slow or
+        // unavailable; replace each loading cell with the real explanation.
+        calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${Array.from({ length: totalDays }, (_, index) => `<button type="button" class="availability-day unavailable" disabled><strong>${index + 1}</strong><span>–</span></button>`).join('')}`;
+        choices.innerHTML = `<p class="selection-hint">${error.message}</p>`;
+      }
     };
     trigger.addEventListener('click', async () => { calendar.hidden = !calendar.hidden; if (!calendar.hidden) await renderMonth(); });
     calendar.querySelector('.availability-prev').addEventListener('click', async () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); await renderMonth(); } });

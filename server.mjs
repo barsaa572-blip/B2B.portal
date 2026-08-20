@@ -639,7 +639,9 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(4, dates.length) }, worker));
+  // Spring handles the calls independently. Eight workers keep a full month
+  // responsive without sending all 28–31 requests at once.
+  await Promise.all(Array.from({ length: Math.min(8, dates.length) }, worker));
   const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, items };
   changeCalendarCache.set(key, { createdAt: Date.now(), value });
   return value;
