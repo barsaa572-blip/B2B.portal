@@ -73,6 +73,11 @@ const bookingFlightDetails = booking => {
   const [from, to] = booking.route.split('â†’').map(value => value.trim());
   return `<div class="booking-flight-detail"><div><span>OUTBOUND</span><strong>${from || 'ULN'} â†’ ${to || 'PVG'}</strong><small>Spring Airlines Â· 9C 7058 Â· Economy</small></div><b>13:00 â†’ 17:00</b></div><div class="booking-flight-detail"><div><span>RETURN</span><strong>${to || 'PVG'} â†’ ${from || 'ULN'}</strong><small>Spring Airlines Â· 9C 7057 Â· Economy</small></div><b>08:10 â†’ 12:00</b></div>`;
 };
+const displayFlightDate = value => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return '';
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+};
 const bookingFlightDetailsClean = booking => {
   const storedFlights = booking.itinerary?.flights;
   if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
@@ -82,8 +87,9 @@ const bookingFlightDetailsClean = booking => {
     const label = storedFlights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'OUTBOUND';
     const route = `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`;
     const times = `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`;
+    const travelDate = displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate));
     const stateText = state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
-    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small>${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'} &middot; ${flight.fare?.cabin || 'Economy'}</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state}">${stateText}</em></div></div>`;
+    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small>${travelDate ? `${travelDate} &middot; ` : ''}${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'} &middot; ${flight.fare?.cabin || 'Economy'}</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state}">${stateText}</em></div></div>`;
   }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: 'active', return: 'active' };
@@ -138,7 +144,7 @@ const bookingLegs = booking => {
   if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
     const key = index ? 'return' : 'outbound'; const passengers = booking.passengers || [booking.passenger];
     const noShowPassengers = (noShow[key] || []).map(Number).filter(Number.isInteger);
-    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, flown: flight.status === 'flown', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
+    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate)), flown: flight.status === 'flown', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
   });
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
@@ -147,7 +153,7 @@ const bookingLegs = booking => {
   return legs;
 };
 const passengerHasNoShow = (booking, index) => Object.values(booking.itinerary?.noShow || {}).some(list => (list || []).map(Number).includes(index));
-const flightChoice = (leg, mode, checked = false) => { const locked = leg.flown || leg.allNoShow; return `<label class="flight-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : leg.allNoShow ? 'NO-SHOW' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : leg.allNoShow ? 'No-show' : 'Select'}</i></label>`; };
+const flightChoice = (leg, mode, checked = false) => { const locked = leg.flown || leg.allNoShow; return `<label class="flight-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : leg.allNoShow ? 'NO-SHOW' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.date ? `${leg.date} &middot; ` : ''}${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : leg.allNoShow ? 'No-show' : 'Select'}</i></label>`; };
 const passengerChoices = (booking, mode, { checked = true, disableNoShow = true } = {}) => (booking.passengers || [booking.passenger]).map((passenger, index) => { const noShow = passengerHasNoShow(booking, index); const locked = disableNoShow && noShow; return `<label class="passenger-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-passenger" value="${index}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span><strong>${index + 1}. ${passenger}</strong><small>${locked ? 'No-show recorded' : 'Adult passenger'}</small></span></label>`; }).join('');
 const yen = value => quoteMnt(value);
 const showCancelSelection = (modal, booking) => {
@@ -990,7 +996,7 @@ const createPortalBookingFromForm = async event => {
     toast(invalidPassenger.error.message);
     return;
   }
-  const bookingFlightSnapshot = flight => {
+  const bookingFlightSnapshot = (flight, travelDate) => {
     const fare = flight?.fare || {};
     const spring = flight?.spring || {};
     return {
@@ -999,6 +1005,7 @@ const createPortalBookingFromForm = async event => {
       airlineLogo: flight?.airlineLogo,
       number: flight?.number,
       duration: flight?.duration,
+      travelDate,
       stops: flight?.stops || 0,
       departure: { id: flight?.departure?.id, name: flight?.departure?.name, time: flight?.departure?.time, terminal: flight?.departure?.terminal || null },
       arrival: { id: flight?.arrival?.id, name: flight?.arrival?.name, time: flight?.arrival?.time, terminal: flight?.arrival?.terminal || null },
@@ -1018,7 +1025,7 @@ const createPortalBookingFromForm = async event => {
     };
   };
   const route = `${selectedOutbound?.departure?.id || ''} → ${selectedOutbound?.arrival?.id || ''}`;
-  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, flights: [selectedOutbound, selectedReturn].filter(Boolean).map(bookingFlightSnapshot) };
+  const itinerary = { route, trip: selectedReturn ? 'round' : 'oneway', departureDate, returnDate, flights: [selectedOutbound, selectedReturn].filter(Boolean).map((flight, index) => bookingFlightSnapshot(flight, index ? returnDate : departureDate)) };
   const phoneCountryCode = event.currentTarget.querySelector('[name="contact-country-code"]')?.value.trim() || '';
   const phoneNumber = event.currentTarget.querySelector('[name="contact-phone"]')?.value.trim() || '';
   const contact = {
