@@ -249,6 +249,7 @@ const showChangeFlow = (modal, booking) => {
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
     const today = new Date(); today.setHours(0, 0, 0, 0); const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1); let shownDate = new Date(currentMonth);
+    let loadingMonth = ''; let loadedMonth = '';
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {
       const option = (flight, checked) => { const difference = Number(flight.fareDifferenceCny || 0); const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}|${difference}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${difference > 0 ? `+ ${yen(difference)}` : 'No fare difference'}</b></label>`; };
@@ -258,6 +259,11 @@ const showChangeFlow = (modal, booking) => {
       setChoice(choices.querySelector('input:checked'));
     };
     const renderMonth = async () => {
+      const requestedMonth = monthKey();
+      // The calendar is prefetched while hidden. Do not start the same 28–31
+      // Spring requests again when the user opens it during that prefetch.
+      if (loadingMonth === requestedMonth || loadedMonth === requestedMonth) return;
+      loadingMonth = requestedMonth;
       const first = new Date(shownDate.getFullYear(), shownDate.getMonth(), 1); const start = (first.getDay() + 6) % 7; const totalDays = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
       calendar.querySelector('.availability-head strong').textContent = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
       // Spring calculates availability one date at a time. Show the full
@@ -272,21 +278,27 @@ const showChangeFlow = (modal, booking) => {
       try {
         const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}`);
         const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
+        if (requestedMonth !== monthKey()) return;
         const byDate = new Map((data.items || []).map(item => [item.date, item]));
         const blanks = '<span class="availability-blank"></span>'.repeat(start);
         const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); const difference = Number(item?.fareDifferenceCny || 0); return `<button type="button" class="availability-day ${available ? '' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? (difference > 0 ? `+ ${yen(difference)}` : 'Available') : '–'}</span></button>`; }).join('');
         calendar.querySelector('.availability-days').innerHTML = `${blanks}${buttons}`;
+        loadedMonth = requestedMonth;
         calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', () => { const item = byDate.get(button.dataset.date); section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected')); button.classList.add('selected'); trigger.textContent = `${button.dataset.date} · ${Number(item.fareDifferenceCny || 0) > 0 ? `+ ${yen(item.fareDifferenceCny)}` : 'available'}`; calendar.hidden = true; renderDailyFlights(button.dataset.date, item.flights || []); }));
       } catch (error) {
         // Keep the month grid visible even if Spring is temporarily slow or
         // unavailable; replace each loading cell with the real explanation.
         calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${Array.from({ length: totalDays }, (_, index) => `<button type="button" class="availability-day unavailable" disabled><strong>${index + 1}</strong><span>–</span></button>`).join('')}`;
         choices.innerHTML = `<p class="selection-hint">${error.message}</p>`;
-      }
+      } finally { if (loadingMonth === requestedMonth) loadingMonth = ''; }
     };
     trigger.addEventListener('click', async () => { calendar.hidden = !calendar.hidden; if (!calendar.hidden) await renderMonth(); });
     calendar.querySelector('.availability-prev').addEventListener('click', async () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); await renderMonth(); } });
     calendar.querySelector('.availability-next').addEventListener('click', async () => { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() + 1, 1); await renderMonth(); });
+    // Start the live lookup as soon as the Change dialog opens. Usually the
+    // response will already be cached by the time the agent opens the
+    // calendar, avoiding a visible wait after pressing "Choose a new date".
+    renderMonth();
   });
   const renderReplacements = () => { const selected = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked); modal.querySelector('.replacement-list').innerHTML = selected.map(replacements).join('') || '<p class="selection-hint">Select an active flight first.</p>'; bindAvailabilityCalendars(); };
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the itinerary and passenger(s), then select a new date and flight.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change-flow')}</section></section><section class="replacement-list"></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change-flow">Calculate change</button></div></section>`;
