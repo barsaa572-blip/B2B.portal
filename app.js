@@ -1053,6 +1053,7 @@ const createPortalBookingFromForm = async event => {
     return { type: ({ Adult: 'ADT', Child: 'CHD', Infant: 'INF' })[card.dataset.passengerType] || 'ADT', lastName: get('last-name'), firstName: get('first-name'), dateOfBirth: get('date-of-birth'), documentType: get('document-type'), documentNumber: get('document-number'), nationality: get('nationality'), issuingCountry: get('issuing-country'), documentExpiry: get('document-expiry'), gender: get('gender') };
   });
   const departureDate = document.querySelector('#outbound-date')?.value;
+  const returnDate = document.querySelector('#return-date')?.value || '';
   const travelDate = dateOnly(departureDate);
   if (!travelDate) { toast('A valid departure date is required.'); return; }
   const invalidPassenger = travellers.map((traveller, index) => ({ index, error: passengerValidationError(traveller, travelDate) })).find(item => item.error);
