@@ -269,24 +269,28 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
   if (!allowed) throw new Error('You do not have access to this booking.');
   const existingFlights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
   const schedules = Array.isArray(springOrder.schedules) ? springOrder.schedules : [];
+  const itemDetails = Array.isArray(springOrder.itemDetails) ? springOrder.itemDetails : [];
   const flights = existingFlights.map((flight, index) => {
     // A Spring order may return order items in a different order.  Prefer the
     // flight number match; retain positional matching only as a fallback.
     const flightNumber = String(flight.flightNumber || flight.number || '').trim().toUpperCase();
     const schedule = schedules.find(candidate => flightNumber && candidate.flightNumber === flightNumber) || schedules[index];
-    if (!schedule) return flight;
+    const item = itemDetails.find(candidate => flightNumber && candidate.flightNumber === flightNumber)
+      || itemDetails[index];
+    if (!schedule && !item) return flight;
     return {
       ...flight,
-      travelDate: schedule.travelDate || flight.travelDate,
+      ...(item?.segmentStatus ? { status: item.segmentStatus, springStatusCode: item.statusCode || null } : {}),
+      travelDate: schedule?.travelDate || flight.travelDate,
       departure: {
         ...(flight.departure || {}),
-        id: schedule.departureCode || flight.departure?.id,
-        time: schedule.departureTime || flight.departure?.time
+        id: schedule?.departureCode || flight.departure?.id,
+        time: schedule?.departureTime || flight.departure?.time
       },
       arrival: {
         ...(flight.arrival || {}),
-        id: schedule.arrivalCode || flight.arrival?.id,
-        time: schedule.arrivalTime || flight.arrival?.time
+        id: schedule?.arrivalCode || flight.arrival?.id,
+        time: schedule?.arrivalTime || flight.arrival?.time
       }
     };
   });

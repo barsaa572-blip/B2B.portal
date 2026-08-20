@@ -640,13 +640,31 @@ const springOrderSummary = result => {
     }
   };
   collectTickets(result?.response?.ticketDocInfo);
-  const schedules = orderItems.map(springItemSchedule).filter(Boolean);
+  const itemDetails = orderItems.map((item, index) => {
+    const statusCode = String(item.statusCode || item.status || '').trim().toUpperCase();
+    const schedule = springItemSchedule(item);
+    // Spring's order-retrieve service is the authority for whether a segment
+    // has been used. Keep its raw code too: the precise codes vary by product.
+    const segmentStatus = /NO[ _-]?SHOW/.test(statusCode) ? 'no-show'
+      : /FLOWN|USED|BOARDED/.test(statusCode) ? 'flown'
+        : /CANCEL|REFUND|VOID/.test(statusCode) ? 'cancelled'
+          : statusCode === 'SOLDTICKET' ? 'ticketed' : 'reserved';
+    return {
+      index,
+      orderItemId: String(item.orderItemID || item.orderItemId || ''),
+      statusCode,
+      segmentStatus,
+      ...(schedule || {})
+    };
+  });
+  const schedules = itemDetails.filter(item => item.travelDate);
   return {
     status,
     ticketed: status === 'PAID' && orderItems.length > 0 && orderItems.every(item => String(item.statusCode || '').toUpperCase() === 'SOLDTICKET'),
     orderItemIds: orderItems.map(item => String(item.orderItemID || '')).filter(Boolean),
     ticketNumbers: [...new Set(ticketNumbers)],
-    schedules
+    schedules,
+    itemDetails
   };
 };
 

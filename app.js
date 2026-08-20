@@ -160,7 +160,21 @@ const openBookingDetail = ref => {
   modal.querySelector('.booking-close').addEventListener('click', () => { clearInterval(bookingDeadlineTimer); modal.close(); });
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
   modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Booking ${booking.ref} marked as ticketed for testing.`); } catch (error) { event.currentTarget.disabled = false; toast(error.message); } });
-  modal.querySelector('.cancel-ticket-flow')?.addEventListener('click', () => showCancelFlow(modal, booking));
+  modal.querySelector('.cancel-ticket-flow')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Checking Spring status…';
+    try {
+      const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/sync`, { method: 'POST' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Spring status could not be checked.');
+      showCancelFlow(modal, payload.booking || booking);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Cancel ticket';
+      toast(error.message || 'Spring status could not be checked.');
+    }
+  });
   modal.querySelector('.change-ticket-flow')?.addEventListener('click', () => showChangeFlow(modal, booking));
   modal.querySelector('.download-ticket')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'ticket'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
   modal.querySelector('.download-receipt')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'receipt'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
@@ -194,8 +208,10 @@ const bookingLegs = booking => {
   const noShow = booking.itinerary?.noShow || {};
   if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
     const key = index ? 'return' : 'outbound'; const passengers = booking.passengers || [booking.passenger];
-    const noShowPassengers = (noShow[key] || []).map(Number).filter(Number.isInteger);
-    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate)), flown: flight.status === 'flown', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
+    const springState = String(flight.status || '').toLowerCase();
+    const springNoShow = springState === 'no-show' || springState === 'noshow';
+    const noShowPassengers = springNoShow ? passengers.map((_, passengerIndex) => passengerIndex) : (noShow[key] || []).map(Number).filter(Number.isInteger);
+    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate)), flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
   });
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
@@ -204,7 +220,7 @@ const bookingLegs = booking => {
   return legs;
 };
 const passengerHasNoShow = (booking, index) => Object.values(booking.itinerary?.noShow || {}).some(list => (list || []).map(Number).includes(index));
-const flightChoice = (leg, mode, checked = false) => { const locked = leg.flown || leg.allNoShow; return `<label class="flight-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : leg.allNoShow ? 'NO-SHOW' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.date ? `${leg.date} &middot; ` : ''}${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : leg.allNoShow ? 'No-show' : 'Select'}</i></label>`; };
+const flightChoice = (leg, mode, checked = false) => { const locked = leg.flown || leg.allNoShow || leg.cancelled; return `<label class="flight-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : leg.allNoShow ? 'NO-SHOW' : leg.cancelled ? 'CANCELLED' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.date ? `${leg.date} &middot; ` : ''}${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : leg.allNoShow ? 'No-show' : leg.cancelled ? 'Cancelled' : 'Select'}</i></label>`; };
 const passengerChoices = (booking, mode, { checked = true, disableNoShow = true } = {}) => (booking.passengers || [booking.passenger]).map((passenger, index) => { const noShow = passengerHasNoShow(booking, index); const locked = disableNoShow && noShow; return `<label class="passenger-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-passenger" value="${index}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span><strong>${index + 1}. ${passenger}</strong><small>${locked ? 'No-show recorded' : 'Adult passenger'}</small></span></label>`; }).join('');
 const yen = value => quoteMnt(value);
 const showCancelSelection = (modal, booking) => {
@@ -261,7 +277,7 @@ const showChangeSelection = (modal, booking) => {
 const selectedPassengerNames = (modal, mode, booking) => [...modal.querySelectorAll(`[name="${mode}-passenger"]:checked`)].map(input => (booking.passengers || [booking.passenger])[Number(input.value)]);
 const showCancelFlow = (modal, booking) => {
   const legs = bookingLegs(booking);
-  const activeLegs = legs.filter(leg => !leg.flown && !leg.allNoShow);
+  const activeLegs = legs.filter(leg => !leg.flown && !leg.allNoShow && !leg.cancelled);
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Select flights and passengers</h2><p class="modal-copy">Spring calculates the actual refund and applies any no-show condition automatically. Flown flights cannot be cancelled.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'cancel-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'cancel-flow')}</section></section><p class="selection-hint">For now Spring calculates the whole PNR. Partial passenger or segment refunds will be enabled after order-detail IDs are synchronised.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-cancel-flow">Calculate refund</button></div></section>`;
   modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
   modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
