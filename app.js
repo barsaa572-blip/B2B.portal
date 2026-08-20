@@ -1125,6 +1125,20 @@ const createPortalBookingFromForm = async event => {
   } catch (error) { toast(error.message || 'Booking could not be created.'); }
   finally { submit.disabled = false; submit.textContent = 'Book'; }
 };
+// Capture the booking button click before any browser/default form handling.
+// A caught error must always be visible to the agent instead of silently
+// leaving the Book button unchanged.
+document.addEventListener('click', event => {
+  const book = event.target.closest('.issue-ticket');
+  if (!book?.form) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  void createPortalBookingFromForm({ preventDefault() {}, currentTarget: book.form })
+    .catch(error => {
+      console.error('Booking form failed before API request:', error);
+      toast(error?.message || 'Booking form could not be submitted.');
+    });
+}, true);
 document.addEventListener('click', event => {
   const book = event.target.closest('.issue-ticket');
   if (book?.form) book.form.noValidate = true;
