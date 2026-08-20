@@ -209,6 +209,16 @@ export async function listPortalBookings(profile) {
   return secretRequest(`/rest/v1/bookings?select=*&order=created_at.desc${bookingAccessFilter(profile)}`);
 }
 
+// Spring automatically releases unpaid PNRs after 30 minutes. Keep the portal
+// status in step with that rule without sending a duplicate cancel request.
+export async function expireTicketingDeadlineBookings() {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  return secretRequest(`/rest/v1/bookings?status=eq.Reserved&created_at=lt.${encodeURIComponent(cutoff)}`, {
+    method: 'PATCH',
+    body: { status: 'Cancelled' }
+  });
+}
+
 export async function createPortalBooking(profile, { totalCny, itinerary, passengers, pnr = newPortalPnr(), status = 'Reserved' }) {
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
   if (!Array.isArray(passengers?.travellers) || !passengers.travellers.length) throw new Error('At least one passenger is required.');
@@ -242,7 +252,9 @@ export async function updatePortalBooking(profile, pnr, status) {
       throw new Error('The 30-minute ticketing deadline has passed. Spring may have cancelled this reservation automatically.');
     }
   }
-  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { status } });
+  const reservationGuard = status === 'Ticketed' ? '&status=eq.Reserved' : '';
+  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}${reservationGuard}`, { method: 'PATCH', body: { status } });
+  if (!updated[0]) throw new Error('This booking is no longer available for that action. Refresh the booking status.');
   return updated[0];
 }
 

@@ -7,7 +7,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -741,7 +741,10 @@ if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getC
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
 if (url.pathname.startsWith('/api/bookings')) { try {
   const profile = await profileForAccessToken(bearer(req));
-  if (url.pathname === '/api/bookings' && req.method === 'GET') return send(res, 200, await listPortalBookings(profile));
+  if (url.pathname === '/api/bookings' && req.method === 'GET') {
+    await expireTicketingDeadlineBookings();
+    return send(res, 200, await listPortalBookings(profile));
+  }
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
     const body = await readJson(req);
     if (!body.itinerary || !body.passengers) throw new Error('Itinerary and passenger details are required.');
@@ -808,4 +811,12 @@ if (!Number.isFinite(amount) || amount === 0) throw new Error('Adjustment amount
 if (url.pathname === '/api/locations') return autocompleteLocations(url, res);
 const requested = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
 const file = normalize(join(ROOT, requested));
-if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try { send(res, 200, await readFile(file), MIME[extname(file)] || 'application/octet-stream'); } catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => console.log(`Flight B2B Portal listening on http://127.0.0.1:${PORT}`));
+if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try { send(res, 200, await readFile(file), MIME[extname(file)] || 'application/octet-stream'); } catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => {
+  console.log(`Flight B2B Portal listening on http://127.0.0.1:${PORT}`);
+  const reconcileExpiredReservations = async () => {
+    try { await expireTicketingDeadlineBookings(); }
+    catch (error) { console.error('Ticketing deadline reconciliation failed:', error.message); }
+  };
+  void reconcileExpiredReservations();
+  setInterval(reconcileExpiredReservations, 60_000).unref();
+});

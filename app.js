@@ -62,7 +62,9 @@ const startBookingDeadlineTimer = modal => {
       const note = timer.querySelector('small');
       if (note) note.textContent = 'The 30-minute ticketing window has ended. Confirm the PNR status in Spring before taking any action.';
       const issue = modal.querySelector('.issue-portal-booking');
+      const cancel = modal.querySelector('.cancel-portal-booking');
       if (issue) { issue.disabled = true; issue.title = 'Ticketing deadline expired'; }
+      if (cancel) { cancel.disabled = true; cancel.title = 'Ticketing deadline expired'; }
       clearInterval(bookingDeadlineTimer); return;
     }
     target.textContent = formatCountdown(remaining);
@@ -143,7 +145,7 @@ const openBookingDetail = ref => {
     return `<div class="passenger-entry"><div class="passenger-name-row"><strong>${index + 1}. ${name}</strong><b class="passenger-type">${type}</b></div><span>${noShow ? 'No-show recorded' : 'Passenger details'}</span><div class="passenger-document"><span>Passport number</span><b>${document.documentNumber || '—'}</b><span>Date of birth</span><b>${document.dateOfBirth || '—'}</b><span>Gender</span><b>${document.gender || '—'}</b><span>Nationality</span><b>${document.nationality || '—'}</b><span>Passport expiry</span><b>${document.documentExpiry || '—'}</b></div></div>`;
   }).join('');
   const ticketingExpired = booking.createdAt && Date.now() >= new Date(booking.createdAt).getTime() + 30 * 60 * 1000;
-  const reservedActions = `<button type="button" class="secondary cancel-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' ? 'disabled' : ''}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' || ticketingExpired ? 'disabled' : ''} ${ticketingExpired ? 'title="Ticketing deadline expired"' : ''}>Issue ticket</button>`;
+  const reservedActions = `<button type="button" class="secondary cancel-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' || ticketingExpired ? 'disabled' : ''} ${ticketingExpired ? 'title="Ticketing deadline expired"' : ''}>Cancel booking</button><button type="button" class="primary issue-portal-booking" ${allFlightsUsed || booking.status === 'Cancelled' || ticketingExpired ? 'disabled' : ''} ${ticketingExpired ? 'title="Ticketing deadline expired"' : ''}>Issue ticket</button>`;
   const ticketedActions = `<button type="button" class="secondary cancel-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button>`;
   const documentActions = booking.status === 'Ticketed' ? `<div class="booking-document-actions"><button type="button" class="secondary download-ticket">Print ticket (PDF)</button><button type="button" class="secondary download-receipt">Receipt (PDF)</button></div>` : '';
   const springConfirmed = booking.itinerary?.springOrder?.lastSyncedAt ? '<span class="tag ticketed">Spring confirmed</span>' : '';
