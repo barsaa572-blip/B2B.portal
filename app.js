@@ -89,7 +89,6 @@ const bookingFlightDetailsClean = booking => {
     const label = storedFlights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'OUTBOUND';
     const departureCode = flight.departure?.id || '';
     const arrivalCode = flight.arrival?.id || '';
-    const route = `${departureCode} &rarr; ${arrivalCode}`;
     const departureTime = (flight.departure?.time || '').slice(-5) || '—';
     const arrivalTime = (flight.arrival?.time || '').slice(-5) || '—';
     const travelDate = displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate));
@@ -99,7 +98,7 @@ const bookingFlightDetailsClean = booking => {
     const durationMinutes = Number(flight.duration);
     const duration = Number.isFinite(durationMinutes) && durationMinutes > 0 ? formatMinutes(durationMinutes) : 'Nonstop';
     const terminal = endpoint => endpoint?.terminal ? ` · ${endpoint.terminal}` : '';
-    return `<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong><b>${route}</b></header><div class="booking-leg-timeline"><div class="booking-leg-time"><b>${departureTime}</b><small>${departureCode} &nbsp;${departureName}${terminal(flight.departure)}</small></div><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><div class="booking-leg-time"><b>${arrivalTime}</b><small>${arrivalCode} &nbsp;${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><span class="airline-logo spring" aria-hidden="true">S</span><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
+    return `<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong></header><div class="booking-leg-timeline"><div class="booking-leg-time"><b>${departureTime}</b><small>${departureCode} &nbsp;${departureName}${terminal(flight.departure)}</small></div><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><div class="booking-leg-time"><b>${arrivalTime}</b><small>${arrivalCode} &nbsp;${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><i class="booking-itinerary-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</i><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
   }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: 'active', return: 'active' };
