@@ -168,7 +168,9 @@ const openBookingDetail = ref => {
       const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/sync`, { method: 'POST' });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Spring status could not be checked.');
-      showCancelFlow(modal, payload.booking || booking);
+      // The sync endpoint returns the database row; turn it back into the UI
+      // booking shape before rendering passenger/segment selections.
+      showCancelFlow(modal, payload.booking ? portalBookingFromRow(payload.booking) : booking);
     } catch (error) {
       button.disabled = false;
       button.textContent = 'Cancel ticket';
