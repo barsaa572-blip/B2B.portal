@@ -124,6 +124,15 @@ const openBookingDetail = ref => {
   modal.querySelector('.change-ticket-flow')?.addEventListener('click', () => showChangeFlow(modal, booking));
   modal.showModal();
   startBookingDeadlineTimer(modal);
+  // Warm Spring's one-day-at-a-time change availability while the agent is
+  // reviewing the booking. This makes the later Change click use the server
+  // cache instead of beginning the slow monthly lookup at that point.
+  if (booking.status === 'Ticketed') {
+    const month = new Date().toISOString().slice(0, 7);
+    bookingLegs(booking).filter(leg => leg.orderItemId && !leg.flown && !leg.allNoShow).forEach(leg => {
+      secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(leg.orderItemId)}&month=${month}`).catch(() => null);
+    });
+  }
 };
 const showCancelEstimate = (modal, booking) => {
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">Ã—</button><p class="eyebrow">CANCEL TICKET</p><h2>Cancellation estimate</h2><p class="modal-copy">Review the estimated refund before submitting this ticket cancellation request.</p><section class="fee-summary"><div><span>Original ticket amount</span><b>${booking.total}</b></div><div><span>Airline cancellation fee</span><b>âˆ’ Â¥ 320.00</b></div><div><span>Service fee</span><b>âˆ’ Â¥ 60.00</b></div><div class="fee-total"><span>Estimated refund</span><strong>Â¥ 900.00</strong></div></section><p class="booking-warning">After confirmation, the cancellation is sent to the airline. Final refund is subject to fare rules and airline approval.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel">Confirm cancellation</button></div></section>`;

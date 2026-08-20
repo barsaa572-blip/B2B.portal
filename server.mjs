@@ -611,7 +611,10 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
 
   const key = changeCalendarKey(pnr, orderItemId, month);
   const cached = changeCalendarCache.get(key);
-  if (cached && Date.now() - cached.createdAt < 2 * 60_000) return cached.value;
+  // A change calendar is pre-warmed while the booking detail is open. Keep it
+  // briefly so opening the Change dialog is immediate, while still refreshing
+  // frequently enough for live availability and fare differences.
+  if (cached && Date.now() - cached.createdAt < 5 * 60_000) return cached.value;
 
   const [year, monthNumber] = month.split('-').map(Number);
   const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
