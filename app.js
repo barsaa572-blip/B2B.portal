@@ -843,6 +843,12 @@ const loadBookings = async () => {
     const response = await secureFetch('/api/bookings');
     const rows = await response.json();
     if (!response.ok) throw new Error(rows.error || 'Bookings could not be loaded.');
+    const pendingSpringSync = rows.filter(row => row.status === 'Reserved' && row.pnr && !String(row.pnr).startsWith('B2B'));
+    if (pendingSpringSync.length) {
+      await Promise.all(pendingSpringSync.map(row => secureFetch(`/api/bookings/${encodeURIComponent(row.pnr)}/sync`, { method: 'POST' }).catch(() => null)));
+      const refreshed = await secureFetch('/api/bookings');
+      if (refreshed.ok) rows.splice(0, rows.length, ...(await refreshed.json()));
+    }
     bookings.splice(0, bookings.length, ...rows.map(portalBookingFromRow));
     renderBookings();
   } catch (error) { console.warn(error.message); }

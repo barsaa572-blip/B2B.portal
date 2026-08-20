@@ -246,6 +246,31 @@ export async function updatePortalBooking(profile, pnr, status) {
   return updated[0];
 }
 
+// A Spring order query is authoritative: it may confirm ticketing after the
+// portal's local 30-minute countdown. Keep only the minimal reconciliation
+// metadata required by later refund/change calls.
+export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
+  const rows = await secretRequest(`/rest/v1/bookings?select=*&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const booking = rows[0];
+  if (!booking) throw new Error('Booking not found.');
+  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  if (!allowed) throw new Error('You do not have access to this booking.');
+  const itinerary = {
+    ...(booking.itinerary || {}),
+    springOrder: {
+      ...(booking.itinerary?.springOrder || {}),
+      pnr,
+      status: springOrder.status,
+      orderItemIds: springOrder.orderItemIds,
+      ticketNumbers: springOrder.ticketNumbers,
+      lastSyncedAt: new Date().toISOString()
+    }
+  };
+  const status = springOrder.ticketed ? 'Ticketed' : booking.status;
+  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { status, itinerary } });
+  return updated[0];
+}
+
 export async function recordPortalBookingNoShow(profile, pnr, { legs, passengerIndexes }) {
   if (!['office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Only an office manager or platform administrator can record a no-show.');
   const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,status,itinerary,passengers&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);

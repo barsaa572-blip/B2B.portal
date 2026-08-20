@@ -27,6 +27,7 @@ export function getSpringStatus(env = process.env) {
       fareRules: '/weekApiFlightSearch/ota/flights/searchKeguiBySegId',
       accessToken: '/auth/oauth2/accessToken',
       refreshToken: '/auth/oauth2/refreshToken',
+      orderRetrieve: '/weekApiOrder/ota/orderOtaCtr/orderRetrieve',
       orderDetail: 'getOrderDetailInfoC2 (XML/SOAP)'
     }
   };
@@ -84,5 +85,6 @@ export function createSpringClient(env = process.env) {
     getChangeAvailability: (payload, token) => jsonRequest(endpoint('SPRING_CHANGE_AVAILABILITY_URL', '/apiOrder/ota/orderOtaCtr/getFlightBgApp'), payload, token),
     submitChange: (payload, token) => jsonRequest(endpoint('SPRING_SUBMIT_CHANGE_URL', '/apiOrder/ota/orderOtaCtr/submitFlightBgOTA'), payload, token),
     getFareRules: (payload, token) => jsonRequest(endpoint('SPRING_FARE_RULES_URL', '/apiFlightSearch/ota/flights/searchKeguiBySegId'), payload, token)
+    ,orderRetrieve: (payload, token) => jsonRequest(endpoint('SPRING_ORDER_RETRIEVE_URL', '/weekApiOrder/ota/orderOtaCtr/orderRetrieve'), payload, token)
   };
 }

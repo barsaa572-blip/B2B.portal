@@ -7,7 +7,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -484,6 +484,37 @@ async function calculateLiveSpringRefund(profile, pnr) {
   };
 }
 
+const springOrderSummary = result => {
+  const order = Array.isArray(result?.response?.order) ? result.response.order[0] : null;
+  if (!order) throw new Error('Spring order query returned no order data.');
+  const orderItems = Array.isArray(order.orderItem) ? order.orderItem : [];
+  const status = String(order.statusCode || '').toUpperCase();
+  const ticketNumbers = [];
+  const collectTickets = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) return value.forEach(collectTickets);
+    for (const [key, item] of Object.entries(value)) {
+      if (/ticket(number|document|doc)/i.test(key) && typeof item === 'string' && item.trim()) ticketNumbers.push(item.trim());
+      else collectTickets(item);
+    }
+  };
+  collectTickets(result?.response?.ticketDocInfo);
+  return {
+    status,
+    ticketed: status === 'PAID' && orderItems.length > 0 && orderItems.every(item => String(item.statusCode || '').toUpperCase() === 'SOLDTICKET'),
+    orderItemIds: orderItems.map(item => String(item.orderItemID || '')).filter(Boolean),
+    ticketNumbers: [...new Set(ticketNumbers)]
+  };
+};
+
+async function syncSpringOrder(profile, pnr) {
+  if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const result = await client.orderRetrieve({ request: { orderFilterCriteria: { order: { orderID: pnr, ownerCode: '' } } } }, token.accessToken);
+  return syncPortalBookingFromSpring(profile, pnr, springOrderSummary(result));
+}
+
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), supabase: getSupabaseStatus() });
@@ -502,6 +533,8 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   if (refundQuoteMatch && req.method === 'POST') {
     return send(res, 200, { quote: await calculateLiveSpringRefund(profile, refundQuoteMatch[1]) });
   }
+  const syncMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/sync$/);
+  if (syncMatch && req.method === 'POST') return send(res, 200, { booking: await syncSpringOrder(profile, syncMatch[1]) });
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {
     const status = match[2] === 'issue' ? 'Ticketed' : 'Cancelled';
