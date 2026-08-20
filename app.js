@@ -89,7 +89,7 @@ const bookingFlightDetailsClean = booking => {
     const times = `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`;
     const travelDate = displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate));
     const stateText = state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
-    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small>${travelDate ? `${travelDate} &middot; ` : ''}${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'} &middot; ${flight.fare?.cabin || 'Economy'}</small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state}">${stateText}</em></div></div>`;
+    return `<div class="booking-flight-detail"><div><span>${label}</span><strong>${route}</strong><small class="booking-flight-date">${travelDate || 'Travel date pending'}</small><small class="booking-flight-meta"><b>${flight.airline || 'Spring Airlines'}</b><i>Flight ${flight.number || '—'}</i><i>${flight.fare?.cabin || 'Economy'}</i></small></div><div class="flight-detail-right"><b>${times}</b><em class="segment-status ${state}">${stateText}</em></div></div>`;
   }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: 'active', return: 'active' };
