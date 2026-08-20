@@ -458,9 +458,11 @@ async function calculateLiveSpringRefund(profile, pnr) {
 
   const client = createSpringClient();
   const token = await client.getAccessToken();
-  // calcType O is Spring's full-order / full-PNR calculation. Partial refunds need
-  // orderHeadIds, which are fetched from the XML order-detail service next.
-  const result = await client.calculateRefund({ orderId: pnr, calcType: 'O' }, token.accessToken);
+  // calcType O is Spring's full-order / full-PNR calculation. Spring's JSON demo
+  // still includes an empty orderHeadIds array for a full-order calculation, so
+  // preserve that shape rather than omitting the field. Partial refunds will pass
+  // the actual IDs once they are synchronised from the XML order-detail service.
+  const result = await client.calculateRefund({ orderId: pnr, calcType: 'O', orderHeadIds: [] }, token.accessToken);
   if (result?.success === false || result?.flag === false) {
     throw new Error(result?.message || result?.errMsg || 'Spring did not accept the refund calculation.');
   }
