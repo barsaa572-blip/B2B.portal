@@ -515,6 +515,77 @@ async function syncSpringOrder(profile, pnr) {
   return syncPortalBookingFromSpring(profile, pnr, springOrderSummary(result));
 }
 
+// Spring's change-availability endpoint works one requested date at a time.
+// Keep this server-side: the browser must not receive an OAuth token and we
+// also verify that the requested order item belongs to the signed-in agency.
+const changeCalendarCache = new Map();
+const changeCalendarKey = (pnr, orderItemId, month) => `${pnr}:${orderItemId}:${month}`;
+const calendarDate = (year, month, day) => `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+const changeFlightSummary = flight => ({
+  segmentHeadId: Number(flight.segmentHeadId),
+  flightNo: String(flight.flightNo || ''),
+  departure: {
+    code: portalAirportCode(flight.oriAirportCode || flight.oriCityCode),
+    name: springText(flight.oriAirportName || flight.oriCityName || ''),
+    time: springTime(flight.oriTimeBJ)
+  },
+  arrival: {
+    code: portalAirportCode(flight.destAirportCode || flight.destCityCode),
+    name: springText(flight.destAirportName || flight.destCityName || ''),
+    time: springTime(flight.destTimeBJ)
+  },
+  aircraft: springText(flight.acType || ''),
+  bookingClass: springText(flight.bgSeatName || ''),
+  // `bgShengcangMoney` is the fare difference returned by Spring for this
+  // replacement option. The final change fee is calculated separately.
+  fareDifferenceCny: Number(flight.bgShengcangMoney || 0)
+});
+
+async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Month must use YYYY-MM format.');
+  const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
+  if (!booking) throw new Error('Booking not found or you do not have access to it.');
+  if (booking.status !== 'Ticketed') throw new Error('Only a ticketed booking can be changed.');
+  const allowedIds = (booking.itinerary?.springOrder?.orderItemIds || []).map(String);
+  if (!allowedIds.includes(String(orderItemId))) throw new Error('This order item does not belong to the selected booking.');
+  if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+
+  const key = changeCalendarKey(pnr, orderItemId, month);
+  const cached = changeCalendarCache.get(key);
+  if (cached && Date.now() - cached.createdAt < 2 * 60_000) return cached.value;
+
+  const [year, monthNumber] = month.split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const today = new Date().toISOString().slice(0, 10);
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const dates = Array.from({ length: daysInMonth }, (_, index) => calendarDate(year, monthNumber, index + 1));
+  const items = new Array(dates.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < dates.length) {
+      const index = cursor++;
+      const date = dates[index];
+      if (date < today) { items[index] = { date, available: false, past: true, flights: [] }; continue; }
+      try {
+        const newTimeLBegin = Date.parse(`${date}T00:00:00+08:00`);
+        const result = await client.getChangeInfo({ lang: 'zh_cn', newTimeLBegin, orderHeadId: Number(orderItemId) }, token.accessToken);
+        const flights = (result.bgFlightInfoList || []).map(changeFlightSummary).filter(flight => Number.isFinite(flight.segmentHeadId) && flight.flightNo);
+        const differences = flights.map(flight => flight.fareDifferenceCny).filter(Number.isFinite);
+        items[index] = { date, available: flights.length > 0, past: false, fareDifferenceCny: differences.length ? Math.min(...differences) : null, flights };
+      } catch (error) {
+        // A date without an eligible replacement is shown as unavailable. Do
+        // not expose opaque upstream errors for every individual calendar day.
+        items[index] = { date, available: false, past: false, flights: [] };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, dates.length) }, worker));
+  const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, items };
+  changeCalendarCache.set(key, { createdAt: Date.now(), value });
+  return value;
+}
+
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), supabase: getSupabaseStatus() });
@@ -532,6 +603,13 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   const refundQuoteMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/refund-quote$/);
   if (refundQuoteMatch && req.method === 'POST') {
     return send(res, 200, { quote: await calculateLiveSpringRefund(profile, refundQuoteMatch[1]) });
+  }
+  const changeCalendarMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-calendar$/);
+  if (changeCalendarMatch && req.method === 'GET') {
+    const orderItemId = url.searchParams.get('orderItemId');
+    const month = url.searchParams.get('month');
+    if (!/^\d+$/.test(String(orderItemId || ''))) throw new Error('A valid Spring order item is required.');
+    return send(res, 200, await getLiveChangeCalendar(profile, changeCalendarMatch[1], orderItemId, month));
   }
   const syncMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/sync$/);
   if (syncMatch && req.method === 'POST') return send(res, 200, { booking: await syncSpringOrder(profile, syncMatch[1]) });
