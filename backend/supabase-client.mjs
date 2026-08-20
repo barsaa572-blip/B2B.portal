@@ -258,7 +258,10 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
   const existingFlights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
   const schedules = Array.isArray(springOrder.schedules) ? springOrder.schedules : [];
   const flights = existingFlights.map((flight, index) => {
-    const schedule = schedules[index];
+    // A Spring order may return order items in a different order.  Prefer the
+    // flight number match; retain positional matching only as a fallback.
+    const flightNumber = String(flight.flightNumber || flight.number || '').trim().toUpperCase();
+    const schedule = schedules.find(candidate => flightNumber && candidate.flightNumber === flightNumber) || schedules[index];
     if (!schedule) return flight;
     return {
       ...flight,
@@ -275,10 +278,11 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
       }
     };
   });
+  const syncedDates = flights.map(flight => flight.travelDate).filter(Boolean);
   const itinerary = {
     ...(booking.itinerary || {}),
-    ...(schedules[0]?.travelDate ? { departureDate: schedules[0].travelDate } : {}),
-    ...(schedules[1]?.travelDate ? { returnDate: schedules[1].travelDate } : {}),
+    ...(syncedDates[0] ? { departureDate: syncedDates[0] } : {}),
+    ...(syncedDates[1] ? { returnDate: syncedDates[1] } : {}),
     ...(flights.length ? { flights } : {}),
     springOrder: {
       ...(booking.itinerary?.springOrder || {}),

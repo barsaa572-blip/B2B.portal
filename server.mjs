@@ -599,15 +599,25 @@ const collectSpringSegmentFields = value => {
 
 const firstSpringField = (fields, pattern) => fields.find(field => pattern.test(field.key))?.value;
 
+const springCollection = value => Array.isArray(value) ? value : (value && typeof value === 'object' ? [value] : []);
+
+const springFlightNumber = fields => {
+  const value = firstSpringField(fields, /(?:^|\.)(?:flightno|flightnumber|flight_code|flightcode)$/);
+  return value ? String(value).trim().toUpperCase() : '';
+};
+
 const springItemSchedule = item => {
   const fields = collectSpringSegmentFields(item);
-  const departureDateValue = firstSpringField(fields, /(?:ori|departure|depart|start).*(?:time|date)|(?:time|date).*(?:ori|departure|depart|start)/);
+  // Spring has used several response schemas over time.  Limit the candidates
+  // to flight/segment fields so passenger birth/passport dates are never used.
+  const departureDateValue = firstSpringField(fields, /(?:ori|departure|depart|start).*(?:time|date)|(?:time|date).*(?:ori|departure|depart|start)|(?:^|\.)(?:flightdate|flightday|departdate)$/);
   const arrivalDateValue = firstSpringField(fields, /(?:dest|arrival|arrive|end).*(?:time|date)|(?:time|date).*(?:dest|arrival|arrive|end)/);
   const departureCode = firstSpringField(fields, /(?:ori|departure|depart).*(?:airport|city)?code$/);
   const arrivalCode = firstSpringField(fields, /(?:dest|arrival|arrive).*(?:airport|city)?code$/);
   const travelDate = springDateOnly(departureDateValue);
   return travelDate ? {
     travelDate,
+    flightNumber: springFlightNumber(fields),
     departureTime: springClock(departureDateValue),
     arrivalTime: springClock(arrivalDateValue),
     departureCode: departureCode ? portalAirportCode(departureCode) : '',
@@ -616,9 +626,9 @@ const springItemSchedule = item => {
 };
 
 const springOrderSummary = result => {
-  const order = Array.isArray(result?.response?.order) ? result.response.order[0] : null;
+  const order = springCollection(result?.response?.order)[0] || null;
   if (!order) throw new Error('Spring order query returned no order data.');
-  const orderItems = Array.isArray(order.orderItem) ? order.orderItem : [];
+  const orderItems = springCollection(order.orderItem);
   const status = String(order.statusCode || '').toUpperCase();
   const ticketNumbers = [];
   const collectTickets = value => {
