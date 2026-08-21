@@ -617,19 +617,27 @@ async function calculateLiveSpringRefund(profile, pnr) {
     throw new Error(result?.message || result?.errMsg || 'Spring did not accept the refund calculation.');
   }
   const quote = findRefundCalculation(result) || result;
+  const amountsCny = {
+    ticketAmount: springAmount(quote, 'retAllMoney'),
+    refundableFare: springAmount(quote, 'retTktMoney'),
+    refundableTaxes: ['retPortMoney', 'retFuelMoney', 'retInsMoney', 'retXMoney', 'retOtherFy']
+      .map(key => springAmount(quote, key) || 0).reduce((sum, value) => sum + value, 0),
+    cancellationFee: springAmount(quote, 'qxxFy'),
+    nonRefundable: springAmount(quote, 'nrfndOtherFy'),
+    refund: springAmount(quote, 'retRealMoney') ?? springAmount(quote, 'retNetMoney') ?? springAmount(quote, 'retAllMoney')
+  };
+  const rate = await getCnyMntRate();
+  const amountsMnt = Object.fromEntries(Object.entries(amountsCny).map(([key, value]) => [
+    key,
+    value === null || value === undefined ? null : quoteCnyToMnt(value, rate, 'refund')
+  ]));
   return {
     bookingRef: pnr,
     calcType: 'O',
     source: 'Spring Airlines',
-    amountsCny: {
-      ticketAmount: springAmount(quote, 'retAllMoney'),
-      refundableFare: springAmount(quote, 'retTktMoney'),
-      refundableTaxes: ['retPortMoney', 'retFuelMoney', 'retInsMoney', 'retXMoney', 'retOtherFy']
-        .map(key => springAmount(quote, key) || 0).reduce((sum, value) => sum + value, 0),
-      cancellationFee: springAmount(quote, 'qxxFy'),
-      nonRefundable: springAmount(quote, 'nrfndOtherFy'),
-      refund: springAmount(quote, 'retRealMoney') ?? springAmount(quote, 'retNetMoney') ?? springAmount(quote, 'retAllMoney')
-    },
+    amountsCny,
+    amountsMnt,
+    refundRate: { bank: rate.bank, nonCashBuyMnt: rate.refundRateMnt, rateDate: rate.rateDate },
     message: typeof result?.message === 'string' ? result.message : null
   };
 }
