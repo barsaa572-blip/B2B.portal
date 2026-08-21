@@ -20,6 +20,10 @@
   });
   const signOut = () => {
     stopRefresh(); sessionStorage.removeItem(storageKey); sessionStorage.removeItem('flightb2b-demo-session');
+    // A session can expire while an invoice or ticket dialog is open. Close every
+    // native dialog before revealing the sign-in screen so stale forms never sit
+    // above it or display the internal session-expiry marker.
+    document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     document.body.classList.remove('role-agent', 'role-office', 'role-platform'); root.hidden = false; render();
   };
   window.forcePortalSignOut = signOut;
