@@ -205,19 +205,19 @@ export async function createTopupRequest({ profile, amountMnt, paymentReference,
   if (!Number.isFinite(walletAmountMnt) || walletAmountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
   const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const rate = await getCnyMntRate();
-  // The wallet credit itself is bought at Khaan Bank's non-cash sell rate.
-  // Portal, Khaan and correspondent-bank fees are payable charges; they do
+  // The wallet credit itself is bought at Golomt Bank's non-cash sell rate.
+  // Portal, Golomt and correspondent-bank fees are payable charges; they do
   // not increase the CNY wallet credit.
   const sellRate = Number(rate.nonCashSellMnt);
   const amountCny = Number((walletAmountMnt / sellRate).toFixed(2));
   const serviceFeeMnt = Math.round(walletAmountMnt * 0.03);
-  // CNY transfer to a non-mainland beneficiary under OUR: 1%, min ¥50, max ¥260.
-  const correspondentFeeCny = Number(Math.min(260, Math.max(50, amountCny * 0.01)).toFixed(2));
+  // Golomt Bank CNY OUR tariff: through ¥100k = ¥50; above ¥100k = ¥150.
+  const correspondentFeeCny = amountCny <= 100_000 ? 50 : 150;
   const correspondentFeeMnt = Math.round(correspondentFeeCny * sellRate);
-  // Khaan Bank CNY transfer tariff: ≤ ¥50k = ₮7,500; ≤ ¥100k = ₮10,000; above = ₮20,000.
-  const khaanTransferFeeMnt = amountCny <= 50_000 ? 7500 : amountCny <= 100_000 ? 10_000 : 20_000;
-  const totalMnt = walletAmountMnt + serviceFeeMnt + correspondentFeeMnt + khaanTransferFeeMnt;
-  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: amountCny, amount_mnt: walletAmountMnt, service_fee_mnt: serviceFeeMnt, correspondent_fee_cny: correspondentFeeCny, correspondent_fee_mnt: correspondentFeeMnt, khaan_transfer_fee_mnt: khaanTransferFeeMnt, total_mnt: totalMnt, official_cny_mnt_rate: sellRate, markup_mnt: 0, effective_cny_mnt_rate: sellRate, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
+  // Golomt Bank CNY transfer tariff: ≤ ¥50k = ₮5,000; ≤ ¥100k = ₮10,000; above = ₮20,000.
+  const bankTransferFeeMnt = amountCny <= 50_000 ? 5000 : amountCny <= 100_000 ? 10_000 : 20_000;
+  const totalMnt = walletAmountMnt + serviceFeeMnt + correspondentFeeMnt + bankTransferFeeMnt;
+  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: amountCny, amount_mnt: walletAmountMnt, service_fee_mnt: serviceFeeMnt, correspondent_fee_cny: correspondentFeeCny, correspondent_fee_mnt: correspondentFeeMnt, bank_transfer_fee_mnt: bankTransferFeeMnt, bank_name: rate.bank, total_mnt: totalMnt, official_cny_mnt_rate: sellRate, markup_mnt: 0, effective_cny_mnt_rate: sellRate, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
   return created[0];
 }
 

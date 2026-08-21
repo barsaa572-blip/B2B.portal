@@ -1,7 +1,7 @@
 // The platform service fee is charged separately on the invoice. Do not add a
 // hidden exchange-rate markup to the agency's CNY wallet credit.
 const DEFAULT_TOPUP_MARKUP_MNT = 0;
-const DEFAULT_SOURCE = 'http://127.0.0.1:8000/api/rates/bank/KhanBank?limit=1';
+const DEFAULT_SOURCE = 'http://127.0.0.1:8000/api/rates/bank/GolomtBank?limit=1';
 const CACHE_MS = 6 * 60 * 60 * 1000;
 let cachedRate = null;
 
@@ -10,12 +10,12 @@ const number = value => Number(String(value ?? '').replace(/,/g, ''));
 const isRate = value => Number.isFinite(value) && value > 0;
 
 const buildRate = ({ nonCashBuy, nonCashSell, rateDate, source }) => {
-  if (!isRate(nonCashBuy) || !isRate(nonCashSell)) throw new Error('A valid Khaan Bank CNY non-cash buy and sell rate was not returned.');
+  if (!isRate(nonCashBuy) || !isRate(nonCashSell)) throw new Error('A valid Golomt Bank CNY non-cash buy and sell rate was not returned.');
   const configuredMarkup = number(process.env.TOPUP_CNY_MARKUP_MNT);
   const markupMnt = Number.isFinite(configuredMarkup) && configuredMarkup >= 0 ? configuredMarkup : DEFAULT_TOPUP_MARKUP_MNT;
   return {
     currency: 'CNY',
-    bank: 'Khaan Bank',
+    bank: 'Golomt Bank',
     nonCashBuyMnt: nonCashBuy,
     nonCashSellMnt: nonCashSell,
     topupRateMnt: nonCashSell + markupMnt,
@@ -30,21 +30,21 @@ const buildRate = ({ nonCashBuy, nonCashSell, rateDate, source }) => {
 };
 
 function configuredFallback() {
-  const buy = number(process.env.KHAN_BANK_CNY_NONCASH_BUY);
-  const sell = number(process.env.KHAN_BANK_CNY_NONCASH_SELL);
+  const buy = number(process.env.GOLOMT_BANK_CNY_NONCASH_BUY);
+  const sell = number(process.env.GOLOMT_BANK_CNY_NONCASH_SELL);
   if (!isRate(buy) || !isRate(sell)) return null;
-  return buildRate({ nonCashBuy: buy, nonCashSell: sell, rateDate: process.env.KHAN_BANK_CNY_RATE_DATE, source: 'Manual Khaan Bank fallback' });
+  return buildRate({ nonCashBuy: buy, nonCashSell: sell, rateDate: process.env.GOLOMT_BANK_CNY_RATE_DATE, source: 'Manual Golomt Bank fallback' });
 }
 
 export async function getCnyMntRate() {
   if (cachedRate && Date.now() - cachedRate.loadedAt < CACHE_MS) return cachedRate.value;
   try {
-    const response = await fetch(process.env.KHAN_BANK_CNY_RATE_API_URL || DEFAULT_SOURCE, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
-    if (!response.ok) throw new Error(`Khaan Bank rate service returned HTTP ${response.status}.`);
+    const response = await fetch(process.env.GOLOMT_BANK_CNY_RATE_API_URL || DEFAULT_SOURCE, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
+    if (!response.ok) throw new Error(`Golomt Bank rate service returned HTTP ${response.status}.`);
     const body = await response.json();
     const row = Array.isArray(body) ? body[0] : body;
     const cny = row?.rates?.cny?.noncash || {};
-    const rate = buildRate({ nonCashBuy: number(cny.buy), nonCashSell: number(cny.sell), rateDate: row?.date || row?.rate_date || row?.last_date, source: 'Local Khaan Bank exchange-rate service' });
+    const rate = buildRate({ nonCashBuy: number(cny.buy), nonCashSell: number(cny.sell), rateDate: row?.date || row?.rate_date || row?.last_date, source: 'Local Golomt Bank exchange-rate service' });
     cachedRate = { value: rate, loadedAt: Date.now() };
     return rate;
   } catch (error) {
