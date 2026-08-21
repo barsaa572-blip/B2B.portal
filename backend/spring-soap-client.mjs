@@ -67,8 +67,11 @@ export function createSpringSoapClient(env = process.env, fetchImpl = fetch) {
         },
         body
       });
-    } catch {
-      throw new Error('Spring credit payment network request failed.');
+    } catch (error) {
+      // Keep the browser message useful without exposing the SOAP body, XML
+      // credentials, or any part of the request payload.
+      const detail = error?.cause?.message || error?.message || 'connection failed';
+      throw new Error(`Spring credit payment network request failed: ${detail}`);
     }
 
     const responseXml = await response.text();
