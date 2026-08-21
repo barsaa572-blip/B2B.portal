@@ -1,5 +1,7 @@
 # Flight B2B Portal — Codex handover
 
+**Last updated: 21 August 2026.**
+
 Read this file before making changes. It is a short, safe replacement for the
 local Windows Codex conversation history. Do not commit credentials or tokens.
 
@@ -86,13 +88,24 @@ HTTP JSON base: `http://101.230.218.71:8001/gdsgatewayota`
 - Change availability: `/apiOrder/ota/orderOtaCtr/getFlightBgApp`
 - Submit change: `/apiOrder/ota/orderOtaCtr/submitFlightBgOTA`
 
+Credit-payment ticket issue is SOAP/XML, not JSON:
+
+- WSDL: `http://101.230.218.72:2001/AirSalesService/springairlines/remoteservice/airsalesLLC?wsdl`
+- operation: `payInCredit4OTA`
+- CNY `moneyClassId`: `0`
+- Spring confirmed `ifSuccess = Y` means credit payment succeeded and the ticket
+  has been issued.
+
+The VPS can reach the WSDL endpoint. The XML username/password are stored only
+in `/etc/flightb2b/flightb2b.env`; do not copy them into this repository.
+
 The legacy SOAP/WSDL order-detail endpoint (`getOrderDetailInfoC2`) is separate
 and not yet connected. Spring's Ulaanbaatar search code is `ULN` in the test
 environment.
 
 ## Current functional status
 
-### Live
+### Live and verified on the Spring test environment
 
 - Spring OAuth token request works from the VPS.
 - Spring availability search is server-side and live for routes provided by the
@@ -105,13 +118,31 @@ environment.
   booking page.
 - Round trip: select outbound flight/fare → select return flight/fare →
   passenger booking page.
+- `bookOrderC` creates real Spring test PNRs. A successful response is stored
+  in Supabase together with Spring identifiers.
+- Credit payment via `payInCredit4OTA` is wired. It must only be called from
+  the final **Issue ticket** action after the wallet balance check. A successful
+  test transaction was logged on 21 August 2026 for PNR `BAARWDE`; Supabase
+  then showed the booking as `Ticketed` and added the matching wallet debit.
+- Ticket deadline countdown begins when the PNR is created. An unpaid PNR is
+  not a ticket and Spring cancels it after the applicable payment time limit.
+- `orderRetrieve` (HTTP JSON test endpoint) is used to synchronise booking
+  status and Spring order identifiers where available.
 
-### Test-only / not yet Spring live
+### Still to finish / verify
 
-- Creating a portal PNR, issue-ticket state, cancel state, change calculations,
-  and booking records are portal/Supabase workflow tests only.
-- Do not state that a Spring ticket is issued until `bookOrderC`, specific-price
-  verification and successful Spring order responses are wired and verified.
+- Finish the cancellation flow: live `calcRetTktFeeOTA` quote exists, but the
+  final `refundTicketB2cAgentOTA` submit must be connected and tested only on a
+  disposable Spring test ticket. Do not set a portal booking to Cancelled before
+  Spring returns success.
+- Finish the change flow: calendar replacement availability is live through
+  `getFlightBgInfo`; `getFlightBgApp` returns a real change calculation and
+  `submitFlightBgOTA` must be connected behind a final confirmation. Preserve
+  the existing PNR and sync it afterwards; do not generate a replacement portal
+  PNR locally.
+- Spring currently supplies `orderItemID` values through order retrieval. Each
+  ticket has a unique order-item ID. Confirm which identifier each refund/change
+  call needs before enabling partial-passenger or partial-segment actions.
 - Child and infant prices are not guessed by availability search. They require
   Spring price verification before issue.
 
@@ -139,6 +170,8 @@ agency management and Spring calls must remain server-side.
 - `server.mjs`: HTTP routes, Spring search normalisation and browser-safe API
   responses.
 - `backend/spring-client.mjs`: server-only Spring OAuth/HTTP JSON client.
+- `backend/supabase-client.mjs`: all Supabase server-side reads/writes,
+  including booking synchronisation and wallet ledger updates.
 - `app.js`: browser UI, search, fare selection, checkout and booking views.
 - `auth.js`, `admin.js`, `team.js`: session/role and management UI.
 - `booking-review.css`, `fare-options.css`: checkout and fare-family UI.
@@ -147,6 +180,9 @@ agency management and Spring calls must remain server-side.
 
 > Read `CODEX_HANDOVER.md` and inspect the current repository before changing
 > anything. This is a Spring Airlines B2B portal. Keep credentials server-only,
-> preserve role isolation and do not claim test portal PNRs are real Spring
-> tickets. Explain the exact files you will change, then implement and run node
-> syntax checks.
+> preserve role isolation, and do not call Spring refund/change submit APIs
+> during testing unless the user explicitly approves a disposable test PNR.
+> First finish live cancellation and change: inspect `server.mjs`,
+> `backend/spring-client.mjs`, and `app.js`; use Spring calculations but require
+> final confirmation for submissions. Explain the exact files you will change,
+> then implement and run node syntax checks.
