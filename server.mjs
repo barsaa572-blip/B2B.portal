@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSpringClient, getSpringStatus } from './backend/spring-client.mjs';
+import { createSpringSoapClient, getSpringSoapStatus } from './backend/spring-soap-client.mjs';
 import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
@@ -10,6 +11,7 @@ import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOff
 import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, refreshAuthSession, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
+const springIssueInFlight = new Set();
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 const send = (res, status, data, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' }); res.end(Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data)); };
@@ -588,6 +590,43 @@ async function createLiveSpringBooking(profile, body) {
   return createPortalBooking(profile, { ...body, itinerary, pnr, status: 'Reserved' });
 }
 
+// Payment is deliberately performed before the portal wallet debit. Spring's
+// successful credit-payment response is the authority for ticket issuance.
+// If the database update fails afterwards, the PNR must be reconciled rather
+// than retried, otherwise the airline could be charged twice.
+async function issueSpringCreditTicket(profile, pnr) {
+  const normalizedPnr = String(pnr || '').trim().toUpperCase();
+  if (!normalizedPnr) throw new Error('Booking reference is required.');
+  if (springIssueInFlight.has(normalizedPnr)) throw new Error('Ticket issue is already in progress for this booking.');
+  springIssueInFlight.add(normalizedPnr);
+  try {
+    await expireTicketingDeadlineBookings();
+    const booking = (await listPortalBookings(profile)).find(item => String(item.pnr || '').toUpperCase() === normalizedPnr);
+    if (!booking) throw new Error('Booking not found or you do not have access to it.');
+    if (booking.status === 'Ticketed') throw new Error('This ticket has already been issued.');
+    if (booking.status !== 'Reserved') throw new Error(`Only a reserved booking can be issued (current status: ${booking.status}).`);
+    if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
+
+    await assertWalletFunds({ agencyId: booking.agency_id, amountCny: Number(booking.total_cny), actorId: profile.id });
+    const springResult = await createSpringSoapClient().payInCredit4OTA({
+      orderNo: normalizedPnr,
+      orderMoney: Number(booking.total_cny),
+      moneyClassId: Number(process.env.SPRING_CREDIT_MONEY_CLASS_ID || 0),
+      orderType: Number(process.env.SPRING_CREDIT_ORDER_TYPE || 0)
+    });
+    try {
+      const updated = await updatePortalBooking(profile, normalizedPnr, 'Ticketed');
+      console.info(`Spring credit payment succeeded and ticket was issued for ${normalizedPnr}.`);
+      return { booking: updated, spring: { ifSuccess: springResult.ifSuccess } };
+    } catch (error) {
+      console.error(`Spring credit payment succeeded but the local update failed for ${normalizedPnr}: ${error.message}`);
+      throw new Error('Spring payment succeeded, but the portal could not update this booking. Do not retry ticket issue; contact support with this PNR.');
+    }
+  } finally {
+    springIssueInFlight.delete(normalizedPnr);
+  }
+}
+
 const findRefundCalculation = (value, depth = 0) => {
   if (!value || depth > 7 || typeof value !== 'object') return null;
   if (['retRealMoney', 'retNetMoney', 'retAllMoney', 'qxxFy'].some(key => Object.hasOwn(value, key))) return value;
@@ -841,7 +880,7 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
 
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
-if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), supabase: getSupabaseStatus() });
+if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), springSoap: getSpringSoapStatus(), supabase: getSupabaseStatus() });
 if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: error.message }); } }
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
 if (url.pathname.startsWith('/api/bookings')) { try {
@@ -891,6 +930,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   }
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {
+    if (match[2] === 'issue') return send(res, 200, await issueSpringCreditTicket(profile, match[1]));
     const status = match[2] === 'issue' ? 'Ticketed' : 'Cancelled';
     return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
   }
