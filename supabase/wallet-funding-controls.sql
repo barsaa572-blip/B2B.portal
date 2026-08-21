@@ -15,7 +15,10 @@ begin
   -- Keep an explicit filter here: this is a deliberate ledger reset, not an
   -- unrestricted REST DELETE request.
   delete from public.wallet_transactions where agency_id is not null;
-  update public.wallets set balance_cny = 0, updated_at = now();
+  -- Same safeguard for the balance reset. Every wallet belongs to an agency.
+  update public.wallets
+  set balance_cny = 0, updated_at = now()
+  where agency_id is not null;
 end;
 $$;
 

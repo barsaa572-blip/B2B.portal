@@ -1,6 +1,6 @@
--- Run once in Supabase SQL Editor to make pending top-up invoices non-expiring.
--- Pending invoices will remain available until a platform administrator approves
--- them, or an authorised user deletes them.
+-- Run once in Supabase SQL Editor.
+-- An approved top-up must always create (or increase) the agency wallet.
+-- This supersedes earlier versions of approve_topup_request.
 
 create or replace function public.approve_topup_request(p_topup_id uuid, p_approved_by uuid)
 returns void language plpgsql security definer set search_path = public as $$
@@ -21,7 +21,6 @@ begin
   if not found then
     raise exception 'Top-up request not found';
   end if;
-
   if request_row.status <> 'pending' then
     raise exception 'This top-up request has already been processed';
   end if;
@@ -30,7 +29,6 @@ begin
   set status = 'approved', approved_at = now(), approved_by = p_approved_by
   where id = p_topup_id;
 
-  -- Never allow an approved invoice to disappear without crediting a wallet.
   insert into public.wallets (agency_id, balance_cny, updated_at)
   values (request_row.agency_id, request_row.amount_cny, now())
   on conflict (agency_id) do update

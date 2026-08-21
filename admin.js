@@ -1,9 +1,13 @@
 (() => {
   let overview = { agencies: [], branches: [], profiles: [], wallets: [], topups: [] };
+  let fxRate = null;
   const byId = id => document.querySelector(id);
   const session = () => JSON.parse(sessionStorage.getItem('flightb2b-session') || '{}');
   const escape = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
-  const money = value => `¥ ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cny = value => `¥ ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const mnt = value => `₮ ${Math.round(Number(value || 0)).toLocaleString('en-US')}`;
+  const money = value => fxRate ? mnt(Number(value || 0) * Number(fxRate.effectiveRateMnt || 0)) : '—';
+  const moneyWithCny = value => `${money(value)}<small class="currency-secondary">${cny(value)} CNY</small>`;
   const notify = message => { const toast = byId('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); };
   const api = async (path, options = {}) => {
     const current = session();
@@ -21,7 +25,7 @@
     byId('#agency-list').innerHTML = visible.map(item => {
       const offices = overview.branches.filter(entry => entry.agency_id === item.id).length;
       const users = overview.profiles.filter(entry => entry.agency_id === item.id).length;
-      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td><strong>${money(wallet(item.id)?.balance_cny)}</strong></td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td>${moneyWithCny(wallet(item.id)?.balance_cny)}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No agencies found.</td></tr>';
     byId('#user-list').innerHTML = overview.profiles.map(item => {
       const company = agency(item.agency_id)?.name || 'Platform';
@@ -34,12 +38,12 @@
     const total = overview.wallets.reduce((sum, item) => sum + Number(item.balance_cny || 0), 0);
     byId('#admin-agency-count').textContent = activeAgencies;
     byId('#admin-user-count').textContent = activeUsers;
-    byId('#admin-network-balance').textContent = money(total);
+    byId('#admin-network-balance').innerHTML = moneyWithCny(total);
     const topupTarget = byId('#admin-topups');
     if (topupTarget) topupTarget.innerHTML = (overview.topups || []).map(item => {
       const company = agency(item.agency_id)?.name || 'Agency';
       const status = String(item.status || 'pending');
-      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td>${money(item.amount_cny)}</td><td><strong>₮ ${Number(item.total_mnt || 0).toLocaleString('en-US')}</strong></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
+      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><strong>${mnt(item.amount_mnt)}</strong><small class="currency-secondary">${cny(item.amount_cny)} CNY wallet credit</small></td><td><strong>${mnt(item.total_mnt)}</strong></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="7" class="no-bookings">No top-up invoices yet.</td></tr>';
     topupTarget.querySelectorAll('.topup-approve').forEach(button => button.insertAdjacentHTML('afterend', `<button class="secondary topup-delete" data-topup-id="${button.dataset.topupId}">Delete</button>`));
   };
@@ -51,7 +55,7 @@
   const closeModal = element => element.close();
   const openAgency = () => {
     const element = modal();
-    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">NEW AGENCY</p><h2>Create agency account</h2><p>Creates an isolated wallet and booking workspace.</p><label>Agency name<input name="name" required placeholder="e.g. Airmarket Travel" /></label><label>Main office / branch<input name="branchName" placeholder="e.g. Main office" /></label><label>Opening balance (CNY)<input name="initialBalance" type="number" step="0.01" min="0" value="0" /></label><p class="admin-form-error" hidden></p><button class="primary full">Create agency</button></form>`;
+    element.innerHTML = `<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">NEW AGENCY</p><h2>Create agency account</h2><p>Creates an isolated wallet and booking workspace.</p><label>Agency name<input name="name" required placeholder="e.g. Airmarket Travel" /></label><label>Main office / branch<input name="branchName" placeholder="e.g. Main office" /></label><label>Opening balance (MNT)<input name="initialBalanceMnt" type="number" step="1" min="0" value="0" /></label><p class="admin-form-error" hidden></p><button class="primary full">Create agency</button></form>`;
     element.showModal(); element.querySelector('.close').onclick = () => closeModal(element);
     element.querySelector('form').onsubmit = async event => { event.preventDefault(); const form = new FormData(event.currentTarget); const submit = event.currentTarget.querySelector('.primary'); const error = event.currentTarget.querySelector('.admin-form-error'); submit.disabled = true; try { await api('/api/admin/agencies', { method: 'POST', body: JSON.stringify(Object.fromEntries(form)) }); closeModal(element); await load(); notify('Agency created.'); } catch (issue) { error.textContent = issue.message; error.hidden = false; submit.disabled = false; } };
   };
@@ -94,7 +98,7 @@
     if (!confirm(`Delete ${name}? If it has booking or financial history, the system will require deactivation instead.`)) return;
     try { await api(`/api/admin/${type}/${id}`, { method: 'DELETE' }); await load(); notify(`${type === 'agencies' ? 'Agency' : 'User'} deleted.`); } catch (issue) { notify(issue.message); }
   };
-  const load = async () => { try { overview = await api('/api/admin/overview'); render(byId('#agency-filter')?.value); } catch (error) { notify(error.message); } };
+  const load = async () => { try { const [nextOverview, rateResponse] = await Promise.all([api('/api/admin/overview'), fetch('/api/fx/cny-mnt')]); overview = nextOverview; if (rateResponse.ok) fxRate = await rateResponse.json(); render(byId('#agency-filter')?.value); } catch (error) { notify(error.message); } };
   const setup = () => {
     byId('#agency-filter')?.addEventListener('input', event => render(event.target.value));
     byId('#add-agency')?.addEventListener('click', openAgency);
@@ -118,6 +122,7 @@
     byId('#admin-topups')?.addEventListener('click', async event => { const approve = event.target.closest('.topup-approve'); const remove = event.target.closest('.topup-delete'); const button = approve || remove; if (!button) return; const deleting = Boolean(remove); if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { if (deleting) await api(`/api/topups/${button.dataset.topupId}`, { method: 'DELETE' }); else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
+    setInterval(() => { if (document.visibilityState === 'visible' && session().accessToken) load(); }, 5000);
   };
   window.loadAdministration = load;
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', setup) : setup();

@@ -1,4 +1,4 @@
-import { getCnyMntRate, quoteCnyToMnt } from './fx-rate.mjs';
+import { getCnyMntRate } from './fx-rate.mjs';
 
 const trimSlash = value => String(value || '').replace(/\/+$/, '');
 
@@ -110,7 +110,7 @@ export async function getAdminOverview() {
     secretRequest('/rest/v1/branches?select=id,agency_id,name&order=name.asc'),
     secretRequest('/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,active,created_at&order=full_name.asc'),
     secretRequest('/rest/v1/wallets?select=agency_id,balance_cny,updated_at'),
-    secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,total_mnt,status,created_at&order=created_at.desc')
+    secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,amount_mnt,total_mnt,status,created_at&order=created_at.desc')
   ]);
   return { agencies, branches, profiles, wallets, topups };
 }
@@ -199,13 +199,15 @@ export async function deleteUser(id) {
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || 'Unable to delete user.'); }
 }
 
-export async function createTopupRequest({ profile, amount, paymentReference, note }) {
+export async function createTopupRequest({ profile, amountMnt, paymentReference, note }) {
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
+  const walletAmountMnt = Math.round(Number(amountMnt));
+  if (!Number.isFinite(walletAmountMnt) || walletAmountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
   const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const rate = await getCnyMntRate();
-  const amountMnt = quoteCnyToMnt(amount, rate);
-  const serviceFeeMnt = Math.round(amountMnt * 0.03);
-  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: Number(amount), amount_mnt: amountMnt, service_fee_mnt: serviceFeeMnt, total_mnt: amountMnt + serviceFeeMnt, official_cny_mnt_rate: rate.officialRateMnt, markup_mnt: rate.markupMnt, effective_cny_mnt_rate: rate.effectiveRateMnt, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
+  const amountCny = Number((walletAmountMnt / Number(rate.effectiveRateMnt)).toFixed(2));
+  const serviceFeeMnt = Math.round(walletAmountMnt * 0.03);
+  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: amountCny, amount_mnt: walletAmountMnt, service_fee_mnt: serviceFeeMnt, total_mnt: walletAmountMnt + serviceFeeMnt, official_cny_mnt_rate: rate.officialRateMnt, markup_mnt: rate.markupMnt, effective_cny_mnt_rate: rate.effectiveRateMnt, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
   return created[0];
 }
 
@@ -216,11 +218,12 @@ export async function getTopupRequests(profile) {
 
 export async function getWalletDetails(profile) {
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency wallet.');
-  const [wallets, transactions] = await Promise.all([
+  const [wallets, transactions, rate] = await Promise.all([
     secretRequest(`/rest/v1/wallets?select=agency_id,balance_cny,updated_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&limit=1`),
-    secretRequest(`/rest/v1/wallet_transactions?select=id,entry_type,amount_cny,reason,created_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&order=created_at.desc&limit=100`)
+    secretRequest(`/rest/v1/wallet_transactions?select=id,entry_type,amount_cny,reason,created_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&order=created_at.desc&limit=100`),
+    getCnyMntRate()
   ]);
-  return { wallet: wallets[0] || { balance_cny: 0 }, transactions };
+  return { wallet: wallets[0] || { balance_cny: 0 }, transactions, rate };
 }
 
 const bookingAccessFilter = profile => {
