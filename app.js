@@ -387,7 +387,25 @@ const showChangeFlow = (modal, booking) => {
     modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Change summary</h2><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${yen(changeFee)}</b></div><div><span>Fare difference</span><b>${yen(fareDifference)}</b></div><div class="fee-total"><span>Additional payment</span><strong>${yen(additional)}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm change request</button></div></section>`;
     modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
     modal.querySelector('.back-booking').addEventListener('click', () => showChangeFlow(modal, booking));
-    modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} is prepared. Spring submission will be enabled next.`); });
+    modal.querySelector('.confirm-change').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const original = button.textContent;
+      button.textContent = 'Checking wallet…';
+      try {
+        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-wallet-check`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amountCny: additional })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Wallet balance check failed.');
+        modal.close();
+        toast(`Wallet balance is sufficient for ${yen(additional)}. Change submission to Spring will be enabled next.`);
+      } catch (error) {
+        toast(error.message || 'Wallet balance is insufficient.');
+        button.disabled = false;
+        button.textContent = original;
+      }
+    });
   });
 };
 const showNoShowFlow = (modal, booking) => {

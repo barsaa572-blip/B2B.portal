@@ -98,6 +98,21 @@
   const setup = () => {
     byId('#agency-filter')?.addEventListener('input', event => render(event.target.value));
     byId('#add-agency')?.addEventListener('click', openAgency);
+    byId('#clear-wallets')?.addEventListener('click', async event => {
+      const confirmation = window.prompt('This will set every agency wallet balance to 0 and permanently delete all wallet ledger history. Type RESET WALLETS to continue.');
+      if (confirmation === null) return;
+      if (confirmation !== 'RESET WALLETS') return notify('Wallet reset cancelled: confirmation text did not match.');
+      event.currentTarget.disabled = true;
+      try {
+        await api('/api/admin/wallet-reset', { method: 'POST', body: JSON.stringify({ confirmation }) });
+        await load();
+        notify('All wallet balances and wallet ledger history have been cleared.');
+      } catch (issue) {
+        notify(issue.message || 'Unable to clear wallet data.');
+      } finally {
+        event.currentTarget.disabled = false;
+      }
+    });
     byId('#add-user')?.addEventListener('click', openUser);
     byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('agency-open')) openAgencyAccess(button.dataset.agencyId); if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
     byId('#admin-topups')?.addEventListener('click', async event => { const approve = event.target.closest('.topup-approve'); const remove = event.target.closest('.topup-delete'); const button = approve || remove; if (!button) return; const deleting = Boolean(remove); if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { if (deleting) await api(`/api/topups/${button.dataset.topupId}`, { method: 'DELETE' }); else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });

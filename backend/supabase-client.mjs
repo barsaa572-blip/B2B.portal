@@ -142,6 +142,26 @@ export async function adjustWallet({ agencyId, amount, reason, createdBy }) {
   return secretRequest('/rest/v1/rpc/platform_adjust_wallet', { method: 'POST', body: { p_agency_id: agencyId, p_amount: Number(amount), p_reason: reason, p_created_by: createdBy } });
 }
 
+// This is deliberately a check only. The actual debit must be performed in
+// the same server-side transaction that confirms Spring payment/issuance.
+// Until Spring's payment endpoint is integrated, the portal must never create
+// a ledger debit merely because a local test ticket status was changed.
+export async function assertWalletFunds({ agencyId, amountCny, actorId }) {
+  const amount = Number(amountCny);
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('A valid wallet amount is required.');
+  return secretRequest('/rest/v1/rpc/assert_wallet_funds', {
+    method: 'POST',
+    body: { p_agency_id: agencyId, p_amount_cny: amount, p_actor_id: actorId }
+  });
+}
+
+export async function clearAllWalletBalancesAndHistory({ createdBy }) {
+  return secretRequest('/rest/v1/rpc/platform_reset_all_wallets', {
+    method: 'POST',
+    body: { p_created_by: createdBy }
+  });
+}
+
 export async function updateAgency(id, { name, active }) {
   const body = {};
   if (name !== undefined) body.name = name;
@@ -239,7 +259,7 @@ export async function createPortalBooking(profile, { totalCny, itinerary, passen
 }
 
 export async function updatePortalBooking(profile, pnr, status) {
-  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status,created_at&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status,created_at,total_cny&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
   const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
@@ -251,6 +271,7 @@ export async function updatePortalBooking(profile, pnr, status) {
     if (!Number.isFinite(deadline) || Date.now() >= deadline) {
       throw new Error('The 30-minute ticketing deadline has passed. Spring may have cancelled this reservation automatically.');
     }
+    await assertWalletFunds({ agencyId: booking.agency_id, amountCny: booking.total_cny, actorId: profile.id });
   }
   const reservationGuard = status === 'Ticketed' ? '&status=eq.Reserved' : '';
   const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}${reservationGuard}`, { method: 'PATCH', body: { status } });
