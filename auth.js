@@ -12,7 +12,16 @@
   const validStoredSession = stored && stored.accessToken && stored.profile && roles[roleKey(stored.profile.role)];
   if (savedSession && !validStoredSession) sessionStorage.removeItem('flightb2b-session');
   const escape = value => String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
-  const signOut = () => { sessionStorage.removeItem('flightb2b-session'); sessionStorage.removeItem('flightb2b-demo-session'); location.reload(); };
+  const signOut = () => {
+    sessionStorage.removeItem('flightb2b-session');
+    sessionStorage.removeItem('flightb2b-demo-session');
+    document.body.classList.remove('role-agent', 'role-office', 'role-platform');
+    root.hidden = false;
+    render();
+  };
+  // API calls use this when Supabase rejects an expired or revoked access token.
+  // The portal must never continue showing data for a session that is no longer valid.
+  window.forcePortalSignOut = signOut;
   const bindSidebarAccount = session => {
     const avatar = document.querySelector('#sidebar-avatar');
     const role = document.querySelector('#sidebar-role');

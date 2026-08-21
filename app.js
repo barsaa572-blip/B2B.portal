@@ -940,9 +940,16 @@ document.querySelector('#search-form').addEventListener('submit', async e => {
 });
 bindFlightButtons();
 const topup = document.querySelector('#topup-modal'); topup.querySelector('.close').addEventListener('click', () => topup.close());
-const toast = message => { const t=document.querySelector('#toast');t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400); };
+const toast = message => { if (message === '__SESSION_EXPIRED__') return; const t=document.querySelector('#toast');t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400); };
 const portalSession = () => JSON.parse(sessionStorage.getItem('flightb2b-session') || '{}');
-const secureFetch = async (url, options = {}) => fetch(url, { ...options, headers: { authorization: `Bearer ${portalSession().accessToken}`, ...(options.headers || {}) } });
+const secureFetch = async (url, options = {}) => {
+  const response = await fetch(url, { ...options, headers: { authorization: `Bearer ${portalSession().accessToken}`, ...(options.headers || {}) } });
+  if (response.status === 401 || response.status === 403) {
+    window.forcePortalSignOut?.();
+    throw new Error('__SESSION_EXPIRED__');
+  }
+  return response;
+};
 const portalBookingFromRow = row => {
   const itinerary = row.itinerary || {};
   const travellers = row.passengers?.travellers || [];

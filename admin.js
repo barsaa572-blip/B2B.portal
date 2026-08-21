@@ -13,6 +13,10 @@
     const current = session();
     const response = await fetch(path, { ...options, headers: { authorization: `Bearer ${current.accessToken}`, 'content-type': 'application/json', ...(options.headers || {}) } });
     const data = await response.json().catch(() => ({}));
+    if (response.status === 401 || response.status === 403) {
+      window.forcePortalSignOut?.();
+      throw new Error('__SESSION_EXPIRED__');
+    }
     if (!response.ok) throw new Error(data.error || 'Request failed.');
     return data;
   };
