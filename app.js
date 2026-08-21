@@ -1217,3 +1217,12 @@ loadPricingRate();
 loadTopupInvoices();
 loadWallet();
 
+// Wallet funding can be approved from a platform-admin session on another
+// device. Polling keeps an agent's open dashboard and Wallet page current
+// without asking the agent to refresh the browser manually.
+setInterval(() => {
+  if (document.visibilityState !== 'visible' || !portalSession().accessToken) return;
+  loadWallet();
+  loadTopupInvoices();
+}, 10000);
+
