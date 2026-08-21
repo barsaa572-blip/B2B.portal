@@ -1,3 +1,6 @@
+import http from 'node:http';
+import https from 'node:https';
+
 const xmlEscape = value => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -24,6 +27,38 @@ const finiteNumber = value => {
   return Number.isFinite(result) ? result : null;
 };
 
+// Spring's legacy JAX-WS service resets some chunked requests sent by undici
+// (the transport behind Node's fetch).  Use the native HTTP client so this
+// SOAP request is HTTP/1.1 with an explicit Content-Length, just like the
+// supplier's XML demo.
+const postSoapXml = (endpoint, xml) => new Promise((resolve, reject) => {
+  const url = new URL(endpoint);
+  const transport = url.protocol === 'https:' ? https : http;
+  const request = transport.request({
+    protocol: url.protocol,
+    hostname: url.hostname,
+    port: url.port || undefined,
+    path: `${url.pathname}${url.search}`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      Accept: 'text/xml, application/xml, */*',
+      SOAPAction: '""',
+      'Content-Length': Buffer.byteLength(xml, 'utf8'),
+      Connection: 'close'
+    },
+    timeout: 30_000
+  }, response => {
+    let responseXml = '';
+    response.setEncoding('utf8');
+    response.on('data', chunk => { responseXml += chunk; });
+    response.on('end', () => resolve({ status: response.statusCode || 0, ok: (response.statusCode || 0) >= 200 && (response.statusCode || 0) < 300, text: responseXml }));
+  });
+  request.once('timeout', () => request.destroy(new Error('SOAP request timed out.')));
+  request.once('error', reject);
+  request.end(xml, 'utf8');
+});
+
 export function getSpringSoapStatus(env = process.env) {
   const endpoint = serviceEndpoint(env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
   const configured = Boolean(endpoint && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD);
@@ -35,7 +70,7 @@ export function getSpringSoapStatus(env = process.env) {
   };
 }
 
-export function createSpringSoapClient(env = process.env, fetchImpl = fetch) {
+export function createSpringSoapClient(env = process.env) {
   const endpoint = serviceEndpoint(env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
   const username = String(env.SPRING_XML_USERNAME || '').trim();
   const password = String(env.SPRING_XML_PASSWORD || '').trim();
@@ -58,15 +93,7 @@ export function createSpringSoapClient(env = process.env, fetchImpl = fetch) {
 
     let response;
     try {
-      response = await fetchImpl(endpoint, {
-        method: 'POST',
-        headers: {
-          'content-type': 'text/xml; charset=utf-8',
-          accept: 'text/xml, application/xml, */*',
-          SOAPAction: '""'
-        },
-        body
-      });
+      response = await postSoapXml(endpoint, body);
     } catch (error) {
       // Keep the browser message useful without exposing the SOAP body, XML
       // credentials, or any part of the request payload.
@@ -74,7 +101,7 @@ export function createSpringSoapClient(env = process.env, fetchImpl = fetch) {
       throw new Error(`Spring credit payment network request failed: ${detail}`);
     }
 
-    const responseXml = await response.text();
+    const responseXml = response.text;
     const result = {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
