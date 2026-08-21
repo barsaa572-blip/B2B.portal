@@ -105,9 +105,18 @@ export function createSpringSoapClient(env = process.env) {
     const result = {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
-      errMsg: xmlValue(responseXml, 'errMsg')
+      errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring')
     };
     if (!response.ok || result.ifSuccess !== 'Y') {
+      // Keep the SOAP response in the server journal only.  It contains no
+      // request credentials, and lets us see Spring's exact business error.
+      console.warn('Spring credit payment rejected', {
+        httpStatus: response.status,
+        ifSuccess: result.ifSuccess,
+        errCode: result.errCode,
+        errMsg: result.errMsg,
+        response: String(responseXml).slice(0, 6000)
+      });
       const detail = result.errMsg || `Spring credit payment failed (${response.status}).`;
       throw new Error(`Spring credit payment failed${result.errCode ? ` (${result.errCode})` : ''}: ${detail}`);
     }
