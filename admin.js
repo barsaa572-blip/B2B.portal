@@ -10,8 +10,9 @@
   const moneyWithCny = value => `${money(value)}<small class="currency-secondary">${cny(value)} CNY</small>`;
   const notify = message => { const toast = byId('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); };
   const api = async (path, options = {}) => {
-    const current = session();
-    const response = await fetch(path, { ...options, headers: { authorization: `Bearer ${current.accessToken}`, 'content-type': 'application/json', ...(options.headers || {}) } });
+    const request = () => { const current = session(); return fetch(path, { ...options, headers: { authorization: `Bearer ${current.accessToken}`, 'content-type': 'application/json', ...(options.headers || {}) } }); };
+    let response = await request();
+    if ((response.status === 401 || response.status === 403) && await window.refreshPortalSession?.()) response = await request();
     const data = await response.json().catch(() => ({}));
     if (response.status === 401 || response.status === 403) {
       window.forcePortalSignOut?.();

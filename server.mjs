@@ -7,7 +7,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, refreshAuthSession, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -900,7 +900,13 @@ if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(
 if (url.pathname === '/api/auth/login' && req.method === 'POST') { try { const { email, password } = await readJson(req);
 if (!email || !password) return send(res, 400, { error: 'Email and password are required.' });
 const session = await signInWithPassword(email, password);
-const profile = await profileForAccessToken(session.access_token); return send(res, 200, { accessToken: session.access_token, expiresIn: session.expires_in, profile }); } catch (error) { return send(res, 401, { error: error.message || 'Sign in failed.' }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await profileForAccessToken(bearer(req));
+const profile = await profileForAccessToken(session.access_token); return send(res, 200, { accessToken: session.access_token, refreshToken: session.refresh_token, expiresIn: session.expires_in, profile }); } catch (error) { return send(res, 401, { error: error.message || 'Sign in failed.' }); } }
+if (url.pathname === '/api/auth/refresh' && req.method === 'POST') { try {
+const { refreshToken } = await readJson(req);
+const session = await refreshAuthSession(refreshToken);
+const profile = await profileForAccessToken(session.access_token);
+return send(res, 200, { accessToken: session.access_token, refreshToken: session.refresh_token, expiresIn: session.expires_in, profile });
+} catch (error) { return send(res, 401, { error: error.message || 'Your login session has expired.' }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await profileForAccessToken(bearer(req));
 if (url.pathname === '/api/topups' && req.method === 'GET') return send(res, 200, await getTopupRequests(profile));
 if (url.pathname === '/api/topups' && req.method === 'POST') { const body = await readJson(req);
 const amountMnt = Number(body.amountMnt);

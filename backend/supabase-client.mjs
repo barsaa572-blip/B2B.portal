@@ -45,6 +45,20 @@ export async function signInWithPassword(email, password) {
   return data;
 }
 
+export async function refreshAuthSession(refreshToken) {
+  const { publishableKey, configured } = config();
+  if (!configured) throw new Error('Authentication is not configured on this server.');
+  if (!refreshToken) throw new Error('Your login session has expired.');
+  const response = await request('/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST',
+    headers: { apikey: publishableKey },
+    body: { refresh_token: refreshToken }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.access_token) throw new Error('Your login session has expired.');
+  return data;
+}
+
 export async function profileForAccessToken(accessToken) {
   const { publishableKey, secretKey, configured } = config();
   if (!configured) throw new Error('Authentication is not configured on this server.');
