@@ -12,9 +12,9 @@
   const api = async (path, options = {}) => {
     const request = () => { const current = session(); return fetch(path, { ...options, headers: { authorization: `Bearer ${current.accessToken}`, 'content-type': 'application/json', ...(options.headers || {}) } }); };
     let response = await request();
-    if ((response.status === 401 || response.status === 403) && await window.refreshPortalSession?.()) response = await request();
+    if (response.status === 401 && await window.refreshPortalSession?.()) response = await request();
     const data = await response.json().catch(() => ({}));
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       window.forcePortalSignOut?.();
       throw new Error('__SESSION_EXPIRED__');
     }

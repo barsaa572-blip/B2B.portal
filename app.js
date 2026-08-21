@@ -945,8 +945,8 @@ const portalSession = () => JSON.parse(sessionStorage.getItem('flightb2b-session
 const secureFetch = async (url, options = {}) => {
   const request = () => fetch(url, { ...options, headers: { authorization: `Bearer ${portalSession().accessToken}`, ...(options.headers || {}) } });
   let response = await request();
-  if ((response.status === 401 || response.status === 403) && await window.refreshPortalSession?.()) response = await request();
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401 && await window.refreshPortalSession?.()) response = await request();
+  if (response.status === 401) {
     window.forcePortalSignOut?.();
     throw new Error('__SESSION_EXPIRED__');
   }
