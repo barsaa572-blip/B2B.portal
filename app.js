@@ -299,7 +299,7 @@ const showCancelFlow = (modal, booking) => {
       const quoteMnt = data.quote?.amountsMnt || {};
       const amount = key => Number.isFinite(Number(quoteMnt[key])) ? mnt(quoteMnt[key]) : Number.isFinite(Number(quote[key])) ? yen(quote[key]) : '—';
       const refundRate = data.quote?.refundRate;
-      modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Spring refund calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines for PNR ${booking.ref}. Any no-show condition is included in this calculation.</p><section class="summary-selection"><h3>Flights to cancel</h3>${selectedLegs.map(leg => `<div><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div>`).join('')}<h3>Passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="fee-summary"><div><span>Refundable ticket amount</span><b>${amount('ticketAmount')}</b></div><div><span>Refundable fare</span><b>${amount('refundableFare')}</b></div><div><span>Refundable taxes</span><b>${amount('refundableTaxes')}</b></div><div><span>Airline cancellation / no-show fee</span><b>− ${amount('cancellationFee')}</b></div><div><span>Non-refundable amount</span><b>− ${amount('nonRefundable')}</b></div><div class="fee-total"><span>Refund</span><strong>${amount('refund')}</strong></div></section><p class="booking-warning">This uses the Spring Airlines calculation. Refund amounts are converted with ${refundRate?.bank || 'Golomt Bank'} non-cash buy rate${refundRate?.nonCashBuyMnt ? ` (${Number(refundRate.nonCashBuyMnt).toLocaleString()} MNT/CNY)` : ''}. The actual refund is not submitted yet; the next step needs the Spring order-detail IDs.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel" disabled>Refund submission coming next</button></div></section>`;
+      modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CANCEL TICKET</p><h2>Spring refund calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines for PNR ${booking.ref}. Any no-show condition is included in this calculation.</p><section class="summary-selection"><h3>Flights to cancel</h3>${selectedLegs.map(leg => `<div><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div>`).join('')}<h3>Passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="fee-summary"><div><span>Refundable ticket amount</span><b>${amount('ticketAmount')}</b></div><div><span>Refundable fare</span><b>${amount('refundableFare')}</b></div><div><span>Refundable taxes</span><b>${amount('refundableTaxes')}</b></div><div><span>Airline cancellation / no-show fee</span><b>− ${amount('cancellationFee')}</b></div><div><span>Non-refundable amount</span><b>− ${amount('nonRefundable')}</b></div><div class="fee-total"><span>Refund</span><strong>${amount('refund')}</strong></div></section><p class="booking-warning">This uses Spring Airlines’ live calculation. Confirming submits the full-PNR refund to Spring; the agency wallet is not credited until the airline settlement is confirmed.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel">Confirm refund</button></div></section>`;
     } catch (error) {
       toast(error.message || 'Spring refund calculation failed.');
       event.currentTarget.disabled = false;
@@ -308,6 +308,14 @@ const showCancelFlow = (modal, booking) => {
     }
     modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
     modal.querySelector('.back-booking').addEventListener('click', () => showCancelFlow(modal, booking));
+    modal.querySelector('.confirm-cancel').addEventListener('click', async event => {
+      const button = event.currentTarget; button.disabled = true; button.textContent = 'Submitting refund…';
+      try {
+        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/refund-submit`, { method: 'POST' });
+        const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Spring refund submission failed.');
+        modal.close(); toast(`Refund submitted to Spring for ${booking.ref}.`); showView('bookings');
+      } catch (error) { button.disabled = false; button.textContent = 'Confirm refund'; toast(error.message || 'Spring refund submission failed.'); }
+    });
   });
 };
 const showChangeFlow = (modal, booking) => {
@@ -323,7 +331,7 @@ const showChangeFlow = (modal, booking) => {
     let loadingMonth = ''; let loadedMonth = '';
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {
-      const option = (flight, checked) => { const difference = Number(flight.fareDifferenceCny || 0); const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}|${difference}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${difference > 0 ? `+ ${yen(difference)}` : 'No fare difference'}</b></label>`; };
+      const option = (flight, checked) => { const difference = Number(flight.fareDifferenceCny || 0); const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}|${difference}" data-segment-head-id="${flight.segmentHeadId || ''}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${difference > 0 ? `+ ${yen(difference)}` : 'No fare difference'}</b></label>`; };
       choices.innerHTML = `<h3>Available flights on ${date}</h3>${flights.map((flight, index) => option(flight, index === 0)).join('')}<div class="pre-calculate-fare">Fare difference <strong>${Number(flights[0]?.fareDifferenceCny || 0) > 0 ? `+ ${yen(flights[0].fareDifferenceCny)}` : 'No fare difference'}</strong></div>`;
       const setChoice = input => { const [, timing, fare] = input.value.split('|'); trigger.dataset.fare = fare; trigger.dataset.flight = input.value.split('|')[0]; trigger.dataset.time = timing; const amount = Number(fare || 0); choices.querySelector('.pre-calculate-fare').innerHTML = `Fare difference <strong>${amount > 0 ? `+ ${yen(amount)}` : 'No fare difference'}</strong>`; };
       choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => setChoice(input)));
@@ -377,37 +385,63 @@ const showChangeFlow = (modal, booking) => {
   modal.querySelectorAll('[name="change-flow-leg"]').forEach(input => input.addEventListener('change', renderReplacements));
   modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
   modal.querySelector('.back-booking').addEventListener('click', () => openBookingDetail(booking.ref));
-  modal.querySelector('.calculate-change-flow').addEventListener('click', () => {
+  modal.querySelector('.calculate-change-flow').addEventListener('click', async event => {
     const selectedLegs = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked);
     const passengers = selectedPassengerNames(modal, 'change-flow', booking);
     const selectedNewFlights = selectedLegs.map(leg => modal.querySelector(`[name="daily-${leg.key}"]:checked`));
     if (!selectedLegs.length || !passengers.length || selectedNewFlights.some(flight => !flight)) return toast('Select flights, passengers, and replacement flights.');
-    const changeFee = 150 * selectedLegs.length * passengers.length;
-    const fareDifference = selectedNewFlights.reduce((total, input) => total + Number(input.value.split('|')[2]) * passengers.length, 0);
-    const additional = changeFee + fareDifference;
-    const comparisons = selectedLegs.map((leg, index) => { const [number, time, fare] = selectedNewFlights[index].value.split('|'); return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${leg.route}</strong><span>Spring Airlines &middot; ${number} &middot; ${time}</span><em>+ ${yen(fare)}</em></div></div>`; }).join('');
-    modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Change summary</h2><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${yen(changeFee)}</b></div><div><span>Fare difference</span><b>${yen(fareDifference)}</b></div><div class="fee-total"><span>Additional payment</span><strong>${yen(additional)}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm change request</button></div></section>`;
-    modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
-    modal.querySelector('.back-booking').addEventListener('click', () => showChangeFlow(modal, booking));
-    modal.querySelector('.confirm-change').addEventListener('click', async event => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      const original = button.textContent;
-      button.textContent = 'Checking wallet…';
-      try {
-        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-wallet-check`, {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amountCny: additional })
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Wallet balance check failed.');
-        modal.close();
-        toast(`Wallet balance is sufficient for ${yen(additional)}. Change submission to Spring will be enabled next.`);
-      } catch (error) {
-        toast(error.message || 'Wallet balance is insufficient.');
-        button.disabled = false;
-        button.textContent = original;
-      }
-    });
+    const pairs = selectedLegs.map((leg, index) => ({
+      flightsOrderHeadId: Number(leg.orderItemId),
+      segHeadId: Number(selectedNewFlights[index].dataset.segmentHeadId)
+    }));
+    if (pairs.some(pair => !Number.isFinite(pair.flightsOrderHeadId) || !Number.isFinite(pair.segHeadId))) return toast('The selected flight is missing its Spring order information. Please sync the booking first.');
+    const calculate = event.currentTarget;
+    calculate.disabled = true;
+    calculate.textContent = 'Calculating…';
+    try {
+      const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-quote`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bgPairList: pairs })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Spring change calculation failed.');
+      const quote = data.quote;
+      const cny = quote.amountsCny || {};
+      const mnt = quote.amountsMnt || {};
+      const display = (key) => Number.isFinite(Number(mnt[key])) ? `₮ ${Number(mnt[key]).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : yen(cny[key] || 0);
+      const comparisons = selectedLegs.map((leg, index) => { const [number, time] = selectedNewFlights[index].value.split('|'); return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${leg.route}</strong><span>Spring Airlines &middot; ${number} &middot; ${time}</span></div></div>`; }).join('');
+      const gateway = Number(cny.paymentFee || 0) > 0 ? `<div><span>Payment gateway fee</span><b>${display('paymentFee')}</b></div>` : '';
+      modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Spring change calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines before submitting the change request.</p><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${display('changeFee')}</b></div><div><span>Fare difference</span><b>${display('fareDifference')}</b></div>${gateway}<div class="fee-total"><span>Additional payment</span><strong>${display('additionalPayment')}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm change request</button></div></section>`;
+      modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
+      modal.querySelector('.back-booking').addEventListener('click', () => showChangeFlow(modal, booking));
+      modal.querySelector('.confirm-change').addEventListener('click', async confirmEvent => {
+        const button = confirmEvent.currentTarget;
+        button.disabled = true;
+        button.textContent = 'Submitting to Spring…';
+        try {
+          const walletResponse = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-wallet-check`, {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amountCny: Number(cny.additionalPayment || 0) })
+          });
+          const walletData = await walletResponse.json();
+          if (!walletResponse.ok) throw new Error(walletData.error || 'Wallet balance check failed.');
+          const submitResponse = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-submit`, {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ appId: quote.appId })
+          });
+          const submitData = await submitResponse.json();
+          if (!submitResponse.ok) throw new Error(submitData.error || 'Spring change submission failed.');
+          modal.close();
+          toast(`Spring change request submitted for ${booking.ref}.`);
+          showView('bookings');
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'Confirm change request';
+          toast(error.message || 'Spring change submission failed.');
+        }
+      });
+    } catch (error) {
+      calculate.disabled = false;
+      calculate.textContent = 'Calculate change';
+      toast(error.message || 'Spring change calculation failed.');
+    }
   });
 };
 const showNoShowFlow = (modal, booking) => {

@@ -878,6 +878,72 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
   return value;
 }
 
+const springSucceeded = result => String(result?.ifSuccess || '').toUpperCase() === 'Y';
+
+async function ticketedSpringBooking(profile, pnr) {
+  const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
+  if (!booking) throw new Error('Booking not found or you do not have access to it.');
+  if (booking.status !== 'Ticketed') throw new Error('Only a ticketed booking can use this Spring action.');
+  if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+  return booking;
+}
+
+async function calculateLiveSpringChange(profile, pnr, bgPairList) {
+  await ticketedSpringBooking(profile, pnr);
+  if (!Array.isArray(bgPairList) || !bgPairList.length) throw new Error('Select at least one replacement flight.');
+  const pairs = bgPairList.map(pair => ({
+    flightsOrderHeadId: Number(pair.flightsOrderHeadId),
+    segHeadId: Number(pair.segHeadId)
+  })).filter(pair => Number.isFinite(pair.flightsOrderHeadId) && Number.isFinite(pair.segHeadId));
+  if (!pairs.length) throw new Error('The selected Spring order item or replacement flight is invalid.');
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const result = await client.getChangeAvailability({
+    bgPairList: pairs,
+    lang: 'zh_cn',
+    remoteIp: process.env.SPRING_REMOTE_IP || ''
+  }, token.accessToken);
+  if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring change calculation failed.');
+  const application = result?.flightBgAppInfo?.flightBgAppDO;
+  if (!Number.isFinite(Number(application?.id))) throw new Error('Spring did not return a change application ID.');
+  const cny = {
+    fareDifference: Number(application.shengcangMoney || 0),
+    changeFee: Number(application.bgFy || 0),
+    paymentFee: Number(application.payGateFy || 0)
+  };
+  cny.additionalPayment = cny.fareDifference + cny.changeFee + cny.paymentFee;
+  const rate = await getCnyMntRate();
+  return {
+    appId: Number(application.id),
+    amountsCny: cny,
+    amountsMnt: Object.fromEntries(Object.entries(cny).map(([key, value]) => [key, quoteCnyToMnt(value, rate.topupRateMnt)])),
+    rate
+  };
+}
+
+async function submitLiveSpringChange(profile, pnr, appId) {
+  await ticketedSpringBooking(profile, pnr);
+  if (!Number.isFinite(Number(appId))) throw new Error('A valid Spring change application is required.');
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const result = await client.submitChange({
+    appId: Number(appId),
+    ip: process.env.SPRING_REMOTE_IP || '',
+    lang: 'zh_cn'
+  }, token.accessToken);
+  if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring change submission failed.');
+  return result;
+}
+
+async function submitLiveSpringRefund(profile, pnr) {
+  const booking = await ticketedSpringBooking(profile, pnr);
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const result = await client.refundTicket({ orderId: booking.pnr, calcType: 'O', orderHeadIds: [] }, token.accessToken);
+  if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring refund submission failed.');
+  return updatePortalBooking(profile, booking.pnr, 'Cancelled');
+}
+
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), springSoap: getSpringSoapStatus(), supabase: getSupabaseStatus() });
@@ -910,6 +976,8 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   if (refundQuoteMatch && req.method === 'POST') {
     return send(res, 200, { quote: await calculateLiveSpringRefund(profile, refundQuoteMatch[1]) });
   }
+  const refundSubmitMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/refund-submit$/);
+  if (refundSubmitMatch && req.method === 'POST') return send(res, 200, { booking: await submitLiveSpringRefund(profile, refundSubmitMatch[1]) });
   const changeCalendarMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-calendar$/);
   if (changeCalendarMatch && req.method === 'GET') {
     const orderItemId = url.searchParams.get('orderItemId');
@@ -927,6 +995,16 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     const amountCny = Number(body.amountCny);
     if (!Number.isFinite(amountCny) || amountCny < 0) throw new Error('A valid additional payment amount is required.');
     return send(res, 200, { wallet: await assertWalletFunds({ agencyId: booking.agency_id, amountCny, actorId: profile.id }) });
+  }
+  const changeQuoteMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-quote$/);
+  if (changeQuoteMatch && req.method === 'POST') {
+    const body = await readJson(req);
+    return send(res, 200, { quote: await calculateLiveSpringChange(profile, changeQuoteMatch[1], body.bgPairList) });
+  }
+  const changeSubmitMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-submit$/);
+  if (changeSubmitMatch && req.method === 'POST') {
+    const body = await readJson(req);
+    return send(res, 200, { result: await submitLiveSpringChange(profile, changeSubmitMatch[1], body.appId) });
   }
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {
