@@ -214,7 +214,8 @@ export async function createTopupRequest({ profile, amountMnt, paymentReference,
   // CNY transfer to a non-mainland beneficiary under OUR: 1%, min ¥50, max ¥260.
   const correspondentFeeCny = Number(Math.min(260, Math.max(50, amountCny * 0.01)).toFixed(2));
   const correspondentFeeMnt = Math.round(correspondentFeeCny * sellRate);
-  const khaanTransferFeeMnt = 7500;
+  // Khaan Bank CNY transfer tariff: ≤ ¥50k = ₮7,500; ≤ ¥100k = ₮10,000; above = ₮20,000.
+  const khaanTransferFeeMnt = amountCny <= 50_000 ? 7500 : amountCny <= 100_000 ? 10_000 : 20_000;
   const totalMnt = walletAmountMnt + serviceFeeMnt + correspondentFeeMnt + khaanTransferFeeMnt;
   const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: amountCny, amount_mnt: walletAmountMnt, service_fee_mnt: serviceFeeMnt, correspondent_fee_cny: correspondentFeeCny, correspondent_fee_mnt: correspondentFeeMnt, khaan_transfer_fee_mnt: khaanTransferFeeMnt, total_mnt: totalMnt, official_cny_mnt_rate: sellRate, markup_mnt: 0, effective_cny_mnt_rate: sellRate, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
   return created[0];

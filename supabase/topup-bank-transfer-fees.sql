@@ -7,3 +7,6 @@ alter table public.topup_requests
 
 comment on column public.topup_requests.correspondent_fee_cny is
   'OUR correspondent bank fee in CNY; currently 1%, minimum 50 CNY, maximum 260 CNY.';
+
+comment on column public.topup_requests.khaan_transfer_fee_mnt is
+  'Khaan Bank CNY transfer fee: 7500 MNT through 50,000 CNY; 10000 MNT through 100,000 CNY; 20000 MNT above.';
