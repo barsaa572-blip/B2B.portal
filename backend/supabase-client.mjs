@@ -142,16 +142,22 @@ export async function adjustWallet({ agencyId, amount, reason, createdBy }) {
   return secretRequest('/rest/v1/rpc/platform_adjust_wallet', { method: 'POST', body: { p_agency_id: agencyId, p_amount: Number(amount), p_reason: reason, p_created_by: createdBy } });
 }
 
-// This is deliberately a check only. The actual debit must be performed in
-// the same server-side transaction that confirms Spring payment/issuance.
-// Until Spring's payment endpoint is integrated, the portal must never create
-// a ledger debit merely because a local test ticket status was changed.
+// Used by change quotes until Spring's change submission endpoint is live.
+// Issuing a ticket uses issueBookingFromWallet below, which performs the
+// check, debit and status change in one database transaction.
 export async function assertWalletFunds({ agencyId, amountCny, actorId }) {
   const amount = Number(amountCny);
   if (!Number.isFinite(amount) || amount < 0) throw new Error('A valid wallet amount is required.');
   return secretRequest('/rest/v1/rpc/assert_wallet_funds', {
     method: 'POST',
     body: { p_agency_id: agencyId, p_amount_cny: amount, p_actor_id: actorId }
+  });
+}
+
+export async function issueBookingFromWallet({ bookingId, actorId }) {
+  return secretRequest('/rest/v1/rpc/issue_booking_from_wallet', {
+    method: 'POST',
+    body: { p_booking_id: bookingId, p_actor_id: actorId }
   });
 }
 
@@ -267,11 +273,9 @@ export async function updatePortalBooking(profile, pnr, status) {
   if (booking.status === 'Cancelled') throw new Error('This booking has already been cancelled.');
   if (status === 'Ticketed' && booking.status === 'Ticketed') throw new Error('This booking is already ticketed.');
   if (status === 'Ticketed' && booking.status === 'Reserved') {
-    const deadline = new Date(booking.created_at).getTime() + 30 * 60 * 1000;
-    if (!Number.isFinite(deadline) || Date.now() >= deadline) {
-      throw new Error('The 30-minute ticketing deadline has passed. Spring may have cancelled this reservation automatically.');
-    }
-    await assertWalletFunds({ agencyId: booking.agency_id, amountCny: booking.total_cny, actorId: profile.id });
+    await issueBookingFromWallet({ bookingId: booking.id, actorId: profile.id });
+    const issuedRows = await secretRequest(`/rest/v1/bookings?select=*&id=eq.${encodeURIComponent(booking.id)}&limit=1`);
+    return issuedRows[0];
   }
   const reservationGuard = status === 'Ticketed' ? '&status=eq.Reserved' : '';
   const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}${reservationGuard}`, { method: 'PATCH', body: { status } });
