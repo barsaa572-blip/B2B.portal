@@ -205,9 +205,18 @@ export async function createTopupRequest({ profile, amountMnt, paymentReference,
   if (!Number.isFinite(walletAmountMnt) || walletAmountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
   const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const rate = await getCnyMntRate();
-  const amountCny = Number((walletAmountMnt / Number(rate.effectiveRateMnt)).toFixed(2));
+  // The wallet credit itself is bought at Khaan Bank's non-cash sell rate.
+  // Portal, Khaan and correspondent-bank fees are payable charges; they do
+  // not increase the CNY wallet credit.
+  const sellRate = Number(rate.nonCashSellMnt);
+  const amountCny = Number((walletAmountMnt / sellRate).toFixed(2));
   const serviceFeeMnt = Math.round(walletAmountMnt * 0.03);
-  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: amountCny, amount_mnt: walletAmountMnt, service_fee_mnt: serviceFeeMnt, total_mnt: walletAmountMnt + serviceFeeMnt, official_cny_mnt_rate: rate.officialRateMnt, markup_mnt: rate.markupMnt, effective_cny_mnt_rate: rate.effectiveRateMnt, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
+  // CNY transfer to a non-mainland beneficiary under OUR: 1%, min ¥50, max ¥260.
+  const correspondentFeeCny = Number(Math.min(260, Math.max(50, amountCny * 0.01)).toFixed(2));
+  const correspondentFeeMnt = Math.round(correspondentFeeCny * sellRate);
+  const khaanTransferFeeMnt = 7500;
+  const totalMnt = walletAmountMnt + serviceFeeMnt + correspondentFeeMnt + khaanTransferFeeMnt;
+  const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: { invoice_number: invoiceNumber, agency_id: profile.agency_id, requested_by: profile.id, amount_cny: amountCny, amount_mnt: walletAmountMnt, service_fee_mnt: serviceFeeMnt, correspondent_fee_cny: correspondentFeeCny, correspondent_fee_mnt: correspondentFeeMnt, khaan_transfer_fee_mnt: khaanTransferFeeMnt, total_mnt: totalMnt, official_cny_mnt_rate: sellRate, markup_mnt: 0, effective_cny_mnt_rate: sellRate, rate_date: rate.rateDate, payment_reference: paymentReference || invoiceNumber, note: note || null } });
   return created[0];
 }
 

@@ -1,4 +1,6 @@
-const DEFAULT_TOPUP_MARKUP_MNT = 1.5;
+// The platform service fee is charged separately on the invoice. Do not add a
+// hidden exchange-rate markup to the agency's CNY wallet credit.
+const DEFAULT_TOPUP_MARKUP_MNT = 0;
 const DEFAULT_SOURCE = 'http://127.0.0.1:8000/api/rates/bank/KhanBank?limit=1';
 const CACHE_MS = 6 * 60 * 60 * 1000;
 let cachedRate = null;
