@@ -916,7 +916,10 @@ async function calculateLiveSpringChange(profile, pnr, bgPairList) {
   return {
     appId: Number(application.id),
     amountsCny: cny,
-    amountsMnt: Object.fromEntries(Object.entries(cny).map(([key, value]) => [key, quoteCnyToMnt(value, rate.topupRateMnt)])),
+    // quoteCnyToMnt expects the complete rate object so it can apply the
+    // configured CNY sell rate consistently. Passing only the numeric rate
+    // made it treat the rate as missing and blocked a valid Spring quote.
+    amountsMnt: Object.fromEntries(Object.entries(cny).map(([key, value]) => [key, quoteCnyToMnt(value, rate)])),
     rate
   };
 }
