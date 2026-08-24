@@ -955,7 +955,9 @@ async function submitLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) 
   const orderHeadIds = await resolveSpringOrderHeadIds(booking.pnr, requestedOrderHeadIds);
   const client = createSpringClient();
   const token = await client.getAccessToken();
-  const result = await client.refundTicket({ orderId: booking.pnr, calcType: 'O', orderHeadIds }, token.accessToken);
+  // Spring's refund submission endpoint does not reuse the calculation payload.
+  // It accepts only the selected passenger/order-head IDs as `orderHeadList`.
+  const result = await client.refundTicket({ orderHeadList: orderHeadIds }, token.accessToken);
   if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring refund submission failed.');
   return updatePortalBooking(profile, booking.pnr, 'Cancelled');
 }
