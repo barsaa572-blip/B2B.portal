@@ -12,7 +12,7 @@ Copy `.env.example` values to the hosting provider's environment settings. Do no
 
 The HTTP JSON routes are mapped in `spring-client.mjs`. Token signing is `uppercase(md5(appKey + "SHA2" + appSecret + timestamp + appKey))`; credentials must stay only in the server environment.
 
-Order detail (`getOrderDetailInfoC2`) is XML/SOAP. Its final XML envelope, SOAPAction, namespace, and response mapper must be implemented from Spring's XML example. This prevents sending an incorrectly guessed booking request.
+Order detail (`getOrderDetailInfoC2`) is XML/SOAP. Before calculating or submitting a refund, the backend looks up the PNR and resolves the supplier's `orderHeadId` values. The calculation and refund submit endpoints then use those same IDs. An optional `SPRING_ORDER_DETAIL_WSDL_URL` can be set; otherwise the configured credit-payment WSDL endpoint is reused.
 
 ## Database
 

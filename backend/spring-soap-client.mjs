@@ -21,6 +21,12 @@ const xmlValue = (xml, tag) => {
   return match ? xmlDecode(match[1].replace(/<[^>]*>/g, '').trim()) : null;
 };
 
+const xmlValues = (xml, tag) => {
+  const escaped = String(tag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matcher = new RegExp(`<(?:(?:[\\w.-]+):)?${escaped}\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?${escaped}>`, 'ig');
+  return Array.from(String(xml).matchAll(matcher), match => xmlDecode(match[1].replace(/<[^>]*>/g, '').trim()));
+};
+
 const serviceEndpoint = wsdlUrl => String(wsdlUrl || '').trim().replace(/[?&]wsdl(?:=[^&]*)?$/i, '');
 const finiteNumber = value => {
   const result = Number(value);
@@ -60,18 +66,20 @@ const postSoapXml = (endpoint, xml) => new Promise((resolve, reject) => {
 });
 
 export function getSpringSoapStatus(env = process.env) {
-  const endpoint = serviceEndpoint(env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
+  const endpoint = serviceEndpoint(env.SPRING_ORDER_DETAIL_WSDL_URL || env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
   const configured = Boolean(endpoint && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD);
   const enabled = env.SPRING_CREDIT_PAYMENT_ENABLED === 'true';
   return {
     creditPaymentEnabled: enabled,
     creditPaymentReady: enabled && configured,
-    creditPayment: 'payInCredit4OTA (XML/SOAP)'
+    creditPayment: 'payInCredit4OTA (XML/SOAP)',
+    orderDetailReady: configured,
+    orderDetail: 'getOrderDetailInfoC2 (XML/SOAP)'
   };
 }
 
 export function createSpringSoapClient(env = process.env) {
-  const endpoint = serviceEndpoint(env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
+  const endpoint = serviceEndpoint(env.SPRING_ORDER_DETAIL_WSDL_URL || env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
   const username = String(env.SPRING_XML_USERNAME || '').trim();
   const password = String(env.SPRING_XML_PASSWORD || '').trim();
 
@@ -123,5 +131,46 @@ export function createSpringSoapClient(env = process.env) {
     return result;
   }
 
-  return { payInCredit4OTA };
+  async function getOrderDetailInfoC2({ orderNo, lang = 'zh_cn' }) {
+    if (!endpoint || !username || !password) {
+      throw new Error('Spring XML order-detail configuration is incomplete on this server.');
+    }
+    const reference = String(orderNo || '').trim();
+    if (!reference) throw new Error('A Spring order number is required for order detail lookup.');
+
+    const body = `<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <i:getOrderDetailInfoC2 xmlns:i="http://wsinterface.remoteservice.booking.springairlines.com/">\n      <orderInfo>\n        <usernameToken><password>${xmlEscape(password)}</password><username>${xmlEscape(username)}</username></usernameToken>\n        <lang>${xmlEscape(lang)}</lang>\n        <orderNo>${xmlEscape(reference)}</orderNo>\n      </orderInfo>\n    </i:getOrderDetailInfoC2>\n  </soap:Body>\n</soap:Envelope>`;
+
+    let response;
+    try {
+      response = await postSoapXml(endpoint, body);
+    } catch (error) {
+      const detail = error?.cause?.message || error?.message || 'connection failed';
+      throw new Error(`Spring order-detail network request failed: ${detail}`);
+    }
+
+    const responseXml = response.text;
+    const result = {
+      ifSuccess: xmlValue(responseXml, 'ifSuccess'),
+      errCode: xmlValue(responseXml, 'errCode'),
+      errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring'),
+      orderHeadIds: [...new Set(xmlValues(responseXml, 'orderHeadId').map(Number).filter(value => Number.isSafeInteger(value) && value > 0))]
+    };
+    if (!response.ok || result.ifSuccess !== 'Y') {
+      console.warn('Spring order-detail lookup rejected', {
+        httpStatus: response.status,
+        ifSuccess: result.ifSuccess,
+        errCode: result.errCode,
+        errMsg: result.errMsg,
+        response: String(responseXml).slice(0, 6000)
+      });
+      throw new Error(`Spring order-detail lookup failed${result.errCode ? ` (${result.errCode})` : ''}: ${result.errMsg || `HTTP ${response.status}`}`);
+    }
+    if (!result.orderHeadIds.length) {
+      console.warn('Spring order-detail response contains no orderHeadId', { response: String(responseXml).slice(0, 6000) });
+      throw new Error('Spring order detail did not return an orderHeadId for this PNR.');
+    }
+    return result;
+  }
+
+  return { payInCredit4OTA, getOrderDetailInfoC2 };
 }

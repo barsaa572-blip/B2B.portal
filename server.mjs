@@ -642,19 +642,30 @@ const springAmount = (source, key) => {
   return Number.isFinite(value) ? value : null;
 };
 
-async function calculateLiveSpringRefund(profile, pnr) {
+const normaliseSpringOrderHeadIds = values => [...new Set((Array.isArray(values) ? values : [])
+  .map(value => Number(value))
+  .filter(value => Number.isSafeInteger(value) && value > 0))];
+
+async function resolveSpringOrderHeadIds(pnr, requestedIds = []) {
+  const detail = await createSpringSoapClient().getOrderDetailInfoC2({ orderNo: pnr, lang: 'zh_cn' });
+  const available = normaliseSpringOrderHeadIds(detail.orderHeadIds);
+  const requested = normaliseSpringOrderHeadIds(requestedIds);
+  if (!requested.length) return available;
+  const unsupported = requested.filter(id => !available.includes(id));
+  if (unsupported.length) throw new Error('One or more selected passengers or segments are no longer available for refund.');
+  return requested;
+}
+
+async function calculateLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) {
   const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
   if (!booking) throw new Error('Booking not found or you do not have access to it.');
   if (booking.status !== 'Ticketed') throw new Error('Only a ticketed booking can be calculated for cancellation.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
 
+  const orderHeadIds = await resolveSpringOrderHeadIds(pnr, requestedOrderHeadIds);
   const client = createSpringClient();
   const token = await client.getAccessToken();
-  // calcType O is Spring's full-order / full-PNR calculation. Spring's JSON demo
-  // still includes an empty orderHeadIds array for a full-order calculation, so
-  // preserve that shape rather than omitting the field. Partial refunds will pass
-  // the actual IDs once they are synchronised from the XML order-detail service.
-  const result = await client.calculateRefund({ orderId: pnr, calcType: 'O', orderHeadIds: [] }, token.accessToken);
+  const result = await client.calculateRefund({ orderId: pnr, calcType: 'O', orderHeadIds }, token.accessToken);
   if (result?.success === false || result?.flag === false) {
     throw new Error(result?.message || result?.errMsg || 'Spring did not accept the refund calculation.');
   }
@@ -676,6 +687,7 @@ async function calculateLiveSpringRefund(profile, pnr) {
   return {
     bookingRef: pnr,
     calcType: 'O',
+    orderHeadIds,
     source: 'Spring Airlines',
     amountsCny,
     amountsMnt,
@@ -938,11 +950,12 @@ async function submitLiveSpringChange(profile, pnr, appId) {
   return result;
 }
 
-async function submitLiveSpringRefund(profile, pnr) {
+async function submitLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) {
   const booking = await ticketedSpringBooking(profile, pnr);
+  const orderHeadIds = await resolveSpringOrderHeadIds(booking.pnr, requestedOrderHeadIds);
   const client = createSpringClient();
   const token = await client.getAccessToken();
-  const result = await client.refundTicket({ orderId: booking.pnr, calcType: 'O', orderHeadIds: [] }, token.accessToken);
+  const result = await client.refundTicket({ orderId: booking.pnr, calcType: 'O', orderHeadIds }, token.accessToken);
   if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring refund submission failed.');
   return updatePortalBooking(profile, booking.pnr, 'Cancelled');
 }
@@ -977,10 +990,14 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   }
   const refundQuoteMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/refund-quote$/);
   if (refundQuoteMatch && req.method === 'POST') {
-    return send(res, 200, { quote: await calculateLiveSpringRefund(profile, refundQuoteMatch[1]) });
+    const body = await readJson(req);
+    return send(res, 200, { quote: await calculateLiveSpringRefund(profile, refundQuoteMatch[1], body.orderHeadIds) });
   }
   const refundSubmitMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/refund-submit$/);
-  if (refundSubmitMatch && req.method === 'POST') return send(res, 200, { booking: await submitLiveSpringRefund(profile, refundSubmitMatch[1]) });
+  if (refundSubmitMatch && req.method === 'POST') {
+    const body = await readJson(req);
+    return send(res, 200, { booking: await submitLiveSpringRefund(profile, refundSubmitMatch[1], body.orderHeadIds) });
+  }
   const changeCalendarMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-calendar$/);
   if (changeCalendarMatch && req.method === 'GET') {
     const orderItemId = url.searchParams.get('orderItemId');
