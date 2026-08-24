@@ -323,7 +323,7 @@ const showChangeFlow = (modal, booking) => {
   const replacements = leg => {
     const orderItem = leg.orderItemId ? `data-order-item-id="${leg.orderItemId}"` : '';
     const unavailable = leg.orderItemId ? '' : '<p class="selection-hint">Spring order item is unavailable. Sync this ticket before changing it.</p>';
-    return `<section class="replacement-flight" data-for="${leg.key}" ${orderItem}><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>${leg.flight}</strong><small>${leg.route} &middot; ${leg.time}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="" data-time="" data-fare="" ${leg.orderItemId ? '' : 'disabled'}>Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>Loading…</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days"></div><p>Same airline and flight availability. – means no flight available.</p></div><div class="daily-flight-options">${unavailable}</div></section>`;
+    return `<section class="replacement-flight" data-for="${leg.key}" ${orderItem}><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>${leg.flight}</strong><small>${leg.route} &middot; ${leg.time}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="" data-time="" data-date="" ${leg.orderItemId ? '' : 'disabled'}>Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>Loading…</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days"></div><p>Same airline and flight availability. • means a matching flight is available.</p></div><div class="daily-flight-options">${unavailable}</div></section>`;
   };
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
@@ -331,11 +331,12 @@ const showChangeFlow = (modal, booking) => {
     let loadingMonth = ''; let loadedMonth = '';
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {
-      const option = (flight, checked) => { const difference = Number(flight.fareDifferenceCny || 0); const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}|${difference}" data-segment-head-id="${flight.segmentHeadId || ''}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${difference > 0 ? `+ ${yen(difference)}` : 'No fare difference'}</b></label>`; };
-      choices.innerHTML = `<h3>Available flights on ${date}</h3>${flights.map((flight, index) => option(flight, index === 0)).join('')}<div class="pre-calculate-fare">Fare difference <strong>${Number(flights[0]?.fareDifferenceCny || 0) > 0 ? `+ ${yen(flights[0].fareDifferenceCny)}` : 'No fare difference'}</strong></div>`;
-      const setChoice = input => { const [, timing, fare] = input.value.split('|'); trigger.dataset.fare = fare; trigger.dataset.flight = input.value.split('|')[0]; trigger.dataset.time = timing; const amount = Number(fare || 0); choices.querySelector('.pre-calculate-fare').innerHTML = `Fare difference <strong>${amount > 0 ? `+ ${yen(amount)}` : 'No fare difference'}</strong>`; };
-      choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => setChoice(input)));
+      const option = (flight, checked) => { const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}" data-segment-head-id="${flight.segmentHeadId || ''}" data-date="${date}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>Select</b></label>`; };
+      choices.innerHTML = `<h3>Available flights on ${date}</h3>${flights.map((flight, index) => option(flight, index === 0)).join('')}`;
+      const setChoice = input => { const [flight, timing] = input.value.split('|'); trigger.dataset.flight = flight; trigger.dataset.time = timing; trigger.dataset.date = input.dataset.date || date; };
+      choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => { setChoice(input); autoCalculateIfReady(); }));
       setChoice(choices.querySelector('input:checked'));
+      autoCalculateIfReady();
     };
     const renderMonth = async () => {
       const requestedMonth = monthKey();
@@ -360,10 +361,10 @@ const showChangeFlow = (modal, booking) => {
         if (requestedMonth !== monthKey()) return;
         const byDate = new Map((data.items || []).map(item => [item.date, item]));
         const blanks = '<span class="availability-blank"></span>'.repeat(start);
-        const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); const difference = Number(item?.fareDifferenceCny || 0); return `<button type="button" class="availability-day ${available ? '' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? (difference > 0 ? `+ ${yen(difference)}` : 'Available') : '–'}</span></button>`; }).join('');
+        const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); return `<button type="button" class="availability-day ${available ? 'available' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? '●' : '–'}</span></button>`; }).join('');
         calendar.querySelector('.availability-days').innerHTML = `${blanks}${buttons}`;
         loadedMonth = requestedMonth;
-        calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', () => { const item = byDate.get(button.dataset.date); section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected')); button.classList.add('selected'); trigger.textContent = `${button.dataset.date} · ${Number(item.fareDifferenceCny || 0) > 0 ? `+ ${yen(item.fareDifferenceCny)}` : 'available'}`; calendar.hidden = true; renderDailyFlights(button.dataset.date, item.flights || []); }));
+        calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', () => { const item = byDate.get(button.dataset.date); section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected')); button.classList.add('selected'); trigger.textContent = `${button.dataset.date} · available`; calendar.hidden = true; renderDailyFlights(button.dataset.date, item.flights || []); }));
       } catch (error) {
         // Keep the month grid visible even if Spring is temporarily slow or
         // unavailable; replace each loading cell with the real explanation.
@@ -374,11 +375,18 @@ const showChangeFlow = (modal, booking) => {
     trigger.addEventListener('click', async () => { calendar.hidden = !calendar.hidden; if (!calendar.hidden) await renderMonth(); });
     calendar.querySelector('.availability-prev').addEventListener('click', async () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); await renderMonth(); } });
     calendar.querySelector('.availability-next').addEventListener('click', async () => { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() + 1, 1); await renderMonth(); });
-    // Start the live lookup as soon as the Change dialog opens. Usually the
-    // response will already be cached by the time the agent opens the
-    // calendar, avoiding a visible wait after pressing "Choose a new date".
-    renderMonth();
   });
+  let autoCalculateQueued = false;
+  const autoCalculateIfReady = () => {
+    const selectedLegs = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked);
+    const passengers = selectedPassengerNames(modal, 'change-flow', booking);
+    const selectedNewFlights = selectedLegs.map(leg => modal.querySelector(`[name="daily-${leg.key}"]:checked`));
+    if (autoCalculateQueued || !selectedLegs.length || !passengers.length || selectedNewFlights.some(flight => !flight)) return;
+    const button = modal.querySelector('.calculate-change-flow');
+    if (!button || button.disabled) return;
+    autoCalculateQueued = true;
+    setTimeout(() => { autoCalculateQueued = false; if (!button.disabled) button.click(); }, 0);
+  };
   const renderReplacements = () => { const selected = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked); modal.querySelector('.replacement-list').innerHTML = selected.map(replacements).join('') || '<p class="selection-hint">Select an active flight first.</p>'; bindAvailabilityCalendars(); };
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the itinerary and passenger(s), then select a new date and flight.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change-flow')}</section></section><section class="replacement-list"></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change-flow">Calculate change</button></div></section>`;
   renderReplacements();
@@ -408,33 +416,28 @@ const showChangeFlow = (modal, booking) => {
       const cny = quote.amountsCny || {};
       const mnt = quote.amountsMnt || {};
       const display = (key) => Number.isFinite(Number(mnt[key])) ? `₮ ${Number(mnt[key]).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : yen(cny[key] || 0);
-      const comparisons = selectedLegs.map((leg, index) => { const [number, time] = selectedNewFlights[index].value.split('|'); return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.flight} &middot; ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${leg.route}</strong><span>Spring Airlines &middot; ${number} &middot; ${time}</span></div></div>`; }).join('');
+      const comparisons = selectedLegs.map((leg, index) => { const [number, time] = selectedNewFlights[index].value.split('|'); const newDate = selectedNewFlights[index].dataset.date || ''; return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.date ? `${leg.date} · ` : ''}${leg.flight} &middot; ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${leg.route}</strong><span>${newDate ? `${newDate} · ` : ''}Spring Airlines · ${number} · ${time}</span></div></div>`; }).join('');
       const gateway = Number(cny.paymentFee || 0) > 0 ? `<div><span>Payment gateway fee</span><b>${display('paymentFee')}</b></div>` : '';
-      modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Spring change calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines before submitting the change request.</p><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${display('changeFee')}</b></div><div><span>Fare difference</span><b>${display('fareDifference')}</b></div>${gateway}<div class="fee-total"><span>Additional payment</span><strong>${display('additionalPayment')}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm change request</button></div></section>`;
+      modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Spring change calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines. Confirmation submits and pays the change request from the agency wallet.</p><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${display('changeFee')}</b></div><div><span>Fare difference</span><b>${display('fareDifference')}</b></div>${gateway}<div class="fee-total"><span>Additional payment</span><strong>${display('additionalPayment')}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm &amp; pay change fee</button></div></section>`;
       modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
       modal.querySelector('.back-booking').addEventListener('click', () => showChangeFlow(modal, booking));
       modal.querySelector('.confirm-change').addEventListener('click', async confirmEvent => {
         const button = confirmEvent.currentTarget;
         button.disabled = true;
-        button.textContent = 'Submitting to Spring…';
+        button.textContent = 'Confirming payment…';
         try {
-          const walletResponse = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-wallet-check`, {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amountCny: Number(cny.additionalPayment || 0) })
-          });
-          const walletData = await walletResponse.json();
-          if (!walletResponse.ok) throw new Error(walletData.error || 'Wallet balance check failed.');
-          const submitResponse = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-submit`, {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ appId: quote.appId })
+          const submitResponse = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-pay`, {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ appId: quote.appId, amountCny: Number(cny.additionalPayment || 0) })
           });
           const submitData = await submitResponse.json();
-          if (!submitResponse.ok) throw new Error(submitData.error || 'Spring change submission failed.');
+          if (!submitResponse.ok) throw new Error(submitData.error || 'Spring change payment failed.');
           modal.close();
-          toast(`Spring change request submitted for ${booking.ref}.`);
+          toast(submitData.paymentRequired === false ? `Spring change request submitted for ${booking.ref}.` : `Spring change payment completed for ${booking.ref}.`);
           showView('bookings');
         } catch (error) {
           button.disabled = false;
-          button.textContent = 'Confirm change request';
-          toast(error.message || 'Spring change submission failed.');
+          button.textContent = 'Confirm & pay change fee';
+          toast(error.message || 'Spring change payment failed.');
         }
       });
     } catch (error) {

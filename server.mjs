@@ -12,6 +12,7 @@ import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBal
 
 const PORT = Number(process.env.PORT || 4173);
 const springIssueInFlight = new Set();
+const springChangePaymentInFlight = new Set();
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
 const send = (res, status, data, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store' }); res.end(Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data)); };
@@ -826,12 +827,14 @@ const changeFlightSummary = flight => ({
   departure: {
     code: portalAirportCode(flight.oriAirportCode || flight.oriCityCode),
     name: springText(flight.oriAirportName || flight.oriCityName || ''),
-    time: springTime(flight.oriTimeBJ)
+    time: springTime(flight.oriTimeBJ),
+    date: String(flight.oriTimeBJ || '').match(/^\d{4}-\d{2}-\d{2}/)?.[0] || ''
   },
   arrival: {
     code: portalAirportCode(flight.destAirportCode || flight.destCityCode),
     name: springText(flight.destAirportName || flight.destCityName || ''),
-    time: springTime(flight.destTimeBJ)
+    time: springTime(flight.destTimeBJ),
+    date: String(flight.destTimeBJ || '').match(/^\d{4}-\d{2}-\d{2}/)?.[0] || ''
   },
   aircraft: springText(flight.acType || ''),
   bookingClass: springText(flight.bgSeatName || ''),
@@ -851,10 +854,9 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
 
   const key = changeCalendarKey(pnr, orderItemId, month);
   const cached = changeCalendarCache.get(key);
-  // A change calendar is pre-warmed while the booking detail is open. Keep it
-  // briefly so opening the Change dialog is immediate, while still refreshing
-  // frequently enough for live availability and fare differences.
-  if (cached && Date.now() - cached.createdAt < 5 * 60_000) return cached.value;
+  // Spring exposes availability one date at a time. Cache an availability-only
+  // month longer so reopening the calendar does not repeat 28–31 live calls.
+  if (cached && Date.now() - cached.createdAt < 15 * 60_000) return cached.value;
 
   const [year, monthNumber] = month.split('-').map(Number);
   const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
@@ -873,8 +875,7 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
         const newTimeLBegin = Date.parse(`${date}T00:00:00+08:00`);
         const result = await client.getChangeInfo({ lang: 'zh_cn', newTimeLBegin, orderHeadId: Number(orderItemId) }, token.accessToken);
         const flights = (result.bgFlightInfoList || []).map(changeFlightSummary).filter(flight => Number.isFinite(flight.segmentHeadId) && flight.flightNo);
-        const differences = flights.map(flight => flight.fareDifferenceCny).filter(Number.isFinite);
-        items[index] = { date, available: flights.length > 0, past: false, fareDifferenceCny: differences.length ? Math.min(...differences) : null, flights };
+        items[index] = { date, available: flights.length > 0, past: false, flights };
       } catch (error) {
         // A date without an eligible replacement is shown as unavailable. Do
         // not expose opaque upstream errors for every individual calendar day.
@@ -882,9 +883,9 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
       }
     }
   };
-  // Spring handles the calls independently. Eight workers keep a full month
-  // responsive without sending all 28–31 requests at once.
-  await Promise.all(Array.from({ length: Math.min(8, dates.length) }, worker));
+  // These are availability lookups only. A modestly higher concurrency avoids
+  // making an agent wait through a whole month of sequential requests.
+  await Promise.all(Array.from({ length: Math.min(20, dates.length) }, worker));
   const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, items };
   changeCalendarCache.set(key, { createdAt: Date.now(), value });
   return value;
@@ -948,6 +949,52 @@ async function submitLiveSpringChange(profile, pnr, appId) {
   }, token.accessToken);
   if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring change submission failed.');
   return result;
+}
+
+// A change request must be paid with the same Spring credit account used for
+// ticket issue. Spring confirmed orderType 2 is specifically for change fees;
+// a successful payment completes the change and reissues the ticket.
+async function paySubmittedSpringChange(profile, pnr, { appId, amountCny }) {
+  const normalizedPnr = String(pnr || '').trim().toUpperCase();
+  const amount = Number(amountCny);
+  if (!normalizedPnr) throw new Error('Booking reference is required.');
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('A valid Spring change payment amount is required.');
+  const requestKey = `${normalizedPnr}:${Number(appId)}`;
+  if (springChangePaymentInFlight.has(requestKey)) throw new Error('Spring change payment is already in progress for this request.');
+  springChangePaymentInFlight.add(requestKey);
+  try {
+    const booking = await ticketedSpringBooking(profile, normalizedPnr);
+    if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
+    await assertWalletFunds({ agencyId: booking.agency_id, amountCny: amount, actorId: profile.id });
+
+    const submission = await submitLiveSpringChange(profile, normalizedPnr, appId);
+    // A zero-fee change is submitted to Spring but does not require a credit
+    // charge. For a positive fee, do not update the portal wallet until Spring
+    // has acknowledged payment—retrying after an ambiguous response could pay twice.
+    if (amount <= 0) return { submission: { ifSuccess: submission.ifSuccess }, paymentRequired: false };
+
+    const payment = await createSpringSoapClient().payInCredit4OTA({
+      orderNo: normalizedPnr,
+      orderMoney: amount,
+      moneyClassId: Number(process.env.SPRING_CREDIT_MONEY_CLASS_ID || 0),
+      orderType: Number(process.env.SPRING_CREDIT_CHANGE_ORDER_TYPE || 2)
+    });
+    try {
+      await adjustWallet({
+        agencyId: booking.agency_id,
+        amount: -amount,
+        reason: `Change fee payment: ${normalizedPnr}`,
+        createdBy: profile.id
+      });
+    } catch (error) {
+      console.error(`Spring change payment succeeded but the local wallet update failed for ${normalizedPnr}: ${error.message}`);
+      throw new Error('Spring change payment succeeded, but the portal wallet could not be updated. Do not retry; contact support with this PNR.');
+    }
+    console.info(`Spring change payment succeeded and change was completed for ${normalizedPnr}.`);
+    return { submission: { ifSuccess: submission.ifSuccess }, payment: { ifSuccess: payment.ifSuccess }, paymentRequired: true };
+  } finally {
+    springChangePaymentInFlight.delete(requestKey);
+  }
 }
 
 async function submitLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) {
@@ -1027,6 +1074,11 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   if (changeSubmitMatch && req.method === 'POST') {
     const body = await readJson(req);
     return send(res, 200, { result: await submitLiveSpringChange(profile, changeSubmitMatch[1], body.appId) });
+  }
+  const changePayMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-pay$/);
+  if (changePayMatch && req.method === 'POST') {
+    const body = await readJson(req);
+    return send(res, 200, await paySubmittedSpringChange(profile, changePayMatch[1], body));
   }
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {
