@@ -138,7 +138,7 @@ export function createSpringSoapClient(env = process.env) {
     const reference = String(orderNo || '').trim();
     if (!reference) throw new Error('A Spring order number is required for order detail lookup.');
 
-    const body = `<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <i:getOrderDetailInfoC2 xmlns:i="http://wsinterface.remoteservice.booking.springairlines.com/">\n      <orderInfo>\n        <usernameToken><password>${xmlEscape(password)}</password><username>${xmlEscape(username)}</username></usernameToken>\n        <lang>${xmlEscape(lang)}</lang>\n        <orderNo>${xmlEscape(reference)}</orderNo>\n      </orderInfo>\n    </i:getOrderDetailInfoC2>\n  </soap:Body>\n</soap:Envelope>`;
+    const body = `<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <i:getOrderDetailInfoC2 xmlns:i="http://wsinterface.remoteservice.booking.springairlines.com/">\n      <queryInfo>\n        <usernameToken><password>${xmlEscape(password)}</password><username>${xmlEscape(username)}</username></usernameToken>\n        <lang>${xmlEscape(lang)}</lang>\n        <orderNo>${xmlEscape(reference)}</orderNo>\n      </queryInfo>\n    </i:getOrderDetailInfoC2>\n  </soap:Body>\n</soap:Envelope>`;
 
     let response;
     try {
