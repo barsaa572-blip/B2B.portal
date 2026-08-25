@@ -203,6 +203,10 @@ const showChangeEstimate = (modal, booking) => {
 const bookingLegs = booking => {
   const storedFlights = booking.itinerary?.flights;
   const noShow = booking.itinerary?.noShow || {};
+  // Initial search snapshots use `.id`; a changed flight supplied by Spring
+  // uses `.code`.  Treat both shapes as the same endpoint so a return leg
+  // cannot accidentally be relabelled as the outbound leg after a sync/change.
+  const airportCode = endpoint => String(endpoint?.id || endpoint?.code || '').toUpperCase();
   // Spring's order-retrieve response does not guarantee that the segments
   // arrive in itinerary order.  Put the original outbound route first before
   // we label a leg "outbound" or "return".  The change calendar then receives
@@ -219,15 +223,17 @@ const bookingLegs = booking => {
   };
   const orderedFlights = Array.isArray(storedFlights) ? [...storedFlights].sort((left, right) => {
     const rank = flight => {
-      if (sameAirportCode(flight?.departure?.id, outboundDeparture) && sameAirportCode(flight?.arrival?.id, outboundArrival)) return 0;
-      if (sameAirportCode(flight?.departure?.id, outboundArrival) && sameAirportCode(flight?.arrival?.id, outboundDeparture)) return 1;
+       if (sameAirportCode(airportCode(flight?.departure), outboundDeparture) && sameAirportCode(airportCode(flight?.arrival), outboundArrival)) return 0;
+       if (sameAirportCode(airportCode(flight?.departure), outboundArrival) && sameAirportCode(airportCode(flight?.arrival), outboundDeparture)) return 1;
       return 2;
     };
     return rank(left) - rank(right);
   }) : [];
   if (orderedFlights.length) return orderedFlights.map((flight, index) => {
-    const isOutbound = sameAirportCode(flight?.departure?.id, outboundDeparture) && sameAirportCode(flight?.arrival?.id, outboundArrival);
-    const isReturn = sameAirportCode(flight?.departure?.id, outboundArrival) && sameAirportCode(flight?.arrival?.id, outboundDeparture);
+     const departureCode = airportCode(flight?.departure);
+     const arrivalCode = airportCode(flight?.arrival);
+     const isOutbound = sameAirportCode(departureCode, outboundDeparture) && sameAirportCode(arrivalCode, outboundArrival);
+     const isReturn = sameAirportCode(departureCode, outboundArrival) && sameAirportCode(arrivalCode, outboundDeparture);
     const key = isOutbound ? 'outbound' : isReturn ? 'return' : (index ? 'return' : 'outbound'); const passengers = booking.passengers || [booking.passenger];
     const springState = String(flight.status || '').toLowerCase();
     const springNoShow = springState === 'no-show' || springState === 'noshow';
@@ -239,7 +245,7 @@ const bookingLegs = booking => {
     // direction. The selected passenger IDs are applied later when the
     // change application is calculated.
     const orderItemId = (booking.itinerary?.springOrder?.orderItemIds || []).find(Boolean) || null;
-    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(travelDate), travelDate, flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId, departureCode: String(flight.departure?.id || '').toUpperCase(), arrivalCode: String(flight.arrival?.id || '').toUpperCase() };
+     return { key, route: `${departureCode} &rarr; ${arrivalCode}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(travelDate), travelDate, flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId, departureCode, arrivalCode };
   });
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
@@ -387,7 +393,7 @@ const showChangeFlow = (modal, booking) => {
       }).join('');
       calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${initialDays}`;
       try {
-        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}&departure=${encodeURIComponent(section.dataset.departureCode || '')}&arrival=${encodeURIComponent(section.dataset.arrivalCode || '')}`);
+        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}&leg=${encodeURIComponent(section.dataset.for || '')}&departure=${encodeURIComponent(section.dataset.departureCode || '')}&arrival=${encodeURIComponent(section.dataset.arrivalCode || '')}`);
         // A VPS restart or reverse-proxy interruption can return an HTML error
         // page.  Do not expose its JSON parser error ("Unexpected token '<'")
         // to an agent; keep the calendar usable and show an actionable message.

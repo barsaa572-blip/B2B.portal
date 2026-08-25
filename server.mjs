@@ -865,7 +865,7 @@ const changeFlightSummary = flight => ({
   fareDifferenceCny: Number(flight.bgShengcangMoney || 0)
 });
 
-async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedDeparture = '', expectedArrival = '') {
+async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedDeparture = '', expectedArrival = '', legKey = '') {
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Month must use YYYY-MM format.');
   const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
   if (!booking) throw new Error('Booking not found or you do not have access to it.');
@@ -877,9 +877,20 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
   // the same on a one-passenger booking but diverge as soon as a PNR has
   // multiple passengers. Resolve the authoritative IDs from the SOAP order
   // detail before requesting a monthly change calendar.
+  const portalRouteCodes = String(booking.itinerary?.route || booking.route || '').match(/[A-Z]{3}/g) || [];
+  const [bookedDeparture = '', bookedArrival = ''] = portalRouteCodes;
+  // Browser-side snapshots can be stale after a Spring sync/change. For a
+  // round trip the leg key is authoritative: always derive its direction from
+  // the booked route instead of allowing a stale BKK→PVG card to query the
+  // return calendar.
+  const canonicalRoute = legKey === 'return'
+    ? { departure: bookedArrival, arrival: bookedDeparture }
+    : legKey === 'outbound'
+      ? { departure: bookedDeparture, arrival: bookedArrival }
+      : null;
   const expectedRoute = {
-    departure: portalAirportCode(expectedDeparture || ''),
-    arrival: portalAirportCode(expectedArrival || '')
+    departure: portalAirportCode(canonicalRoute?.departure || expectedDeparture || ''),
+    arrival: portalAirportCode(canonicalRoute?.arrival || expectedArrival || '')
   };
   // A round-trip/multi-passenger PNR has one Spring `orderHeadId` per
   // passenger *and* segment.  Previously this picked the first ID of the PNR
@@ -1168,7 +1179,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     const orderItemId = url.searchParams.get('orderItemId');
     const month = url.searchParams.get('month');
     if (!/^\d+$/.test(String(orderItemId || ''))) throw new Error('A valid Spring order item is required.');
-    return send(res, 200, await getLiveChangeCalendar(profile, changeCalendarMatch[1], orderItemId, month, url.searchParams.get('departure'), url.searchParams.get('arrival')));
+    return send(res, 200, await getLiveChangeCalendar(profile, changeCalendarMatch[1], orderItemId, month, url.searchParams.get('departure'), url.searchParams.get('arrival'), url.searchParams.get('leg')));
   }
   const syncMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/sync$/);
   if (syncMatch && req.method === 'POST') return send(res, 200, { booking: await syncSpringOrder(profile, syncMatch[1]) });
