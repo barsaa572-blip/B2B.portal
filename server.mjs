@@ -877,7 +877,23 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
   // the same on a one-passenger booking but diverge as soon as a PNR has
   // multiple passengers. Resolve the authoritative IDs from the SOAP order
   // detail before requesting a monthly change calendar.
-  const liveOrderHeadIds = await resolveSpringOrderHeadIds(pnr);
+  const expectedRoute = {
+    departure: portalAirportCode(expectedDeparture || ''),
+    arrival: portalAirportCode(expectedArrival || '')
+  };
+  // A round-trip/multi-passenger PNR has one Spring `orderHeadId` per
+  // passenger *and* segment.  Previously this picked the first ID of the PNR
+  // for every calendar. That happens to work for outbound, but makes the
+  // return calendar ask Spring about outbound availability and then filter all
+  // results out. Select IDs whose SOAP order-detail flight route matches the
+  // calendar's selected leg instead.
+  const detail = await createSpringSoapClient().getOrderDetailInfoC2({ orderNo: pnr, lang: 'zh_cn' });
+  const allOrderHeadIds = normaliseSpringOrderHeadIds(detail.orderHeadIds);
+  const routeOrderHeadIds = normaliseSpringOrderHeadIds((detail.orderHeads || [])
+    .filter(item => (!expectedRoute.departure || sameAirportCode(item.departureCode, expectedRoute.departure))
+      && (!expectedRoute.arrival || sameAirportCode(item.arrivalCode, expectedRoute.arrival)))
+    .map(item => item.orderHeadId));
+  const liveOrderHeadIds = routeOrderHeadIds.length ? routeOrderHeadIds : allOrderHeadIds;
   const requestedOrderHeadId = Number(orderItemId);
   const orderHeadId = liveOrderHeadIds.includes(requestedOrderHeadId)
     ? requestedOrderHeadId
@@ -886,10 +902,6 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
     throw new Error('Spring did not return a changeable passenger order for this booking.');
   }
 
-  const expectedRoute = {
-    departure: portalAirportCode(expectedDeparture || ''),
-    arrival: portalAirportCode(expectedArrival || '')
-  };
   const key = changeCalendarKey(pnr, orderHeadId, month, expectedRoute.departure, expectedRoute.arrival);
   const cached = changeCalendarCache.get(key);
   // Spring exposes availability one date at a time. The browser starts this

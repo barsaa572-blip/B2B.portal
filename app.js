@@ -218,14 +218,17 @@ const bookingLegs = booking => {
     return Boolean(a && b && (a === b || equivalentAirportCodes[a]?.includes(b) || equivalentAirportCodes[b]?.includes(a)));
   };
   const orderedFlights = Array.isArray(storedFlights) ? [...storedFlights].sort((left, right) => {
-    const leftMatchesOutbound = sameAirportCode(left?.departure?.id, outboundDeparture)
-      && sameAirportCode(left?.arrival?.id, outboundArrival);
-    const rightMatchesOutbound = sameAirportCode(right?.departure?.id, outboundDeparture)
-      && sameAirportCode(right?.arrival?.id, outboundArrival);
-    return Number(rightMatchesOutbound) - Number(leftMatchesOutbound);
+    const rank = flight => {
+      if (sameAirportCode(flight?.departure?.id, outboundDeparture) && sameAirportCode(flight?.arrival?.id, outboundArrival)) return 0;
+      if (sameAirportCode(flight?.departure?.id, outboundArrival) && sameAirportCode(flight?.arrival?.id, outboundDeparture)) return 1;
+      return 2;
+    };
+    return rank(left) - rank(right);
   }) : [];
   if (orderedFlights.length) return orderedFlights.map((flight, index) => {
-    const key = index ? 'return' : 'outbound'; const passengers = booking.passengers || [booking.passenger];
+    const isOutbound = sameAirportCode(flight?.departure?.id, outboundDeparture) && sameAirportCode(flight?.arrival?.id, outboundArrival);
+    const isReturn = sameAirportCode(flight?.departure?.id, outboundArrival) && sameAirportCode(flight?.arrival?.id, outboundDeparture);
+    const key = isOutbound ? 'outbound' : isReturn ? 'return' : (index ? 'return' : 'outbound'); const passengers = booking.passengers || [booking.passenger];
     const springState = String(flight.status || '').toLowerCase();
     const springNoShow = springState === 'no-show' || springState === 'noshow';
     const noShowPassengers = springNoShow ? passengers.map((_, passengerIndex) => passengerIndex) : (noShow[key] || []).map(Number).filter(Number.isInteger);

@@ -27,6 +27,16 @@ const xmlValues = (xml, tag) => {
   return Array.from(String(xml).matchAll(matcher), match => xmlDecode(match[1].replace(/<[^>]*>/g, '').trim()));
 };
 
+// Keep the XML for a nested object when an order contains more than one
+// passenger or segment.  `xmlValue` intentionally flattens child tags, which
+// is useful for simple fields but would lose the relationship between an
+// orderHeadId and its flight route.
+const xmlBlocks = (xml, tag) => {
+  const escaped = String(tag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matcher = new RegExp(`<(?:(?:[\\w.-]+):)?${escaped}\\b[^>]*>[\\s\\S]*?<\\/(?:[\\w.-]+:)?${escaped}>`, 'ig');
+  return Array.from(String(xml).matchAll(matcher), match => match[0]);
+};
+
 const serviceEndpoint = wsdlUrl => String(wsdlUrl || '').trim().replace(/[?&]wsdl(?:=[^&]*)?$/i, '');
 const finiteNumber = value => {
   const result = Number(value);
@@ -114,6 +124,21 @@ export function createSpringSoapClient(env = process.env) {
     }
 
     const responseXml = response.text;
+    const orderHeads = xmlBlocks(responseXml, 'ticketList').map(ticket => {
+      const flight = xmlBlocks(ticket, 'flightBasicInfo')[0] || '';
+      const origin = xmlBlocks(flight, 'oriEndPoint')[0] || '';
+      const destination = xmlBlocks(flight, 'destEndPoint')[0] || '';
+      const originAirport = xmlBlocks(origin, 'airportCityInfo')[0] || '';
+      const destinationAirport = xmlBlocks(destination, 'airportCityInfo')[0] || '';
+      return {
+        orderHeadId: finiteNumber(xmlValue(ticket, 'orderHeadId')),
+        departureCode: xmlValue(originAirport, 'airportCode') || xmlValue(originAirport, 'cityCode'),
+        arrivalCode: xmlValue(destinationAirport, 'airportCode') || xmlValue(destinationAirport, 'cityCode'),
+        flightNo: xmlValue(flight, 'flightNo'),
+        departureTime: xmlValue(xmlBlocks(origin, 'oriTimeInfo')[0] || '', 'timeBJ'),
+        arrivalTime: xmlValue(xmlBlocks(destination, 'destTimeInfo')[0] || '', 'timeBJ')
+      };
+    }).filter(item => Number.isSafeInteger(item.orderHeadId) && item.orderHeadId > 0);
     const result = {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
@@ -157,7 +182,8 @@ export function createSpringSoapClient(env = process.env) {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
       errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring'),
-      orderHeadIds: [...new Set(xmlValues(responseXml, 'orderHeadId').map(Number).filter(value => Number.isSafeInteger(value) && value > 0))],
+      orderHeads,
+      orderHeadIds: [...new Set(orderHeads.map(item => item.orderHeadId).concat(xmlValues(responseXml, 'orderHeadId').map(Number)).filter(value => Number.isSafeInteger(value) && value > 0))],
       // `orderSumInfo.orderMoney` is Spring's authoritative amount for this
       // PNR after any promotion/discount has been applied.  It is CNY when
       // moneyClassId is 0 and must be used for credit payment, rather than a
