@@ -76,8 +76,10 @@ const bookingFlightDetails = booking => {
   return `<div class="booking-flight-detail"><div><span>OUTBOUND</span><strong>${from || 'ULN'} â†’ ${to || 'PVG'}</strong><small>Spring Airlines Â· 9C 7058 Â· Economy</small></div><b>13:00 â†’ 17:00</b></div><div class="booking-flight-detail"><div><span>RETURN</span><strong>${to || 'PVG'} â†’ ${from || 'ULN'}</strong><small>Spring Airlines Â· 9C 7057 Â· Economy</small></div><b>08:10 â†’ 12:00</b></div>`;
 };
 const displayFlightDate = value => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return '';
-  const date = new Date(`${value}T12:00:00`);
+  // Spring can supply either YYYY-MM-DD or a full local timestamp.
+  const normalized = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+  if (!normalized) return '';
+  const date = new Date(`${normalized}T12:00:00`);
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 };
 const bookingFlightDetailsClean = booking => {
@@ -91,7 +93,9 @@ const bookingFlightDetailsClean = booking => {
     const arrivalCode = flight.arrival?.id || '';
     const departureTime = (flight.departure?.time || '').slice(-5) || '—';
     const arrivalTime = (flight.arrival?.time || '').slice(-5) || '—';
-    const travelDate = displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate));
+    // A schedule can arrive from Spring with the date nested on its departure
+    // endpoint.  Preserve the original itinerary date as a final fallback.
+    const travelDate = displayFlightDate(flight.travelDate || flight.departure?.date || flight.departure?.dateTime || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate));
     const departureName = reviewAirportName(flight.departure);
     const arrivalName = reviewAirportName(flight.arrival);
     const durationMinutes = Number(flight.duration);
@@ -100,7 +104,8 @@ const bookingFlightDetailsClean = booking => {
     const previous = [...(booking.itinerary?.changeHistory || [])].reverse().map(entry => ({ ...(entry.legs || []).find(item => item.key === legKey), changedAt: entry.changedAt })).find(item => item?.oldFlight);
     const oldFlight = previous?.oldFlight;
     const changedAt = previous?.changedAt ? new Date(previous.changedAt).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    const history = oldFlight ? `<article class="booking-flight-history"><small>REPLACED FLIGHT · ${changedAt}</small><strong>${oldFlight.departure?.id || ''} ${oldFlight.departure?.time || ''} → ${oldFlight.arrival?.id || ''} ${oldFlight.arrival?.time || ''}</strong><em>Flight ${oldFlight.number || '—'} · inactive after change</em></article>` : '';
+    const oldTravelDate = displayFlightDate(oldFlight?.travelDate || oldFlight?.departure?.date || oldFlight?.departure?.dateTime);
+    const history = oldFlight ? `<article class="booking-flight-history"><small>REPLACED FLIGHT · ${changedAt}</small><strong>${oldTravelDate ? `${oldTravelDate} · ` : ''}${oldFlight.departure?.id || ''} ${oldFlight.departure?.time || ''} → ${oldFlight.arrival?.id || ''} ${oldFlight.arrival?.time || ''}</strong><em>Flight ${oldFlight.number || '—'} · inactive after change</em></article>` : '';
     const stateText = oldFlight ? 'Active after change' : state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
     return `${history}<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong></header><div class="booking-leg-timeline"><div class="booking-leg-airport departure"><small><b>${departureCode}</b> ${departureName}${terminal(flight.departure)}</small></div><b class="booking-leg-time departure">${departureTime}</b><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><b class="booking-leg-time arrival">${arrivalTime}</b><div class="booking-leg-airport arrival"><small><b>${arrivalCode}</b> ${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><i class="booking-itinerary-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</i><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
   }).join('');
@@ -238,7 +243,10 @@ const bookingLegs = booking => {
     const springState = String(flight.status || '').toLowerCase();
     const springNoShow = springState === 'no-show' || springState === 'noshow';
     const noShowPassengers = springNoShow ? passengers.map((_, passengerIndex) => passengerIndex) : (noShow[key] || []).map(Number).filter(Number.isInteger);
-    const travelDate = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || '';
+    // Use the leg route, rather than its array position, for the saved-date
+    // fallback: Spring can return return segments before outbound segments.
+    const fallbackDate = key === 'return' ? booking.itinerary?.returnDate : booking.itinerary?.departureDate;
+    const travelDate = flight.travelDate || flight.departure?.date || flight.departure?.dateTime || fallbackDate || '';
     // Spring's `orderHeadId` belongs to a passenger/order, not to the
     // positional flight array.  Do not assign the second passenger's ID to
     // the return leg: doing so makes Spring return availability for the wrong
@@ -486,7 +494,7 @@ const showChangeFlow = (modal, booking) => {
       const cny = quote.amountsCny || {};
       const mnt = quote.amountsMnt || {};
       const display = (key) => Number.isFinite(Number(mnt[key])) ? `₮ ${Number(mnt[key]).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : yen(cny[key] || 0);
-      const comparisons = selectedLegs.map((leg, index) => { const input = selectedNewFlights[index]; const number = input.dataset.flightNo || input.value.split('|')[0]; const newDate = displayFlightDate(input.dataset.date || ''); const newTimes = `${input.dataset.departureTime || '—'} → ${input.dataset.arrivalTime || '—'}`; return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.date ? `${displayFlightDate(leg.date)} · ` : ''}${leg.flight} · ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${input.dataset.departureCode || leg.route.split(' ')[0]} → ${input.dataset.arrivalCode || leg.route.split(' ').at(-1)}</strong><span>${newDate ? `${newDate} · ` : ''}Spring Airlines · ${number} · ${newTimes}</span></div></div>`; }).join('');
+      const comparisons = selectedLegs.map((leg, index) => { const input = selectedNewFlights[index]; const number = input.dataset.flightNo || input.value.split('|')[0]; const newDate = displayFlightDate(input.dataset.date || ''); const oldDate = leg.date || displayFlightDate(leg.travelDate || ''); const newTimes = `${input.dataset.departureTime || '—'} → ${input.dataset.arrivalTime || '—'}`; return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${oldDate ? `${oldDate} · ` : ''}${leg.flight} · ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${input.dataset.departureCode || leg.route.split(' ')[0]} → ${input.dataset.arrivalCode || leg.route.split(' ').at(-1)}</strong><span>${newDate ? `${newDate} · ` : ''}Spring Airlines · ${number} · ${newTimes}</span></div></div>`; }).join('');
       const gateway = Number(cny.paymentFee || 0) > 0 ? `<div><span>Payment gateway fee</span><b>${display('paymentFee')}</b></div>` : '';
       modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Spring change calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines. Confirmation submits and pays the change request from the agency wallet.</p><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${display('changeFee')}</b></div><div><span>Fare difference</span><b>${display('fareDifference')}</b></div>${gateway}<div class="fee-total"><span>Additional payment</span><strong>${display('additionalPayment')}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm &amp; pay change fee</button></div></section>`;
       modal.querySelector('.booking-close').addEventListener('click', () => modal.close());

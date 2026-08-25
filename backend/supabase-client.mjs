@@ -353,7 +353,9 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
     return {
       ...flight,
       ...(item?.segmentStatus ? { status: item.segmentStatus, springStatusCode: item.statusCode || null } : {}),
-      travelDate: schedule?.travelDate || flight.travelDate,
+      // Spring's JSON order lookup occasionally omits the date.  Do not
+      // overwrite the booking's original, known departure/return date.
+      travelDate: schedule?.travelDate || flight.travelDate || flight.departure?.date || flight.departure?.dateTime || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate),
       departure: {
         ...(flight.departure || {}),
         id: schedule?.departureCode || flight.departure?.id,
@@ -405,10 +407,12 @@ export async function recordPortalBookingChange(profile, pnr, { appId, changes =
     const change = byLeg.get(key);
     const replacement = change?.newFlight;
     if (!replacement?.flightNo) return flight;
+    const originalDate = flight.travelDate || flight.departure?.date || flight.departure?.dateTime || (key === 'return' ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || null;
+    const oldFlight = originalDate && !flight.travelDate ? { ...flight, travelDate: originalDate } : flight;
     const next = {
       ...flight,
       number: replacement.flightNo,
-      travelDate: replacement.travelDate || replacement.date || replacement.departure?.date || flight.travelDate,
+      travelDate: replacement.travelDate || replacement.date || replacement.departure?.date || oldFlight.travelDate,
       airline: replacement.airline || flight.airline || 'Spring Airlines',
       bookingClass: replacement.bookingClass || flight.bookingClass,
       departure: {
@@ -428,7 +432,7 @@ export async function recordPortalBookingChange(profile, pnr, { appId, changes =
       spring: { ...(flight.spring || {}), segHeadId: replacement.segmentHeadId || flight.spring?.segHeadId },
       status: 'ticketed'
     };
-    applied.push({ key, oldFlight: flight, newFlight: next });
+    applied.push({ key, oldFlight, newFlight: next });
     return next;
   });
   if (!applied.length) throw new Error('No replacement flight was available to save for this change.');
