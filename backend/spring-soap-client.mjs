@@ -124,21 +124,6 @@ export function createSpringSoapClient(env = process.env) {
     }
 
     const responseXml = response.text;
-    const orderHeads = xmlBlocks(responseXml, 'ticketList').map(ticket => {
-      const flight = xmlBlocks(ticket, 'flightBasicInfo')[0] || '';
-      const origin = xmlBlocks(flight, 'oriEndPoint')[0] || '';
-      const destination = xmlBlocks(flight, 'destEndPoint')[0] || '';
-      const originAirport = xmlBlocks(origin, 'airportCityInfo')[0] || '';
-      const destinationAirport = xmlBlocks(destination, 'airportCityInfo')[0] || '';
-      return {
-        orderHeadId: finiteNumber(xmlValue(ticket, 'orderHeadId')),
-        departureCode: xmlValue(originAirport, 'airportCode') || xmlValue(originAirport, 'cityCode'),
-        arrivalCode: xmlValue(destinationAirport, 'airportCode') || xmlValue(destinationAirport, 'cityCode'),
-        flightNo: xmlValue(flight, 'flightNo'),
-        departureTime: xmlValue(xmlBlocks(origin, 'oriTimeInfo')[0] || '', 'timeBJ'),
-        arrivalTime: xmlValue(xmlBlocks(destination, 'destTimeInfo')[0] || '', 'timeBJ')
-      };
-    }).filter(item => Number.isSafeInteger(item.orderHeadId) && item.orderHeadId > 0);
     const result = {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
@@ -178,6 +163,21 @@ export function createSpringSoapClient(env = process.env) {
     }
 
     const responseXml = response.text;
+    const orderHeads = xmlBlocks(responseXml, 'ticketList').map(ticket => {
+      const flight = xmlBlocks(ticket, 'flightBasicInfo')[0] || '';
+      const origin = xmlBlocks(flight, 'oriEndPoint')[0] || '';
+      const destination = xmlBlocks(flight, 'destEndPoint')[0] || '';
+      const originAirport = xmlBlocks(origin, 'airportCityInfo')[0] || '';
+      const destinationAirport = xmlBlocks(destination, 'airportCityInfo')[0] || '';
+      return {
+        orderHeadId: finiteNumber(xmlValue(ticket, 'orderHeadId')),
+        departureCode: xmlValue(originAirport, 'airportCode') || xmlValue(originAirport, 'cityCode'),
+        arrivalCode: xmlValue(destinationAirport, 'airportCode') || xmlValue(destinationAirport, 'cityCode'),
+        flightNo: xmlValue(flight, 'flightNo'),
+        departureTime: xmlValue(xmlBlocks(origin, 'oriTimeInfo')[0] || '', 'timeBJ'),
+        arrivalTime: xmlValue(xmlBlocks(destination, 'destTimeInfo')[0] || '', 'timeBJ')
+      };
+    }).filter(item => Number.isSafeInteger(item.orderHeadId) && item.orderHeadId > 0);
     const result = {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
