@@ -370,6 +370,10 @@ const showChangeFlow = (modal, booking) => {
     trigger.addEventListener('click', async () => { calendar.hidden = !calendar.hidden; if (!calendar.hidden) await renderMonth(); });
     calendar.querySelector('.availability-prev').addEventListener('click', async () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); await renderMonth(); } });
     calendar.querySelector('.availability-next').addEventListener('click', async () => { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() + 1, 1); await renderMonth(); });
+    // Warm the server-side monthly cache in the background as soon as the
+    // change flow opens. The calendar stays hidden, while the agent selects
+    // passengers; by the time they open it, the schedule is normally ready.
+    window.setTimeout(() => { renderMonth().catch(() => {}); }, 0);
   });
   const renderReplacements = () => { const selected = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked); modal.querySelector('.replacement-list').innerHTML = selected.map(replacements).join('') || '<p class="selection-hint">Select an active flight first.</p>'; bindAvailabilityCalendars(); };
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the itinerary and passenger(s), then select a new date and flight.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change-flow')}</section></section><section class="replacement-list"></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change-flow">Calculate change</button></div></section>`;

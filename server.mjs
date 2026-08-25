@@ -863,11 +863,11 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
 
   const key = changeCalendarKey(pnr, orderItemId, month);
   const cached = changeCalendarCache.get(key);
-  // Spring exposes availability one date at a time. Cache an availability-only
-  // month longer so reopening the calendar does not repeat 28–31 live calls.
-  // An upstream timeout must not leave the agent looking at an entirely
-  // unavailable calendar for fifteen minutes. Successful availability is
-  // cached longer, while an empty/failed month is retried quickly.
+  // Spring exposes availability one date at a time. The browser starts this
+  // lookup as a background prefetch when the change screen opens, so opening
+  // the calendar itself never has to repeat 28–31 live calls. Flight/fare
+  // options are indicative only; Calculate change always asks Spring again
+  // for the final payable amount.
   if (cached && Date.now() - cached.createdAt < cached.ttlMs) return cached.value;
 
   const [year, monthNumber] = month.split('-').map(Number);
@@ -900,7 +900,10 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
   await Promise.all(Array.from({ length: Math.min(20, dates.length) }, worker));
   const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, items };
   const hasAvailability = items.some(item => item?.available);
-  changeCalendarCache.set(key, { createdAt: Date.now(), ttlMs: hasAvailability ? 15 * 60_000 : 60_000, value });
+  // Schedules are relatively stable during a session. Retain a populated
+  // month for six hours; retry a completely unavailable result sooner in
+  // case Spring had a temporary timeout while it was prefetched.
+  changeCalendarCache.set(key, { createdAt: Date.now(), ttlMs: hasAvailability ? 6 * 60 * 60_000 : 5 * 60_000, value });
   return value;
 }
 
