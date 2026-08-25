@@ -209,11 +209,19 @@ const bookingLegs = booking => {
   // the correct route, rather than e.g. treating BKK → PVG as the return leg.
   const routeCodes = String(booking.itinerary?.route || booking.route || '').match(/[A-Z]{3}/g) || [];
   const [outboundDeparture, outboundArrival] = routeCodes;
+  const equivalentAirportCodes = {
+    ULN: ['UBN'], UBN: ['ULN'], PVG: ['SHA'], SHA: ['PVG'],
+    PEK: ['BJS'], PKX: ['BJS'], BJS: ['PEK', 'PKX']
+  };
+  const sameAirportCode = (left, right) => {
+    const a = String(left || '').toUpperCase(); const b = String(right || '').toUpperCase();
+    return Boolean(a && b && (a === b || equivalentAirportCodes[a]?.includes(b) || equivalentAirportCodes[b]?.includes(a)));
+  };
   const orderedFlights = Array.isArray(storedFlights) ? [...storedFlights].sort((left, right) => {
-    const leftMatchesOutbound = String(left?.departure?.id || '').toUpperCase() === outboundDeparture
-      && String(left?.arrival?.id || '').toUpperCase() === outboundArrival;
-    const rightMatchesOutbound = String(right?.departure?.id || '').toUpperCase() === outboundDeparture
-      && String(right?.arrival?.id || '').toUpperCase() === outboundArrival;
+    const leftMatchesOutbound = sameAirportCode(left?.departure?.id, outboundDeparture)
+      && sameAirportCode(left?.arrival?.id, outboundArrival);
+    const rightMatchesOutbound = sameAirportCode(right?.departure?.id, outboundDeparture)
+      && sameAirportCode(right?.arrival?.id, outboundArrival);
     return Number(rightMatchesOutbound) - Number(leftMatchesOutbound);
   }) : [];
   if (orderedFlights.length) return orderedFlights.map((flight, index) => {
@@ -391,6 +399,9 @@ const showChangeFlow = (modal, booking) => {
         const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); return `<button type="button" class="availability-day ${available ? 'available' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? '●' : '–'}</span></button>`; }).join('');
         calendar.querySelector('.availability-days').innerHTML = `${blanks}${buttons}`;
         loadedMonth = requestedMonth;
+        if (!data.items?.some(item => item?.available)) {
+          choices.innerHTML = `<p class="selection-hint">Spring did not return matching ${section.dataset.departureCode || ''} → ${section.dataset.arrivalCode || ''} flights for ${calendar.querySelector('.availability-head strong').textContent}. Try another month.</p>`;
+        }
         calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', () => { const item = byDate.get(button.dataset.date); section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected')); button.classList.add('selected'); trigger.textContent = `${button.dataset.date} · available`; calendar.hidden = true; renderDailyFlights(button.dataset.date, item.flights || []); }));
       } catch (error) {
         // Keep the month grid visible even if Spring is temporarily slow or

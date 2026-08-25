@@ -830,6 +830,19 @@ async function syncSpringOrder(profile, pnr) {
 const changeCalendarCache = new Map();
 const changeCalendarKey = (pnr, orderItemId, month, departure = '', arrival = '') => `${pnr}:${orderItemId}:${month}:${departure}:${arrival}`;
 const calendarDate = (year, month, day) => `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+// Spring occasionally returns a city code in place of the airport code. The
+// portal route is airport based, so treat these known aliases as the same
+// endpoint before filtering replacement flights.
+const airportCodeAliases = {
+  ULN: ['UBN'], UBN: ['ULN'],
+  PVG: ['SHA'], SHA: ['PVG'],
+  PEK: ['BJS'], PKX: ['BJS'], BJS: ['PEK', 'PKX']
+};
+const sameAirportCode = (left, right) => {
+  const a = portalAirportCode(left);
+  const b = portalAirportCode(right);
+  return Boolean(a && b && (a === b || airportCodeAliases[a]?.includes(b) || airportCodeAliases[b]?.includes(a)));
+};
 const changeFlightSummary = flight => ({
   segmentHeadId: Number(flight.segmentHeadId),
   flightNo: String(flight.flightNo || ''),
@@ -895,8 +908,8 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
           // The supplier can return replacement choices for another segment
           // under the same passenger order head. Only expose the route the
           // agent actually selected in the portal.
-          return (!expectedRoute.departure || flight.departure.code === expectedRoute.departure)
-            && (!expectedRoute.arrival || flight.arrival.code === expectedRoute.arrival);
+          return (!expectedRoute.departure || sameAirportCode(flight.departure.code, expectedRoute.departure))
+            && (!expectedRoute.arrival || sameAirportCode(flight.arrival.code, expectedRoute.arrival));
         });
         items[index] = { date, available: flights.length > 0, past: false, flights };
       } catch (error) {
