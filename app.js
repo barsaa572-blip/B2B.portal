@@ -238,7 +238,11 @@ const bookingLegs = booking => {
 };
 const passengerHasNoShow = (booking, index) => Object.values(booking.itinerary?.noShow || {}).some(list => (list || []).map(Number).includes(index));
 const flightChoice = (leg, mode, checked = false) => { const locked = leg.flown || leg.allNoShow || leg.cancelled; return `<label class="flight-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-leg" value="${leg.key}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span class="flight-choice-copy"><small>${leg.flown ? 'FLOWN' : leg.allNoShow ? 'NO-SHOW' : leg.cancelled ? 'CANCELLED' : 'ACTIVE FLIGHT'}</small><strong>${leg.route}</strong><em>${leg.date ? `${leg.date} &middot; ` : ''}${leg.flight}</em></span><b>${leg.time}</b><i>${leg.flown ? 'Used' : leg.allNoShow ? 'No-show' : leg.cancelled ? 'Cancelled' : 'Select'}</i></label>`; };
-const passengerChoices = (booking, mode, { checked = true, disableNoShow = true } = {}) => (booking.passengers || [booking.passenger]).map((passenger, index) => { const noShow = passengerHasNoShow(booking, index); const locked = disableNoShow && noShow; return `<label class="passenger-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-passenger" value="${index}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span><strong>${index + 1}. ${passenger}</strong><small>${locked ? 'No-show recorded' : 'Adult passenger'}</small></span></label>`; }).join('');
+const passengerTypeLabel = (booking, index) => {
+  const type = String(booking.documents?.[index]?.type || booking.passengerTypes?.[index] || 'ADT').toUpperCase();
+  return ({ ADT: 'Adult passenger', CHD: 'Child passenger', INF: 'Infant passenger', ADULT: 'Adult passenger', CHILD: 'Child passenger', INFANT: 'Infant passenger' })[type] || `${type} passenger`;
+};
+const passengerChoices = (booking, mode, { checked = true, disableNoShow = true } = {}) => (booking.passengers || [booking.passenger]).map((passenger, index) => { const noShow = passengerHasNoShow(booking, index); const locked = disableNoShow && noShow; return `<label class="passenger-choice ${locked ? 'flown' : ''}"><input type="checkbox" name="${mode}-passenger" value="${index}" ${checked && !locked ? 'checked' : ''} ${locked ? 'disabled' : ''}/><span><strong>${index + 1}. ${passenger}</strong><small>${locked ? 'No-show recorded' : passengerTypeLabel(booking, index)}</small></span></label>`; }).join('');
 const yen = value => quoteMnt(value);
 const showCancelSelection = (modal, booking) => {
   const legs = bookingLegs(booking);
