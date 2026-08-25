@@ -92,13 +92,17 @@ const bookingFlightDetailsClean = booking => {
     const departureTime = (flight.departure?.time || '').slice(-5) || '—';
     const arrivalTime = (flight.arrival?.time || '').slice(-5) || '—';
     const travelDate = displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate));
-    const stateText = state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
     const departureName = reviewAirportName(flight.departure);
     const arrivalName = reviewAirportName(flight.arrival);
     const durationMinutes = Number(flight.duration);
     const duration = Number.isFinite(durationMinutes) && durationMinutes > 0 ? formatMinutes(durationMinutes) : 'Nonstop';
     const terminal = endpoint => endpoint?.terminal ? ` · ${endpoint.terminal}` : '';
-    return `<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong></header><div class="booking-leg-timeline"><div class="booking-leg-airport departure"><small><b>${departureCode}</b> ${departureName}${terminal(flight.departure)}</small></div><b class="booking-leg-time departure">${departureTime}</b><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><b class="booking-leg-time arrival">${arrivalTime}</b><div class="booking-leg-airport arrival"><small><b>${arrivalCode}</b> ${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><i class="booking-itinerary-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</i><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
+    const previous = [...(booking.itinerary?.changeHistory || [])].reverse().map(entry => ({ ...(entry.legs || []).find(item => item.key === legKey), changedAt: entry.changedAt })).find(item => item?.oldFlight);
+    const oldFlight = previous?.oldFlight;
+    const changedAt = previous?.changedAt ? new Date(previous.changedAt).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    const history = oldFlight ? `<article class="booking-flight-history"><small>REPLACED FLIGHT · ${changedAt}</small><strong>${oldFlight.departure?.id || ''} ${oldFlight.departure?.time || ''} → ${oldFlight.arrival?.id || ''} ${oldFlight.arrival?.time || ''}</strong><em>Flight ${oldFlight.number || '—'} · inactive after change</em></article>` : '';
+    const stateText = oldFlight ? 'Active after change' : state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
+    return `${history}<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong></header><div class="booking-leg-timeline"><div class="booking-leg-airport departure"><small><b>${departureCode}</b> ${departureName}${terminal(flight.departure)}</small></div><b class="booking-leg-time departure">${departureTime}</b><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><b class="booking-leg-time arrival">${arrivalTime}</b><div class="booking-leg-airport arrival"><small><b>${arrivalCode}</b> ${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><i class="booking-itinerary-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</i><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
   }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: 'active', return: 'active' };
@@ -182,15 +186,6 @@ const openBookingDetail = ref => {
   modal.querySelector('.download-receipt')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'receipt'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
   modal.showModal();
   startBookingDeadlineTimer(modal);
-  // Warm Spring's one-day-at-a-time change availability while the agent is
-  // reviewing the booking. This makes the later Change click use the server
-  // cache instead of beginning the slow monthly lookup at that point.
-  if (booking.status === 'Ticketed') {
-    const month = new Date().toISOString().slice(0, 7);
-    bookingLegs(booking).filter(leg => leg.orderItemId && !leg.flown && !leg.allNoShow).forEach(leg => {
-      secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(leg.orderItemId)}&month=${month}`).catch(() => null);
-    });
-  }
 };
 const showCancelEstimate = (modal, booking) => {
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">Ã—</button><p class="eyebrow">CANCEL TICKET</p><h2>Cancellation estimate</h2><p class="modal-copy">Review the estimated refund before submitting this ticket cancellation request.</p><section class="fee-summary"><div><span>Original ticket amount</span><b>${booking.total}</b></div><div><span>Airline cancellation fee</span><b>âˆ’ Â¥ 320.00</b></div><div><span>Service fee</span><b>âˆ’ Â¥ 60.00</b></div><div class="fee-total"><span>Estimated refund</span><strong>Â¥ 900.00</strong></div></section><p class="booking-warning">After confirmation, the cancellation is sent to the airline. Final refund is subject to fare rules and airline approval.</p><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-cancel">Confirm cancellation</button></div></section>`;
@@ -323,7 +318,7 @@ const showChangeFlow = (modal, booking) => {
   const replacements = leg => {
     const orderItem = leg.orderItemId ? `data-order-item-id="${leg.orderItemId}"` : '';
     const unavailable = leg.orderItemId ? '' : '<p class="selection-hint">Spring order item is unavailable. Sync this ticket before changing it.</p>';
-    return `<section class="replacement-flight" data-for="${leg.key}" ${orderItem}><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>${leg.flight}</strong><small>${leg.route} &middot; ${leg.time}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="" data-time="" data-date="" ${leg.orderItemId ? '' : 'disabled'}>Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>Loading…</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days"></div><p>Same airline and flight availability. • means a matching flight is available.</p></div><div class="daily-flight-options">${unavailable}</div></section>`;
+    return `<section class="replacement-flight" data-for="${leg.key}" ${orderItem}><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>${leg.flight}</strong><small>${leg.route} &middot; ${leg.time}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="" data-time="" data-date="" ${leg.orderItemId ? '' : 'disabled'}>Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>Loading…</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days"></div><p>Available dates only. Select a date to view matching flights and their fare difference.</p></div><div class="daily-flight-options">${unavailable}</div></section>`;
   };
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
@@ -331,12 +326,11 @@ const showChangeFlow = (modal, booking) => {
     let loadingMonth = ''; let loadedMonth = '';
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {
-      const option = (flight, checked) => { const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}" data-segment-head-id="${flight.segmentHeadId || ''}" data-date="${date}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>Select</b></label>`; };
+      const option = (flight, checked) => { const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; const difference = Number(flight.fareDifferenceCny || 0); const price = difference > 0 ? `+ ${quoteMnt(difference)}` : 'No fare difference'; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}" data-segment-head-id="${flight.segmentHeadId || ''}" data-date="${date}" data-flight-no="${flight.flightNo || ''}" data-booking-class="${flight.bookingClass || ''}" data-departure-code="${flight.departure?.code || ''}" data-departure-name="${flight.departure?.name || ''}" data-departure-time="${flight.departure?.time || ''}" data-arrival-code="${flight.arrival?.code || ''}" data-arrival-name="${flight.arrival?.name || ''}" data-arrival-time="${flight.arrival?.time || ''}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${price}</b></label>`; };
       choices.innerHTML = `<h3>Available flights on ${date}</h3>${flights.map((flight, index) => option(flight, index === 0)).join('')}`;
       const setChoice = input => { const [flight, timing] = input.value.split('|'); trigger.dataset.flight = flight; trigger.dataset.time = timing; trigger.dataset.date = input.dataset.date || date; };
-      choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => { setChoice(input); autoCalculateIfReady(); }));
+      choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => setChoice(input)));
       setChoice(choices.querySelector('input:checked'));
-      autoCalculateIfReady();
     };
     const renderMonth = async () => {
       const requestedMonth = monthKey();
@@ -376,17 +370,6 @@ const showChangeFlow = (modal, booking) => {
     calendar.querySelector('.availability-prev').addEventListener('click', async () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); await renderMonth(); } });
     calendar.querySelector('.availability-next').addEventListener('click', async () => { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() + 1, 1); await renderMonth(); });
   });
-  let autoCalculateQueued = false;
-  const autoCalculateIfReady = () => {
-    const selectedLegs = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked);
-    const passengers = selectedPassengerNames(modal, 'change-flow', booking);
-    const selectedNewFlights = selectedLegs.map(leg => modal.querySelector(`[name="daily-${leg.key}"]:checked`));
-    if (autoCalculateQueued || !selectedLegs.length || !passengers.length || selectedNewFlights.some(flight => !flight)) return;
-    const button = modal.querySelector('.calculate-change-flow');
-    if (!button || button.disabled) return;
-    autoCalculateQueued = true;
-    setTimeout(() => { autoCalculateQueued = false; if (!button.disabled) button.click(); }, 0);
-  };
   const renderReplacements = () => { const selected = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked); modal.querySelector('.replacement-list').innerHTML = selected.map(replacements).join('') || '<p class="selection-hint">Select an active flight first.</p>'; bindAvailabilityCalendars(); };
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the itinerary and passenger(s), then select a new date and flight.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change-flow')}</section></section><section class="replacement-list"></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change-flow">Calculate change</button></div></section>`;
   renderReplacements();
@@ -403,6 +386,21 @@ const showChangeFlow = (modal, booking) => {
       segHeadId: Number(selectedNewFlights[index].dataset.segmentHeadId)
     }));
     if (pairs.some(pair => !Number.isFinite(pair.flightsOrderHeadId) || !Number.isFinite(pair.segHeadId))) return toast('The selected flight is missing its Spring order information. Please sync the booking first.');
+    const changes = selectedLegs.map((leg, index) => {
+      const input = selectedNewFlights[index];
+      return {
+        key: leg.key,
+        newFlight: {
+          segmentHeadId: Number(input.dataset.segmentHeadId),
+          flightNo: input.dataset.flightNo || input.value.split('|')[0],
+          bookingClass: input.dataset.bookingClass || '',
+          airline: 'Spring Airlines',
+          travelDate: input.dataset.date || '',
+          departure: { code: input.dataset.departureCode || '', name: input.dataset.departureName || '', time: input.dataset.departureTime || '', date: input.dataset.date || '' },
+          arrival: { code: input.dataset.arrivalCode || '', name: input.dataset.arrivalName || '', time: input.dataset.arrivalTime || '', date: input.dataset.date || '' }
+        }
+      };
+    });
     const calculate = event.currentTarget;
     calculate.disabled = true;
     calculate.textContent = 'Calculating…';
@@ -416,7 +414,7 @@ const showChangeFlow = (modal, booking) => {
       const cny = quote.amountsCny || {};
       const mnt = quote.amountsMnt || {};
       const display = (key) => Number.isFinite(Number(mnt[key])) ? `₮ ${Number(mnt[key]).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : yen(cny[key] || 0);
-      const comparisons = selectedLegs.map((leg, index) => { const [number, time] = selectedNewFlights[index].value.split('|'); const newDate = selectedNewFlights[index].dataset.date || ''; return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.date ? `${leg.date} · ` : ''}${leg.flight} &middot; ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${leg.route}</strong><span>${newDate ? `${newDate} · ` : ''}Spring Airlines · ${number} · ${time}</span></div></div>`; }).join('');
+      const comparisons = selectedLegs.map((leg, index) => { const input = selectedNewFlights[index]; const number = input.dataset.flightNo || input.value.split('|')[0]; const newDate = displayFlightDate(input.dataset.date || ''); const newTimes = `${input.dataset.departureTime || '—'} → ${input.dataset.arrivalTime || '—'}`; return `<div class="flight-comparison"><div><small>OLD FLIGHT</small><strong>${leg.route}</strong><span>${leg.date ? `${displayFlightDate(leg.date)} · ` : ''}${leg.flight} · ${leg.time}</span></div><i>→</i><div><small>NEW FLIGHT</small><strong>${input.dataset.departureCode || leg.route.split(' ')[0]} → ${input.dataset.arrivalCode || leg.route.split(' ').at(-1)}</strong><span>${newDate ? `${newDate} · ` : ''}Spring Airlines · ${number} · ${newTimes}</span></div></div>`; }).join('');
       const gateway = Number(cny.paymentFee || 0) > 0 ? `<div><span>Payment gateway fee</span><b>${display('paymentFee')}</b></div>` : '';
       modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Spring change calculation</h2><p class="modal-copy">Calculated directly by Spring Airlines. Confirmation submits and pays the change request from the agency wallet.</p><section class="summary-selection"><h3>Selected passengers</h3><p>${passengers.join(' &middot; ')}</p></section><section class="comparison-list">${comparisons}</section><section class="fee-summary"><div><span>Airline change fee</span><b>${display('changeFee')}</b></div><div><span>Fare difference</span><b>${display('fareDifference')}</b></div>${gateway}<div class="fee-total"><span>Additional payment</span><strong>${display('additionalPayment')}</strong></div></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary confirm-change">Confirm &amp; pay change fee</button></div></section>`;
       modal.querySelector('.booking-close').addEventListener('click', () => modal.close());
@@ -427,13 +425,19 @@ const showChangeFlow = (modal, booking) => {
         button.textContent = 'Confirming payment…';
         try {
           const submitResponse = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-pay`, {
-            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ appId: quote.appId, amountCny: Number(cny.additionalPayment || 0) })
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ appId: quote.appId, amountCny: Number(cny.additionalPayment || 0), changes })
           });
           const submitData = await submitResponse.json();
           if (!submitResponse.ok) throw new Error(submitData.error || 'Spring change payment failed.');
+          const updated = submitData.booking ? portalBookingFromRow(submitData.booking) : null;
+          if (updated) {
+            const currentIndex = bookings.findIndex(item => item.ref === updated.ref);
+            if (currentIndex >= 0) bookings.splice(currentIndex, 1, updated); else bookings.unshift(updated);
+            renderBookings();
+          }
           modal.close();
           toast(submitData.paymentRequired === false ? `Spring change request submitted for ${booking.ref}.` : `Spring change payment completed for ${booking.ref}.`);
-          showView('bookings');
+          if (updated) openBookingDetail(updated.ref); else showView('bookings');
         } catch (error) {
           button.disabled = false;
           button.textContent = 'Confirm & pay change fee';

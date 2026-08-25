@@ -8,7 +8,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingChange, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const springIssueInFlight = new Set();
@@ -963,12 +963,14 @@ async function submitLiveSpringChange(profile, pnr, appId) {
 // A change request must be paid with the same Spring credit account used for
 // ticket issue. Spring confirmed orderType 2 is specifically for change fees;
 // a successful payment completes the change and reissues the ticket.
-async function paySubmittedSpringChange(profile, pnr, { appId, amountCny }) {
+async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, changes = [] }) {
   const normalizedPnr = String(pnr || '').trim().toUpperCase();
+  const numericAppId = Number(appId);
   const amount = Number(amountCny);
   if (!normalizedPnr) throw new Error('Booking reference is required.');
+  if (!Number.isFinite(numericAppId) || numericAppId <= 0) throw new Error('A valid Spring change application is required.');
   if (!Number.isFinite(amount) || amount < 0) throw new Error('A valid Spring change payment amount is required.');
-  const requestKey = `${normalizedPnr}:${Number(appId)}`;
+  const requestKey = `${normalizedPnr}:${numericAppId}`;
   if (springChangePaymentInFlight.has(requestKey)) throw new Error('Spring change payment is already in progress for this request.');
   springChangePaymentInFlight.add(requestKey);
   try {
@@ -976,25 +978,30 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny }) {
     if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
     await assertWalletFunds({ agencyId: booking.agency_id, amountCny: amount, actorId: profile.id });
 
-    const submission = await submitLiveSpringChange(profile, normalizedPnr, appId);
+    const submission = await submitLiveSpringChange(profile, normalizedPnr, numericAppId);
     // A zero-fee change is submitted to Spring but does not require a credit
     // charge. For a positive fee, do not update the portal wallet until Spring
     // has acknowledged payment—retrying after an ambiguous response could pay twice.
-    if (amount <= 0) return { submission: { ifSuccess: submission.ifSuccess }, paymentRequired: false };
+    if (amount <= 0) {
+      const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes });
+      return { submission: { ifSuccess: submission.ifSuccess }, paymentRequired: false, booking: updatedBooking };
+    }
 
     // This is deliberately logged without credentials or SOAP XML.  Spring's
     // payment errors do not always include a message, so the PNR, change
     // application ID and exact CNY value are needed to reconcile a rejected
     // payment with Spring support.
     console.info('Submitting Spring change credit payment', {
-      orderNo: normalizedPnr,
-      appId: Number(appId),
+      orderNo: String(numericAppId),
+      appId: numericAppId,
       orderType: Number(process.env.SPRING_CREDIT_CHANGE_ORDER_TYPE || 2),
       orderMoneyCny: amount,
       moneyClassId: Number(process.env.SPRING_CREDIT_MONEY_CLASS_ID || 0)
     });
     const payment = await createSpringSoapClient().payInCredit4OTA({
-      orderNo: normalizedPnr,
+      // Spring uses the numeric change-application ID for orderType 2, not
+      // the PNR. Using the PNR here causes its "For input string" SOAP fault.
+      orderNo: String(numericAppId),
       orderMoney: amount,
       moneyClassId: Number(process.env.SPRING_CREDIT_MONEY_CLASS_ID || 0),
       orderType: Number(process.env.SPRING_CREDIT_CHANGE_ORDER_TYPE || 2)
@@ -1010,8 +1017,9 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny }) {
       console.error(`Spring change payment succeeded but the local wallet update failed for ${normalizedPnr}: ${error.message}`);
       throw new Error('Spring change payment succeeded, but the portal wallet could not be updated. Do not retry; contact support with this PNR.');
     }
+    const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes });
     console.info(`Spring change payment succeeded and change was completed for ${normalizedPnr}.`);
-    return { submission: { ifSuccess: submission.ifSuccess }, payment: { ifSuccess: payment.ifSuccess }, paymentRequired: true };
+    return { submission: { ifSuccess: submission.ifSuccess }, payment: { ifSuccess: payment.ifSuccess }, paymentRequired: true, booking: updatedBooking };
   } finally {
     springChangePaymentInFlight.delete(requestKey);
   }

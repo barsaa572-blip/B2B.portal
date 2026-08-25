@@ -386,6 +386,63 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
   return updated[0];
 }
 
+// A confirmed Spring change replaces the active segment, but retains the
+// original segment in the itinerary audit trail so agents can see exactly
+// when and what was changed without treating the old flight as active.
+export async function recordPortalBookingChange(profile, pnr, { appId, changes = [] }) {
+  const rows = await secretRequest(`/rest/v1/bookings?select=*&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const booking = rows[0];
+  if (!booking) throw new Error('Booking not found.');
+  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  if (!allowed) throw new Error('You do not have access to this booking.');
+  if (booking.status !== 'Ticketed') throw new Error('Only ticketed bookings can be changed.');
+  const originalFlights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
+  const byLeg = new Map((changes || []).filter(item => item?.key && item?.newFlight).map(item => [item.key, item]));
+  const changedAt = new Date().toISOString();
+  const applied = [];
+  const flights = originalFlights.map((flight, index) => {
+    const key = index ? 'return' : 'outbound';
+    const change = byLeg.get(key);
+    const replacement = change?.newFlight;
+    if (!replacement?.flightNo) return flight;
+    const next = {
+      ...flight,
+      number: replacement.flightNo,
+      travelDate: replacement.travelDate || replacement.date || replacement.departure?.date || flight.travelDate,
+      airline: replacement.airline || flight.airline || 'Spring Airlines',
+      bookingClass: replacement.bookingClass || flight.bookingClass,
+      departure: {
+        ...(flight.departure || {}),
+        id: replacement.departure?.code || replacement.departure?.id || flight.departure?.id,
+        name: replacement.departure?.name || flight.departure?.name,
+        time: replacement.departure?.time || flight.departure?.time,
+        terminal: replacement.departure?.terminal || flight.departure?.terminal || null
+      },
+      arrival: {
+        ...(flight.arrival || {}),
+        id: replacement.arrival?.code || replacement.arrival?.id || flight.arrival?.id,
+        name: replacement.arrival?.name || flight.arrival?.name,
+        time: replacement.arrival?.time || flight.arrival?.time,
+        terminal: replacement.arrival?.terminal || flight.arrival?.terminal || null
+      },
+      spring: { ...(flight.spring || {}), segHeadId: replacement.segmentHeadId || flight.spring?.segHeadId },
+      status: 'ticketed'
+    };
+    applied.push({ key, oldFlight: flight, newFlight: next });
+    return next;
+  });
+  if (!applied.length) throw new Error('No replacement flight was available to save for this change.');
+  const itinerary = {
+    ...(booking.itinerary || {}),
+    flights,
+    ...(flights[0]?.travelDate ? { departureDate: flights[0].travelDate } : {}),
+    ...(flights[1]?.travelDate ? { returnDate: flights[1].travelDate } : {}),
+    changeHistory: [...(booking.itinerary?.changeHistory || []), { appId: Number(appId), changedAt, legs: applied }]
+  };
+  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { itinerary } });
+  return updated[0];
+}
+
 export async function recordPortalBookingNoShow(profile, pnr, { legs, passengerIndexes }) {
   if (!['office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Only an office manager or platform administrator can record a no-show.');
   const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,status,itinerary,passengers&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
