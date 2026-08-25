@@ -304,6 +304,8 @@ const showChangeSelection = (modal, booking) => {
   modal.querySelector('.confirm-change').addEventListener('click', () => { modal.close(); toast(`Change request for ${booking.ref} created.`); });
 };
 const selectedPassengerNames = (modal, mode, booking) => [...modal.querySelectorAll(`[name="${mode}-passenger"]:checked`)].map(input => (booking.passengers || [booking.passenger])[Number(input.value)]);
+const selectedPassengerIndexes = (modal, mode) => [...modal.querySelectorAll(`[name="${mode}-passenger"]:checked`)]
+  .map(input => Number(input.value)).filter(Number.isInteger);
 const showCancelFlow = (modal, booking) => {
   const legs = bookingLegs(booking);
   const activeLegs = legs.filter(leg => !leg.flown && !leg.allNoShow && !leg.cancelled);
@@ -355,10 +357,10 @@ const showChangeFlow = (modal, booking) => {
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
     const today = new Date(); today.setHours(0, 0, 0, 0); const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1); const travelDate = section.dataset.travelDate || ''; const flightMonth = /^\d{4}-\d{2}-\d{2}$/.test(travelDate) ? new Date(`${travelDate}T12:00:00`) : null; let shownDate = flightMonth && flightMonth >= currentMonth ? new Date(flightMonth.getFullYear(), flightMonth.getMonth(), 1) : new Date(currentMonth);
-    let loadingMonth = ''; let loadedMonth = '';
+    let loadingMonth = ''; let loadedMonth = ''; let liveOrderHeadIds = [];
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {
-      const option = (flight, checked) => { const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; const difference = Number(flight.fareDifferenceCny || 0); const price = difference > 0 ? `+ ${quoteMnt(difference)}` : 'No fare difference'; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}" data-segment-head-id="${flight.segmentHeadId || ''}" data-date="${date}" data-flight-no="${flight.flightNo || ''}" data-booking-class="${flight.bookingClass || ''}" data-departure-code="${flight.departure?.code || ''}" data-departure-name="${flight.departure?.name || ''}" data-departure-time="${flight.departure?.time || ''}" data-arrival-code="${flight.arrival?.code || ''}" data-arrival-name="${flight.arrival?.name || ''}" data-arrival-time="${flight.arrival?.time || ''}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${price}</b></label>`; };
+      const option = (flight, checked) => { const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; const difference = Number(flight.fareDifferenceCny || 0); const price = difference > 0 ? `+ ${quoteMnt(difference)}` : 'No fare difference'; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}" data-segment-head-id="${flight.segmentHeadId || ''}" data-order-head-ids="${liveOrderHeadIds.join(',')}" data-date="${date}" data-flight-no="${flight.flightNo || ''}" data-booking-class="${flight.bookingClass || ''}" data-departure-code="${flight.departure?.code || ''}" data-departure-name="${flight.departure?.name || ''}" data-departure-time="${flight.departure?.time || ''}" data-arrival-code="${flight.arrival?.code || ''}" data-arrival-name="${flight.arrival?.name || ''}" data-arrival-time="${flight.arrival?.time || ''}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${price}</b></label>`; };
       choices.innerHTML = `<h3>Available flights on ${date}</h3>${flights.map((flight, index) => option(flight, index === 0)).join('')}`;
       const setChoice = input => { const [flight, timing] = input.value.split('|'); trigger.dataset.flight = flight; trigger.dataset.time = timing; trigger.dataset.date = input.dataset.date || date; };
       choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => setChoice(input)));
@@ -394,6 +396,9 @@ const showChangeFlow = (modal, booking) => {
         }
         if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
         if (requestedMonth !== monthKey()) return;
+        liveOrderHeadIds = Array.isArray(data.orderHeadIds)
+          ? data.orderHeadIds.map(Number).filter(Number.isSafeInteger)
+          : [];
         const byDate = new Map((data.items || []).map(item => [item.date, item]));
         const blanks = '<span class="availability-blank"></span>'.repeat(start);
         const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); return `<button type="button" class="availability-day ${available ? 'available' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? '●' : '–'}</span></button>`; }).join('');
@@ -427,12 +432,22 @@ const showChangeFlow = (modal, booking) => {
   modal.querySelector('.calculate-change-flow').addEventListener('click', async event => {
     const selectedLegs = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked);
     const passengers = selectedPassengerNames(modal, 'change-flow', booking);
+    const passengerIndexes = selectedPassengerIndexes(modal, 'change-flow');
     const selectedNewFlights = selectedLegs.map(leg => modal.querySelector(`[name="daily-${leg.key}"]:checked`));
     if (!selectedLegs.length || !passengers.length || selectedNewFlights.some(flight => !flight)) return toast('Select flights, passengers, and replacement flights.');
-    const pairs = selectedLegs.map((leg, index) => ({
-      flightsOrderHeadId: Number(leg.orderItemId),
-      segHeadId: Number(selectedNewFlights[index].dataset.segmentHeadId)
-    }));
+    const pairs = selectedLegs.flatMap((leg, index) => {
+      const input = selectedNewFlights[index];
+      const fallbackId = Number(leg.orderItemId);
+      const orderHeadIds = String(input.dataset.orderHeadIds || '')
+        .split(',').map(Number).filter(Number.isSafeInteger);
+      const selectedIds = [...new Set(passengerIndexes
+        .map(passengerIndex => orderHeadIds[passengerIndex] || fallbackId)
+        .filter(Number.isSafeInteger))];
+      return selectedIds.map(flightsOrderHeadId => ({
+        flightsOrderHeadId,
+        segHeadId: Number(input.dataset.segmentHeadId)
+      }));
+    });
     if (pairs.some(pair => !Number.isFinite(pair.flightsOrderHeadId) || !Number.isFinite(pair.segHeadId))) return toast('The selected flight is missing its Spring order information. Please sync the booking first.');
     const changes = selectedLegs.map((leg, index) => {
       const input = selectedNewFlights[index];

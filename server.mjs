@@ -870,15 +870,27 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
   const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
   if (!booking) throw new Error('Booking not found or you do not have access to it.');
   if (booking.status !== 'Ticketed') throw new Error('Only a ticketed booking can be changed.');
-  const allowedIds = (booking.itinerary?.springOrder?.orderItemIds || []).map(String);
-  if (!allowedIds.includes(String(orderItemId))) throw new Error('This order item does not belong to the selected booking.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+
+  // `getFlightBgInfo` requires Spring's passenger orderHeadId, not the
+  // order-item id stored by the HTTP order-retrieve response. They can look
+  // the same on a one-passenger booking but diverge as soon as a PNR has
+  // multiple passengers. Resolve the authoritative IDs from the SOAP order
+  // detail before requesting a monthly change calendar.
+  const liveOrderHeadIds = await resolveSpringOrderHeadIds(pnr);
+  const requestedOrderHeadId = Number(orderItemId);
+  const orderHeadId = liveOrderHeadIds.includes(requestedOrderHeadId)
+    ? requestedOrderHeadId
+    : liveOrderHeadIds[0];
+  if (!Number.isSafeInteger(orderHeadId) || orderHeadId <= 0) {
+    throw new Error('Spring did not return a changeable passenger order for this booking.');
+  }
 
   const expectedRoute = {
     departure: portalAirportCode(expectedDeparture || ''),
     arrival: portalAirportCode(expectedArrival || '')
   };
-  const key = changeCalendarKey(pnr, orderItemId, month, expectedRoute.departure, expectedRoute.arrival);
+  const key = changeCalendarKey(pnr, orderHeadId, month, expectedRoute.departure, expectedRoute.arrival);
   const cached = changeCalendarCache.get(key);
   // Spring exposes availability one date at a time. The browser starts this
   // lookup as a background prefetch when the change screen opens, so opening
@@ -907,7 +919,7 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
         return await client.getChangeInfo({
           lang: 'zh_cn',
           newTimeLBegin: Date.parse(`${date}T00:00:00+08:00`),
-          orderHeadId: Number(orderItemId)
+          orderHeadId
         }, token.accessToken);
       } catch (error) {
         lastError = error;
@@ -944,7 +956,12 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
   // overwhelming Spring's test gateway (which otherwise intermittently
   // returns an HTML 502 page to the portal).
   await Promise.all(Array.from({ length: Math.min(4, dates.length) }, worker));
-  const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, expectedRoute, items, lookupFailures };
+  const value = {
+    source: 'Spring Airlines', pnr,
+    orderHeadId: String(orderHeadId),
+    orderHeadIds: liveOrderHeadIds.map(String),
+    month, expectedRoute, items, lookupFailures
+  };
   const hasAvailability = items.some(item => item?.available);
   // Schedules are relatively stable during a session. Retain a populated
   // month for six hours; retry a completely unavailable result sooner in
@@ -973,6 +990,10 @@ async function calculateLiveSpringChange(profile, pnr, bgPairList) {
     segHeadId: Number(pair.segHeadId)
   })).filter(pair => Number.isFinite(pair.flightsOrderHeadId) && Number.isFinite(pair.segHeadId));
   if (!pairs.length) throw new Error('The selected Spring order item or replacement flight is invalid.');
+  const liveOrderHeadIds = await resolveSpringOrderHeadIds(pnr);
+  if (pairs.some(pair => !liveOrderHeadIds.includes(pair.flightsOrderHeadId))) {
+    throw new Error('Passenger order data has changed in Spring. Please reopen the change screen and select the flight again.');
+  }
   const client = createSpringClient();
   const token = await client.getAccessToken();
   const result = await client.getChangeAvailability({
