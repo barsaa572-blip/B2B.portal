@@ -982,6 +982,17 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny }) {
     // has acknowledged payment—retrying after an ambiguous response could pay twice.
     if (amount <= 0) return { submission: { ifSuccess: submission.ifSuccess }, paymentRequired: false };
 
+    // This is deliberately logged without credentials or SOAP XML.  Spring's
+    // payment errors do not always include a message, so the PNR, change
+    // application ID and exact CNY value are needed to reconcile a rejected
+    // payment with Spring support.
+    console.info('Submitting Spring change credit payment', {
+      orderNo: normalizedPnr,
+      appId: Number(appId),
+      orderType: Number(process.env.SPRING_CREDIT_CHANGE_ORDER_TYPE || 2),
+      orderMoneyCny: amount,
+      moneyClassId: Number(process.env.SPRING_CREDIT_MONEY_CLASS_ID || 0)
+    });
     const payment = await createSpringSoapClient().payInCredit4OTA({
       orderNo: normalizedPnr,
       orderMoney: amount,
