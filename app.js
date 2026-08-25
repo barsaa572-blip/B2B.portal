@@ -203,7 +203,20 @@ const showChangeEstimate = (modal, booking) => {
 const bookingLegs = booking => {
   const storedFlights = booking.itinerary?.flights;
   const noShow = booking.itinerary?.noShow || {};
-  if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
+  // Spring's order-retrieve response does not guarantee that the segments
+  // arrive in itinerary order.  Put the original outbound route first before
+  // we label a leg "outbound" or "return".  The change calendar then receives
+  // the correct route, rather than e.g. treating BKK → PVG as the return leg.
+  const routeCodes = String(booking.itinerary?.route || booking.route || '').match(/[A-Z]{3}/g) || [];
+  const [outboundDeparture, outboundArrival] = routeCodes;
+  const orderedFlights = Array.isArray(storedFlights) ? [...storedFlights].sort((left, right) => {
+    const leftMatchesOutbound = String(left?.departure?.id || '').toUpperCase() === outboundDeparture
+      && String(left?.arrival?.id || '').toUpperCase() === outboundArrival;
+    const rightMatchesOutbound = String(right?.departure?.id || '').toUpperCase() === outboundDeparture
+      && String(right?.arrival?.id || '').toUpperCase() === outboundArrival;
+    return Number(rightMatchesOutbound) - Number(leftMatchesOutbound);
+  }) : [];
+  if (orderedFlights.length) return orderedFlights.map((flight, index) => {
     const key = index ? 'return' : 'outbound'; const passengers = booking.passengers || [booking.passenger];
     const springState = String(flight.status || '').toLowerCase();
     const springNoShow = springState === 'no-show' || springState === 'noshow';
