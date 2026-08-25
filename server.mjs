@@ -828,7 +828,7 @@ async function syncSpringOrder(profile, pnr) {
 // Keep this server-side: the browser must not receive an OAuth token and we
 // also verify that the requested order item belongs to the signed-in agency.
 const changeCalendarCache = new Map();
-const changeCalendarKey = (pnr, orderItemId, month) => `${pnr}:${orderItemId}:${month}`;
+const changeCalendarKey = (pnr, orderItemId, month, departure = '', arrival = '') => `${pnr}:${orderItemId}:${month}:${departure}:${arrival}`;
 const calendarDate = (year, month, day) => `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 const changeFlightSummary = flight => ({
   segmentHeadId: Number(flight.segmentHeadId),
@@ -852,7 +852,7 @@ const changeFlightSummary = flight => ({
   fareDifferenceCny: Number(flight.bgShengcangMoney || 0)
 });
 
-async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
+async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedDeparture = '', expectedArrival = '') {
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Month must use YYYY-MM format.');
   const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
   if (!booking) throw new Error('Booking not found or you do not have access to it.');
@@ -861,7 +861,11 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
   if (!allowedIds.includes(String(orderItemId))) throw new Error('This order item does not belong to the selected booking.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
 
-  const key = changeCalendarKey(pnr, orderItemId, month);
+  const expectedRoute = {
+    departure: portalAirportCode(expectedDeparture || ''),
+    arrival: portalAirportCode(expectedArrival || '')
+  };
+  const key = changeCalendarKey(pnr, orderItemId, month, expectedRoute.departure, expectedRoute.arrival);
   const cached = changeCalendarCache.get(key);
   // Spring exposes availability one date at a time. The browser starts this
   // lookup as a background prefetch when the change screen opens, so opening
@@ -886,7 +890,14 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
       try {
         const newTimeLBegin = Date.parse(`${date}T00:00:00+08:00`);
         const result = await client.getChangeInfo({ lang: 'zh_cn', newTimeLBegin, orderHeadId: Number(orderItemId) }, token.accessToken);
-        const flights = (result.bgFlightInfoList || []).map(changeFlightSummary).filter(flight => Number.isFinite(flight.segmentHeadId) && flight.flightNo);
+        const flights = (result.bgFlightInfoList || []).map(changeFlightSummary).filter(flight => {
+          if (!Number.isFinite(flight.segmentHeadId) || !flight.flightNo) return false;
+          // The supplier can return replacement choices for another segment
+          // under the same passenger order head. Only expose the route the
+          // agent actually selected in the portal.
+          return (!expectedRoute.departure || flight.departure.code === expectedRoute.departure)
+            && (!expectedRoute.arrival || flight.arrival.code === expectedRoute.arrival);
+        });
         items[index] = { date, available: flights.length > 0, past: false, flights };
       } catch (error) {
         // A date without an eligible replacement is shown as unavailable. Do
@@ -898,7 +909,7 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
   // These are availability lookups only. A modestly higher concurrency avoids
   // making an agent wait through a whole month of sequential requests.
   await Promise.all(Array.from({ length: Math.min(20, dates.length) }, worker));
-  const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, items };
+  const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, expectedRoute, items };
   const hasAvailability = items.some(item => item?.available);
   // Schedules are relatively stable during a session. Retain a populated
   // month for six hours; retry a completely unavailable result sooner in
@@ -1087,7 +1098,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     const orderItemId = url.searchParams.get('orderItemId');
     const month = url.searchParams.get('month');
     if (!/^\d+$/.test(String(orderItemId || ''))) throw new Error('A valid Spring order item is required.');
-    return send(res, 200, await getLiveChangeCalendar(profile, changeCalendarMatch[1], orderItemId, month));
+    return send(res, 200, await getLiveChangeCalendar(profile, changeCalendarMatch[1], orderItemId, month, url.searchParams.get('departure'), url.searchParams.get('arrival')));
   }
   const syncMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/sync$/);
   if (syncMatch && req.method === 'POST') return send(res, 200, { booking: await syncSpringOrder(profile, syncMatch[1]) });

@@ -209,7 +209,13 @@ const bookingLegs = booking => {
     const springNoShow = springState === 'no-show' || springState === 'noshow';
     const noShowPassengers = springNoShow ? passengers.map((_, passengerIndex) => passengerIndex) : (noShow[key] || []).map(Number).filter(Number.isInteger);
     const travelDate = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || '';
-    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(travelDate), travelDate, flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
+    // Spring's `orderHeadId` belongs to a passenger/order, not to the
+    // positional flight array.  Do not assign the second passenger's ID to
+    // the return leg: doing so makes Spring return availability for the wrong
+    // direction. The selected passenger IDs are applied later when the
+    // change application is calculated.
+    const orderItemId = (booking.itinerary?.springOrder?.orderItemIds || []).find(Boolean) || null;
+    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(travelDate), travelDate, flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId, departureCode: String(flight.departure?.id || '').toUpperCase(), arrivalCode: String(flight.arrival?.id || '').toUpperCase() };
   });
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
@@ -319,7 +325,7 @@ const showChangeFlow = (modal, booking) => {
   const replacements = leg => {
     const orderItem = leg.orderItemId ? `data-order-item-id="${leg.orderItemId}"` : '';
     const unavailable = leg.orderItemId ? '' : '<p class="selection-hint">Spring order item is unavailable. Sync this ticket before changing it.</p>';
-    return `<section class="replacement-flight" data-for="${leg.key}" data-travel-date="${leg.travelDate || ''}" ${orderItem}><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>${leg.flight}</strong><small>${leg.route} &middot; ${leg.time}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="" data-time="" data-date="" ${leg.orderItemId ? '' : 'disabled'}>Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>Loading…</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days"></div><p>Available dates only. Select a date to view matching flights and their fare difference.</p></div><div class="daily-flight-options">${unavailable}</div></section>`;
+    return `<section class="replacement-flight" data-for="${leg.key}" data-travel-date="${leg.travelDate || ''}" data-departure-code="${leg.departureCode || ''}" data-arrival-code="${leg.arrivalCode || ''}" ${orderItem}><div class="replacement-title"><span>New date for ${leg.key === 'outbound' ? 'departure flight' : 'return flight'}</span><strong>${leg.flight}</strong><small>${leg.route} &middot; ${leg.time}</small></div><button type="button" class="availability-date" data-for="${leg.key}" data-flight="" data-time="" data-date="" ${leg.orderItemId ? '' : 'disabled'}>Choose a new date</button><div class="availability-calendar" hidden><div class="availability-head"><button type="button" class="availability-prev" aria-label="Previous month">‹</button><strong>Loading…</strong><button type="button" class="availability-next" aria-label="Next month">›</button></div><div class="availability-week"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class="availability-days"></div><p>Available dates only. Select a date to view matching flights and their fare difference.</p></div><div class="daily-flight-options">${unavailable}</div></section>`;
   };
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
@@ -351,7 +357,7 @@ const showChangeFlow = (modal, booking) => {
       }).join('');
       calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${initialDays}`;
       try {
-        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}`);
+        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}&departure=${encodeURIComponent(section.dataset.departureCode || '')}&arrival=${encodeURIComponent(section.dataset.arrivalCode || '')}`);
         // A VPS restart or reverse-proxy interruption can return an HTML error
         // page.  Do not expose its JSON parser error ("Unexpected token '<'")
         // to an agent; keep the calendar usable and show an actionable message.
