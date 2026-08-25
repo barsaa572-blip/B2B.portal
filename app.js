@@ -352,7 +352,16 @@ const showChangeFlow = (modal, booking) => {
       calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${initialDays}`;
       try {
         const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}`);
-        const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
+        // A VPS restart or reverse-proxy interruption can return an HTML error
+        // page.  Do not expose its JSON parser error ("Unexpected token '<'")
+        // to an agent; keep the calendar usable and show an actionable message.
+        const responseText = await response.text();
+        let data;
+        try { data = responseText ? JSON.parse(responseText) : {}; }
+        catch {
+          throw new Error('The availability service was temporarily interrupted. Please open the calendar again in a moment.');
+        }
+        if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
         if (requestedMonth !== monthKey()) return;
         const byDate = new Map((data.items || []).map(item => [item.date, item]));
         const blanks = '<span class="availability-blank"></span>'.repeat(start);
