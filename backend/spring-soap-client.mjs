@@ -97,7 +97,11 @@ export function createSpringSoapClient(env = process.env) {
       throw new Error('A valid Spring order number, amount, currency and order type are required.');
     }
 
-    const body = `<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <i:payInCredit4OTA xmlns:i="http://wsinterface.remoteservice.booking.springairlines.com/">\n      <paymentInfo>\n        <usernameToken><password>${xmlEscape(password)}</password><username>${xmlEscape(username)}</username></usernameToken>\n        <moneyClassId>${currencyId}</moneyClassId>\n        <orderMoney>${money}</orderMoney>\n        <orderNo>${xmlEscape(String(orderNo).trim())}</orderNo>\n        <orderType>${type}</orderType>\n      </paymentInfo>\n    </i:payInCredit4OTA>\n  </soap:Body>\n</soap:Envelope>`;
+    // The legacy SOAP service deserializes its bean fields in the sequence
+    // defined by the WSDL.  Do not rearrange these tags: if `orderNo` appears
+    // where `orderMoney` is expected Spring attempts to parse a PNR as a
+    // number (e.g. "For input string: BAARWUB").
+    const body = `<?xml version="1.0" encoding="utf-8"?>\n<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">\n  <soap:Body>\n    <i:payInCredit4OTA xmlns:i="http://wsinterface.remoteservice.booking.springairlines.com/">\n      <paymentInfo>\n        <usernameToken><password>${xmlEscape(password)}</password><username>${xmlEscape(username)}</username></usernameToken>\n        <orderType>${type}</orderType>\n        <orderNo>${xmlEscape(String(orderNo).trim())}</orderNo>\n        <orderMoney>${money}</orderMoney>\n        <moneyClassId>${currencyId}</moneyClassId>\n      </paymentInfo>\n    </i:payInCredit4OTA>\n  </soap:Body>\n</soap:Envelope>`;
 
     let response;
     try {
