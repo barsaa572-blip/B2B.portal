@@ -100,12 +100,20 @@ const bookingFlightDetailsClean = booking => {
     const arrivalName = reviewAirportName(flight.arrival);
     const durationMinutes = Number(flight.duration);
     const duration = Number.isFinite(durationMinutes) && durationMinutes > 0 ? formatMinutes(durationMinutes) : 'Nonstop';
-    const terminal = endpoint => endpoint?.terminal ? ` · ${endpoint.terminal}` : '';
+    // Supplier terminals occasionally contain a concatenated Chinese airport
+    // name (for example "3T2航站楼").  Only render a clear, trustworthy T1–T9
+    // value; the airport name itself is resolved to English below.
+    const terminal = endpoint => {
+      const raw = String(endpoint?.terminal || '').trim();
+      const match = raw.match(/(?:^|\s)T([1-9])(?:\s|$)/i) || raw.match(/(?:航站楼|Terminal)\s*([1-9])\b/i) || raw.match(/\dT([1-9])/i);
+      return match ? ` · T${match[1]}` : '';
+    };
     const previous = [...(booking.itinerary?.changeHistory || [])].reverse().map(entry => ({ ...(entry.legs || []).find(item => item.key === legKey), changedAt: entry.changedAt })).find(item => item?.oldFlight);
     const oldFlight = previous?.oldFlight;
     const changedAt = previous?.changedAt ? new Date(previous.changedAt).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    const oldTravelDate = displayFlightDate(oldFlight?.travelDate || oldFlight?.departure?.date || oldFlight?.departure?.dateTime);
-    const history = oldFlight ? `<article class="booking-flight-history"><small>REPLACED FLIGHT · ${changedAt}</small><strong>${oldTravelDate ? `${oldTravelDate} · ` : ''}${oldFlight.departure?.id || ''} ${oldFlight.departure?.time || ''} → ${oldFlight.arrival?.id || ''} ${oldFlight.arrival?.time || ''}</strong><em>Flight ${oldFlight.number || '—'} · inactive after change</em></article>` : '';
+    const oldTravelDate = displayFlightDate(oldFlight?.travelDate || oldFlight?.departure?.date || oldFlight?.departure?.dateTime || previous?.oldTravelDate);
+    const historyDate = oldTravelDate || 'Original travel date unavailable';
+    const history = oldFlight ? `<article class="booking-flight-history"><small>REPLACED FLIGHT${changedAt ? ` · Changed ${changedAt}` : ''}</small><strong>${historyDate} · ${oldFlight.departure?.id || ''} ${oldFlight.departure?.time || ''} → ${oldFlight.arrival?.id || ''} ${oldFlight.arrival?.time || ''}</strong><em>Flight ${oldFlight.number || '—'} · inactive after change</em></article>` : '';
     const stateText = oldFlight ? 'Active after change' : state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
     return `${history}<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong></header><div class="booking-leg-timeline"><div class="booking-leg-airport departure"><small><b>${departureCode}</b> ${departureName}${terminal(flight.departure)}</small></div><b class="booking-leg-time departure">${departureTime}</b><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><b class="booking-leg-time arrival">${arrivalTime}</b><div class="booking-leg-airport arrival"><small><b>${arrivalCode}</b> ${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><i class="booking-itinerary-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</i><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
   }).join('');
@@ -606,7 +614,19 @@ const totalPrice = () => {
   const adultTotal = numbers.reduce((sum, value) => sum + value, 0) * activePassengerCounts.adults;
   return quoteMnt(adultTotal);
 };
-const airportNames = { ULN: 'Chinggis Khaan International Airport', PVG: 'Shanghai Pudong International Airport', SHA: 'Shanghai Hongqiao International Airport', PEK: 'Beijing Capital International Airport', PKX: 'Beijing Daxing International Airport', HKG: 'Hong Kong International Airport', NRT: 'Tokyo Narita International Airport', ICN: 'Seoul Incheon International Airport' };
+const airportNames = {
+  ULN: 'Chinggis Khaan International Airport',
+  BKK: 'Suvarnabhumi Airport', DMK: 'Don Mueang International Airport',
+  PVG: 'Shanghai Pudong International Airport', SHA: 'Shanghai Hongqiao International Airport',
+  PEK: 'Beijing Capital International Airport', PKX: 'Beijing Daxing International Airport',
+  CAN: 'Guangzhou Baiyun International Airport', SZX: 'Shenzhen Bao’an International Airport',
+  CTU: 'Chengdu Shuangliu International Airport', TFU: 'Chengdu Tianfu International Airport',
+  XIY: 'Xi’an Xianyang International Airport', HGH: 'Hangzhou Xiaoshan International Airport',
+  NKG: 'Nanjing Lukou International Airport', WUH: 'Wuhan Tianhe International Airport',
+  DLC: 'Dalian Zhoushuizi International Airport', NNG: 'Nanning Wuxu International Airport',
+  HKG: 'Hong Kong International Airport', NRT: 'Tokyo Narita International Airport',
+  ICN: 'Seoul Incheon International Airport'
+};
 const mockFlight = (departure, arrival, number, departureTime, arrivalTime, price, airline = 'Spring') => ({ airline, number, duration: 250, stops: 0, price: String(price), departure: { id: departure, time: departureTime, name: airportNames[departure] || `${departure} Airport` }, arrival: { id: arrival, time: arrivalTime, name: airportNames[arrival] || `${arrival} Airport` }, segments: [{ airline, number, duration: 250, departure: { id: departure, time: departureTime, name: airportNames[departure] || `${departure} Airport` }, arrival: { id: arrival, time: arrivalTime, name: airportNames[arrival] || `${arrival} Airport` }, airplane: 'Airbus A320', travelClass: 'Economy' }] });
 const mockSearchResults = (departure, arrival) => [mockFlight(departure, arrival, '9C 7058', '13:00', '17:00', 2095), mockFlight(departure, arrival, '9C 7012', '08:10', '12:05', 2360), mockFlight(departure, arrival, '9C 7026', '18:30', '22:30', 2580)];
 const showMockSearch = (departure, arrival) => { const outbound = mockSearchResults(departure, arrival); if (tripType === 'round') { const returns = [mockFlight(arrival, departure, '9C 7057', '08:10', '12:00', 1960), mockFlight(arrival, departure, '9C 7011', '14:15', '18:05', 2150), mockFlight(arrival, departure, '9C 7025', '19:20', '23:15', 2290)]; renderRoundPairs(outbound.map((flight, index) => ({ outbound: flight, returnFlight: returns[index], sameAirline: true }))); } else renderFlights(outbound, 'outbound'); };
@@ -628,7 +648,14 @@ const selectedReviewFares = () => {
   const total = flights.reduce((sum, flight) => sum + cnyAmount(flight?.fare?.total ?? flight?.price), 0) * adults;
   return { fare, taxes, total };
 };
-const reviewAirportName = airport => airport?.name || airportNames[airport?.id] || `${airport?.id || ''} Airport`;
+const reviewAirportName = airport => {
+  const code = String(airport?.id || airport?.code || '').toUpperCase();
+  // Always prefer an English code mapping over Spring’s supplier text. This
+  // prevents Chinese/concatenated airport names from leaking into the portal.
+  if (airportNames[code]) return airportNames[code];
+  const supplied = String(airport?.name || '').trim();
+  return /[\u3400-\u9fff]/.test(supplied) ? `${code || 'Airport'} Airport` : (supplied || `${code || 'Airport'} Airport`);
+};
 const reviewFlight = (flight, date) => {
   if (!flight) return '';
   const first = flight.segments?.[0] || flight;
