@@ -8,7 +8,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, refreshAuthSession, requirePlatformAdmin, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const springIssueInFlight = new Set();
@@ -608,10 +608,19 @@ async function issueSpringCreditTicket(profile, pnr) {
     if (booking.status !== 'Reserved') throw new Error(`Only a reserved booking can be issued (current status: ${booking.status}).`);
     if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
 
-    await assertWalletFunds({ agencyId: booking.agency_id, amountCny: Number(booking.total_cny), actorId: profile.id });
+    // The fare stored at reservation time can be provisional.  Read the PNR
+    // directly from Spring before payment so any getSpecificPriceNew/booking
+    // promotion is reflected in the CNY amount sent to payInCredit4OTA.
+    const orderDetail = await createSpringSoapClient().getOrderDetailInfoC2({ orderNo: normalizedPnr, lang: 'zh_cn' });
+    const finalCny = Number(orderDetail.orderMoneyCny);
+    if (!Number.isFinite(finalCny) || finalCny <= 0) {
+      throw new Error('Spring did not return a valid final CNY amount for this PNR. Ticket issue was not attempted.');
+    }
+    const springBooking = await setPortalBookingSpringAmount(profile, normalizedPnr, finalCny);
+    await assertWalletFunds({ agencyId: springBooking.agency_id, amountCny: finalCny, actorId: profile.id });
     const springResult = await createSpringSoapClient().payInCredit4OTA({
       orderNo: normalizedPnr,
-      orderMoney: Number(booking.total_cny),
+      orderMoney: finalCny,
       moneyClassId: Number(process.env.SPRING_CREDIT_MONEY_CLASS_ID || 0),
       orderType: Number(process.env.SPRING_CREDIT_ORDER_TYPE || 0)
     });

@@ -153,7 +153,12 @@ export function createSpringSoapClient(env = process.env) {
       ifSuccess: xmlValue(responseXml, 'ifSuccess'),
       errCode: xmlValue(responseXml, 'errCode'),
       errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring'),
-      orderHeadIds: [...new Set(xmlValues(responseXml, 'orderHeadId').map(Number).filter(value => Number.isSafeInteger(value) && value > 0))]
+      orderHeadIds: [...new Set(xmlValues(responseXml, 'orderHeadId').map(Number).filter(value => Number.isSafeInteger(value) && value > 0))],
+      // `orderSumInfo.orderMoney` is Spring's authoritative amount for this
+      // PNR after any promotion/discount has been applied.  It is CNY when
+      // moneyClassId is 0 and must be used for credit payment, rather than a
+      // price previously calculated in the browser.
+      orderMoneyCny: finiteNumber(xmlValue(responseXml, 'orderMoney'))
     };
     if (!response.ok || result.ifSuccess !== 'Y') {
       console.warn('Spring order-detail lookup rejected', {

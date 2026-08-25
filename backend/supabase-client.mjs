@@ -310,6 +310,26 @@ export async function updatePortalBooking(profile, pnr, status) {
   return updated[0];
 }
 
+// Before issuing, replace the provisional search price with the amount Spring
+// has confirmed for the actual PNR (including any supplier discount).  The
+// booking must still be reserved; ticketed/cancelled records are immutable.
+export async function setPortalBookingSpringAmount(profile, pnr, amountCny) {
+  const amount = Number(amountCny);
+  if (!Number.isFinite(amount) || amount < 0) throw new Error('Spring returned an invalid CNY order amount.');
+  const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
+  const booking = rows[0];
+  if (!booking) throw new Error('Booking not found.');
+  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  if (!allowed) throw new Error('You do not have access to this booking.');
+  if (booking.status !== 'Reserved') throw new Error(`Spring amount can only be updated for a reserved booking (current status: ${booking.status}).`);
+  const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}&status=eq.Reserved`, {
+    method: 'PATCH',
+    body: { total_cny: amount }
+  });
+  if (!updated[0]) throw new Error('This booking is no longer available for ticket issue. Refresh the booking status.');
+  return updated[0];
+}
+
 // A Spring order query is authoritative: it may confirm ticketing after the
 // portal's local 30-minute countdown. Keep only the minimal reconciliation
 // metadata required by later refund/change calls.
