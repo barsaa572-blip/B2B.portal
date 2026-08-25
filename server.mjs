@@ -895,14 +895,34 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
   const dates = Array.from({ length: daysInMonth }, (_, index) => calendarDate(year, monthNumber, index + 1));
   const items = new Array(dates.length);
   let cursor = 0;
+  let lookupFailures = 0;
+  // Spring's change-availability endpoint is comparatively slow and can
+  // close connections when a whole calendar month is requested at once.
+  // Retry a transient failure once, but keep the request pool deliberately
+  // small so a multi-passenger PNR behaves the same as a one-passenger PNR.
+  const getChangeInfoForDate = async date => {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await client.getChangeInfo({
+          lang: 'zh_cn',
+          newTimeLBegin: Date.parse(`${date}T00:00:00+08:00`),
+          orderHeadId: Number(orderItemId)
+        }, token.accessToken);
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 350));
+      }
+    }
+    throw lastError;
+  };
   const worker = async () => {
     while (cursor < dates.length) {
       const index = cursor++;
       const date = dates[index];
       if (date < today) { items[index] = { date, available: false, past: true, flights: [] }; continue; }
       try {
-        const newTimeLBegin = Date.parse(`${date}T00:00:00+08:00`);
-        const result = await client.getChangeInfo({ lang: 'zh_cn', newTimeLBegin, orderHeadId: Number(orderItemId) }, token.accessToken);
+        const result = await getChangeInfoForDate(date);
         const flights = (result.bgFlightInfoList || []).map(changeFlightSummary).filter(flight => {
           if (!Number.isFinite(flight.segmentHeadId) || !flight.flightNo) return false;
           // The supplier can return replacement choices for another segment
@@ -915,19 +935,23 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
       } catch (error) {
         // A date without an eligible replacement is shown as unavailable. Do
         // not expose opaque upstream errors for every individual calendar day.
+        lookupFailures += 1;
         items[index] = { date, available: false, past: false, flights: [] };
       }
     }
   };
-  // These are availability lookups only. A modestly higher concurrency avoids
-  // making an agent wait through a whole month of sequential requests.
-  await Promise.all(Array.from({ length: Math.min(20, dates.length) }, worker));
-  const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, expectedRoute, items };
+  // Four simultaneous supplier calls keep the calendar responsive without
+  // overwhelming Spring's test gateway (which otherwise intermittently
+  // returns an HTML 502 page to the portal).
+  await Promise.all(Array.from({ length: Math.min(4, dates.length) }, worker));
+  const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, expectedRoute, items, lookupFailures };
   const hasAvailability = items.some(item => item?.available);
   // Schedules are relatively stable during a session. Retain a populated
   // month for six hours; retry a completely unavailable result sooner in
   // case Spring had a temporary timeout while it was prefetched.
-  changeCalendarCache.set(key, { createdAt: Date.now(), ttlMs: hasAvailability ? 6 * 60 * 60_000 : 5 * 60_000, value });
+  const futureLookupCount = items.filter(item => item && !item.past).length;
+  const allLookupsFailed = futureLookupCount > 0 && lookupFailures === futureLookupCount;
+  changeCalendarCache.set(key, { createdAt: Date.now(), ttlMs: hasAvailability ? 6 * 60 * 60_000 : allLookupsFailed ? 30_000 : 5 * 60_000, value });
   return value;
 }
 
