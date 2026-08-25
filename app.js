@@ -208,7 +208,8 @@ const bookingLegs = booking => {
     const springState = String(flight.status || '').toLowerCase();
     const springNoShow = springState === 'no-show' || springState === 'noshow';
     const noShowPassengers = springNoShow ? passengers.map((_, passengerIndex) => passengerIndex) : (noShow[key] || []).map(Number).filter(Number.isInteger);
-    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate)), flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
+    const travelDate = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || '';
+    return { key, route: `${flight.departure?.id || ''} &rarr; ${flight.arrival?.id || ''}`, flight: `${flight.airline || 'Spring Airlines'} &middot; ${flight.number || 'Flight'}`, time: `${(flight.departure?.time || '').slice(-5)} &rarr; ${(flight.arrival?.time || '').slice(-5)}`, date: displayFlightDate(travelDate), travelDate, flown: springState === 'flown' || springState === 'used', cancelled: springState === 'cancelled', noShowPassengers, allNoShow: passengers.length > 0 && noShowPassengers.length >= passengers.length, orderItemId: booking.itinerary?.springOrder?.orderItemIds?.[index] || null };
   });
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
   const states = booking.legStates || { outbound: booking.ref === 'L3Y7CX' ? 'flown' : 'active', return: 'active' };
@@ -322,7 +323,7 @@ const showChangeFlow = (modal, booking) => {
   };
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
-    const today = new Date(); today.setHours(0, 0, 0, 0); const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1); let shownDate = new Date(currentMonth);
+    const today = new Date(); today.setHours(0, 0, 0, 0); const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1); const flightMonth = /^\d{4}-\d{2}-\d{2}$/.test(leg.travelDate || '') ? new Date(`${leg.travelDate}T12:00:00`) : null; let shownDate = flightMonth && flightMonth >= currentMonth ? new Date(flightMonth.getFullYear(), flightMonth.getMonth(), 1) : new Date(currentMonth);
     let loadingMonth = ''; let loadedMonth = '';
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {

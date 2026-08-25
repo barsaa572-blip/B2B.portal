@@ -865,7 +865,10 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
   const cached = changeCalendarCache.get(key);
   // Spring exposes availability one date at a time. Cache an availability-only
   // month longer so reopening the calendar does not repeat 28–31 live calls.
-  if (cached && Date.now() - cached.createdAt < 15 * 60_000) return cached.value;
+  // An upstream timeout must not leave the agent looking at an entirely
+  // unavailable calendar for fifteen minutes. Successful availability is
+  // cached longer, while an empty/failed month is retried quickly.
+  if (cached && Date.now() - cached.createdAt < cached.ttlMs) return cached.value;
 
   const [year, monthNumber] = month.split('-').map(Number);
   const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
@@ -896,7 +899,8 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month) {
   // making an agent wait through a whole month of sequential requests.
   await Promise.all(Array.from({ length: Math.min(20, dates.length) }, worker));
   const value = { source: 'Spring Airlines', pnr, orderItemId: String(orderItemId), month, items };
-  changeCalendarCache.set(key, { createdAt: Date.now(), value });
+  const hasAvailability = items.some(item => item?.available);
+  changeCalendarCache.set(key, { createdAt: Date.now(), ttlMs: hasAvailability ? 15 * 60_000 : 60_000, value });
   return value;
 }
 
