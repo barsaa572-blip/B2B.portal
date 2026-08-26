@@ -427,7 +427,7 @@ const showChangeFlow = (modal, booking) => {
           if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
           liveOrderHeadIds = Array.isArray(data.orderHeadIds) ? data.orderHeadIds.map(Number).filter(Number.isSafeInteger) : [];
           trigger.textContent = button.dataset.date;
-          if (!data.flights?.length) throw new Error(`Spring did not return matching flights for ${button.dataset.date}. Choose another date.`);
+          if (!data.flights?.length) throw new Error(`No matching flight schedule is available for ${button.dataset.date}. Please choose another date.`);
           renderDailyFlights(button.dataset.date, data.flights);
         } catch (error) { choices.innerHTML = `<p class="selection-hint">${error.message || 'Unable to load Spring availability.'}</p>`; }
       }));
