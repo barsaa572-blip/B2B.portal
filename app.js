@@ -134,12 +134,28 @@ const bookingFareBreakdown = booking => {
   // booked total, allocating the display breakdown in Spring's fare/tax ratio.
   const fareAmount = known > 0 ? total * (base / known) : total;
   const taxAmount = Math.max(0, total - fareAmount);
-  const types = (booking.documents || []).map(item => item.type || 'ADT');
-  const typeSummary = ['ADT', 'CHD', 'INF'].map(type => {
+  const types = (booking.documents || []).map(item => String(item.type || 'ADT').toUpperCase());
+  if (!types.length) types.push('ADT');
+  const labels = { ADT: 'Adult', CHD: 'Child', INF: 'Infant' };
+  const totalsByType = booking.passengers?.priceBreakdown || booking.itinerary?.priceBreakdown || {};
+  const typeRows = ['ADT', 'CHD', 'INF'].map(type => {
     const count = types.filter(item => item === type).length;
-    return count ? `${count} ${type}` : '';
-  }).filter(Boolean).join(' · ');
-  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3><div><span>Fare</span><b>${quoteMnt(fareAmount)}</b></div><div><span>Taxes &amp; fees</span><b>${quoteMnt(taxAmount)}</b></div><div class="booking-fare-total"><span>Total fare${typeSummary ? ` · ${typeSummary}` : ''}</span><strong>${quoteMnt(total)}</strong></div></section>`;
+    if (!count) return '';
+    const supplied = totalsByType[type] || totalsByType[labels[type]?.toLowerCase()];
+    const suppliedFare = Number(supplied?.fare);
+    const suppliedTaxes = Number(supplied?.taxes);
+    const suppliedTotal = Number(supplied?.total);
+    const isAdultOnly = type === 'ADT' && types.every(item => item === 'ADT');
+    const canShowAmounts = (Number.isFinite(suppliedFare) && Number.isFinite(suppliedTaxes) && Number.isFinite(suppliedTotal)) || isAdultOnly;
+    const rowFare = Number.isFinite(suppliedFare) ? suppliedFare : (isAdultOnly ? fareAmount : null);
+    const rowTaxes = Number.isFinite(suppliedTaxes) ? suppliedTaxes : (isAdultOnly ? taxAmount : null);
+    const rowTotal = Number.isFinite(suppliedTotal) ? suppliedTotal : (isAdultOnly ? total : null);
+    const details = canShowAmounts
+      ? `Fare ${quoteMnt(rowFare)} · Taxes &amp; fees ${quoteMnt(rowTaxes)}`
+      : `Included in the booking total; exact ${labels[type].toLowerCase()} fare is confirmed by Spring Airlines.`;
+    return `<div class="booking-passenger-fare ${canShowAmounts ? '' : 'unpriced'}"><span><b>${labels[type]} × ${count}</b><small>${details}</small></span><strong>${canShowAmounts ? quoteMnt(rowTotal) : 'Included'}</strong></div>`;
+  }).join('');
+  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3>${typeRows}<div class="booking-fare-total"><span>Total · ${types.length} passenger${types.length === 1 ? '' : 's'}</span><strong>${quoteMnt(total)}</strong></div></section>`;
 };
 const downloadBookingDocument = async (pnr, type) => {
   const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${type}.pdf`);
@@ -161,7 +177,11 @@ const openBookingDetail = ref => {
   const passengers = booking.passengers || [booking.passenger];
   const activeLegs = bookingLegs(booking).filter(leg => !leg.flown && !leg.allNoShow);
   const allFlightsUsed = !activeLegs.length;
-  const passengerDescription = `${booking.passengerCount || passengers.length} Adult${(booking.passengerCount || passengers.length) > 1 ? 's' : ''} &middot; Passport details verified before ticketing`;
+  const passengerTypes = passengers.map((_, index) => String(booking.documents?.[index]?.type || booking.passengerTypes?.[index] || 'ADT').toUpperCase());
+  const passengerDescription = ['ADT', 'CHD', 'INF'].map(type => {
+    const count = passengerTypes.filter(item => item === type).length;
+    return count ? `${count} ${{ ADT: 'Adult', CHD: 'Child', INF: 'Infant' }[type]}${count === 1 ? '' : 's'}` : '';
+  }).filter(Boolean).join(' · ') + ' &middot; Passport details verified before ticketing';
   const passengerList = passengers.map((name, index) => {
     const document = booking.documents?.[index] || {};
     const type = document.type || booking.passengerTypes?.[index] || 'ADT';
