@@ -5,6 +5,9 @@ create type public.wallet_entry_type as enum ('credit', 'debit', 'adjustment');
 create table public.agencies (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
+  registration_number text,
+  email text,
+  phone text,
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
