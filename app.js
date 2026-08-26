@@ -419,7 +419,7 @@ const showChangeFlow = (modal, booking) => {
       calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', async () => {
         section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected'));
         button.classList.add('selected');
-        choices.innerHTML = '<p class="selection-hint">Searching Spring availability for this date…</p>';
+        choices.innerHTML = '<p class="selection-hint">Searching availability…</p>';
         try {
           const query = new URLSearchParams({ orderItemId: section.dataset.orderItemId, date: button.dataset.date, leg: section.dataset.for || '', departure: section.dataset.departureCode || '', arrival: section.dataset.arrivalCode || '' });
           const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-options?${query}`);
