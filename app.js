@@ -397,7 +397,7 @@ const showChangeFlow = (modal, booking) => {
   const bindAvailabilityCalendars = () => modal.querySelectorAll('.replacement-flight[data-order-item-id]').forEach(section => {
     const trigger = section.querySelector('.availability-date'); const calendar = section.querySelector('.availability-calendar'); const choices = section.querySelector('.daily-flight-options');
     const today = new Date(); today.setHours(0, 0, 0, 0); const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1); const travelDate = section.dataset.travelDate || ''; const flightMonth = /^\d{4}-\d{2}-\d{2}$/.test(travelDate) ? new Date(`${travelDate}T12:00:00`) : null; let shownDate = flightMonth && flightMonth >= currentMonth ? new Date(flightMonth.getFullYear(), flightMonth.getMonth(), 1) : new Date(currentMonth);
-    let loadingMonth = ''; let loadedMonth = ''; let liveOrderHeadIds = [];
+    let liveOrderHeadIds = [];
     const monthKey = () => `${shownDate.getFullYear()}-${String(shownDate.getMonth() + 1).padStart(2, '0')}`;
     const renderDailyFlights = (date, flights) => {
       const option = (flight, checked) => { const timing = `${flight.departure.time} ${flight.departure.code} → ${flight.arrival.time} ${flight.arrival.code}`; const difference = Number(flight.fareDifferenceCny || 0); const price = difference > 0 ? `+ ${quoteMnt(difference)}` : 'No fare difference'; return `<label class="daily-flight-choice"><input type="radio" name="daily-${trigger.dataset.for}" value="${flight.flightNo}|${timing}" data-segment-head-id="${flight.segmentHeadId || ''}" data-order-head-ids="${liveOrderHeadIds.join(',')}" data-date="${date}" data-flight-no="${flight.flightNo || ''}" data-booking-class="${flight.bookingClass || ''}" data-departure-code="${flight.departure?.code || ''}" data-departure-name="${flight.departure?.name || ''}" data-departure-time="${flight.departure?.time || ''}" data-arrival-code="${flight.arrival?.code || ''}" data-arrival-name="${flight.arrival?.name || ''}" data-arrival-time="${flight.arrival?.time || ''}" ${checked ? 'checked' : ''}/><span><strong>Spring Airlines · ${flight.flightNo}</strong><small>${timing}${flight.bookingClass ? ` · ${flight.bookingClass}` : ''}</small></span><b>${price}</b></label>`; };
@@ -406,62 +406,36 @@ const showChangeFlow = (modal, booking) => {
       choices.querySelectorAll('input').forEach(input => input.addEventListener('change', () => setChoice(input)));
       setChoice(choices.querySelector('input:checked'));
     };
-    const renderMonth = async () => {
-      const requestedMonth = monthKey();
-      // The calendar is prefetched while hidden. Do not start the same 28–31
-      // Spring requests again when the user opens it during that prefetch.
-      if (loadingMonth === requestedMonth || loadedMonth === requestedMonth) return;
-      loadingMonth = requestedMonth;
+    const renderMonth = () => {
       const first = new Date(shownDate.getFullYear(), shownDate.getMonth(), 1); const start = (first.getDay() + 6) % 7; const totalDays = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
       calendar.querySelector('.availability-head strong').textContent = first.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-      // Spring calculates availability one date at a time. Show the full
-      // calendar immediately so the user never sees an empty panel while the
-      // live requests are still running.
       const initialBlanks = '<span class="availability-blank"></span>'.repeat(start);
-      const initialDays = Array.from({ length: totalDays }, (_, index) => {
-        const day = index + 1;
-        return `<button type="button" class="availability-day loading" disabled><strong>${day}</strong><span>Loading…</span></button>`;
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const buttons = Array.from({ length: totalDays }, (_, index) => {
+        const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`;
+        return `<button type="button" class="availability-day available${date === todayKey ? ' today' : ''}" data-date="${date}" ${date < todayKey ? 'disabled' : ''}><strong>${day}</strong></button>`;
       }).join('');
-      calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${initialDays}`;
-      try {
-        const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-calendar?orderItemId=${encodeURIComponent(section.dataset.orderItemId)}&month=${monthKey()}&leg=${encodeURIComponent(section.dataset.for || '')}&departure=${encodeURIComponent(section.dataset.departureCode || '')}&arrival=${encodeURIComponent(section.dataset.arrivalCode || '')}`);
-        // A VPS restart or reverse-proxy interruption can return an HTML error
-        // page.  Do not expose its JSON parser error ("Unexpected token '<'")
-        // to an agent; keep the calendar usable and show an actionable message.
-        const responseText = await response.text();
-        let data;
-        try { data = responseText ? JSON.parse(responseText) : {}; }
-        catch {
-          throw new Error('The availability service was temporarily interrupted. Please open the calendar again in a moment.');
-        }
-        if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
-        if (requestedMonth !== monthKey()) return;
-        liveOrderHeadIds = Array.isArray(data.orderHeadIds)
-          ? data.orderHeadIds.map(Number).filter(Number.isSafeInteger)
-          : [];
-        const byDate = new Map((data.items || []).map(item => [item.date, item]));
-        const blanks = '<span class="availability-blank"></span>'.repeat(start);
-        const buttons = Array.from({ length: totalDays }, (_, index) => { const day = index + 1; const date = `${monthKey()}-${String(day).padStart(2, '0')}`; const item = byDate.get(date); const available = Boolean(item?.available); return `<button type="button" class="availability-day ${available ? 'available' : 'unavailable'}${date === new Date().toISOString().slice(0, 10) ? ' today' : ''}" data-date="${date}" ${available ? '' : 'disabled'}><strong>${day}</strong><span>${available ? '●' : '–'}</span></button>`; }).join('');
-        calendar.querySelector('.availability-days').innerHTML = `${blanks}${buttons}`;
-        loadedMonth = requestedMonth;
-        if (!data.items?.some(item => item?.available)) {
-          choices.innerHTML = `<p class="selection-hint">Spring did not return matching ${section.dataset.departureCode || ''} → ${section.dataset.arrivalCode || ''} flights for ${calendar.querySelector('.availability-head strong').textContent}. Try another month.</p>`;
-        }
-        calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', () => { const item = byDate.get(button.dataset.date); section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected')); button.classList.add('selected'); trigger.textContent = `${button.dataset.date} · available`; calendar.hidden = true; renderDailyFlights(button.dataset.date, item.flights || []); }));
-      } catch (error) {
-        // Keep the month grid visible even if Spring is temporarily slow or
-        // unavailable; replace each loading cell with the real explanation.
-        calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${Array.from({ length: totalDays }, (_, index) => `<button type="button" class="availability-day unavailable" disabled><strong>${index + 1}</strong><span>–</span></button>`).join('')}`;
-        choices.innerHTML = `<p class="selection-hint">${error.message}</p>`;
-      } finally { if (loadingMonth === requestedMonth) loadingMonth = ''; }
+      calendar.querySelector('.availability-days').innerHTML = `${initialBlanks}${buttons}`;
+      calendar.querySelectorAll('.availability-day:not(:disabled)').forEach(button => button.addEventListener('click', async () => {
+        section.querySelectorAll('.availability-day').forEach(node => node.classList.remove('selected'));
+        button.classList.add('selected');
+        choices.innerHTML = '<p class="selection-hint">Searching Spring availability for this date…</p>';
+        try {
+          const query = new URLSearchParams({ orderItemId: section.dataset.orderItemId, date: button.dataset.date, leg: section.dataset.for || '', departure: section.dataset.departureCode || '', arrival: section.dataset.arrivalCode || '' });
+          const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/change-options?${query}`);
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Unable to load Spring availability.');
+          liveOrderHeadIds = Array.isArray(data.orderHeadIds) ? data.orderHeadIds.map(Number).filter(Number.isSafeInteger) : [];
+          trigger.textContent = button.dataset.date;
+          calendar.hidden = true;
+          if (!data.flights?.length) throw new Error(`Spring did not return matching flights for ${button.dataset.date}. Choose another date.`);
+          renderDailyFlights(button.dataset.date, data.flights);
+        } catch (error) { choices.innerHTML = `<p class="selection-hint">${error.message || 'Unable to load Spring availability.'}</p>`; }
+      }));
     };
-    trigger.addEventListener('click', async () => { calendar.hidden = !calendar.hidden; if (!calendar.hidden) await renderMonth(); });
-    calendar.querySelector('.availability-prev').addEventListener('click', async () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); await renderMonth(); } });
-    calendar.querySelector('.availability-next').addEventListener('click', async () => { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() + 1, 1); await renderMonth(); });
-    // Warm the server-side monthly cache in the background as soon as the
-    // change flow opens. The calendar stays hidden, while the agent selects
-    // passengers; by the time they open it, the schedule is normally ready.
-    window.setTimeout(() => { renderMonth().catch(() => {}); }, 0);
+    trigger.addEventListener('click', () => { calendar.hidden = !calendar.hidden; if (!calendar.hidden) renderMonth(); });
+    calendar.querySelector('.availability-prev').addEventListener('click', () => { if (shownDate > currentMonth) { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() - 1, 1); renderMonth(); } });
+    calendar.querySelector('.availability-next').addEventListener('click', () => { shownDate = new Date(shownDate.getFullYear(), shownDate.getMonth() + 1, 1); renderMonth(); });
   });
   const renderReplacements = () => { const selected = legs.filter(leg => modal.querySelector(`[name="change-flow-leg"][value="${leg.key}"]`)?.checked); modal.querySelector('.replacement-list').innerHTML = selected.map(replacements).join('') || '<p class="selection-hint">Select an active flight first.</p>'; bindAvailabilityCalendars(); };
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button">&times;</button><p class="eyebrow">CHANGE BOOKING</p><h2>Select flights and passengers</h2><p class="modal-copy">Choose the itinerary and passenger(s), then select a new date and flight.</p><section class="selection-group"><h3>Itinerary</h3><section class="flight-choice-list">${legs.map(leg => flightChoice(leg, 'change-flow', !leg.flown)).join('')}</section></section><section class="selection-group"><h3>Passengers</h3><section class="passenger-choice-list">${passengerChoices(booking, 'change-flow')}</section></section><section class="replacement-list"></section><div class="booking-detail-actions"><button type="button" class="secondary back-booking">Back</button><button type="button" class="primary calculate-change-flow">Calculate change</button></div></section>`;

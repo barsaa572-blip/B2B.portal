@@ -994,6 +994,44 @@ async function getLiveChangeCalendar(profile, pnr, orderItemId, month, expectedD
   return value;
 }
 
+// A change calendar must open instantly.  Do not query Spring for every day
+// in a month; the agent chooses a date first and this performs one live
+// availability lookup only for that selected date.
+async function getLiveChangeOptions(profile, pnr, orderItemId, date, expectedDeparture = '', expectedArrival = '', legKey = '') {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Date must use YYYY-MM-DD format.');
+  if (date < new Date().toISOString().slice(0, 10)) throw new Error('Choose a future travel date.');
+  const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
+  if (!booking) throw new Error('Booking not found or you do not have access to it.');
+  if (booking.status !== 'Ticketed') throw new Error('Only a ticketed booking can be changed.');
+  if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+  const routeCodes = String(booking.itinerary?.route || booking.route || '').match(/[A-Z]{3}/g) || [];
+  const [bookedDeparture = '', bookedArrival = ''] = routeCodes;
+  const canonicalRoute = legKey === 'return'
+    ? { departure: bookedArrival, arrival: bookedDeparture }
+    : legKey === 'outbound' ? { departure: bookedDeparture, arrival: bookedArrival } : null;
+  const expectedRoute = {
+    departure: portalAirportCode(canonicalRoute?.departure || expectedDeparture || ''),
+    arrival: portalAirportCode(canonicalRoute?.arrival || expectedArrival || '')
+  };
+  const detail = await createSpringSoapClient().getOrderDetailInfoC2({ orderNo: pnr, lang: 'zh_cn' });
+  const allOrderHeadIds = normaliseSpringOrderHeadIds(detail.orderHeadIds);
+  const routeOrderHeadIds = normaliseSpringOrderHeadIds((detail.orderHeads || [])
+    .filter(item => (!expectedRoute.departure || sameAirportCode(item.departureCode, expectedRoute.departure))
+      && (!expectedRoute.arrival || sameAirportCode(item.arrivalCode, expectedRoute.arrival)))
+    .map(item => item.orderHeadId));
+  const orderHeadIds = routeOrderHeadIds.length ? routeOrderHeadIds : allOrderHeadIds;
+  const requestedId = Number(orderItemId);
+  const orderHeadId = orderHeadIds.includes(requestedId) ? requestedId : orderHeadIds[0];
+  if (!Number.isSafeInteger(orderHeadId) || orderHeadId <= 0) throw new Error('Spring did not return a changeable passenger order for this booking.');
+  const client = createSpringClient();
+  const token = await client.getAccessToken();
+  const result = await client.getChangeInfo({ lang: 'zh_cn', newTimeLBegin: Date.parse(`${date}T00:00:00+08:00`), orderHeadId }, token.accessToken);
+  const flights = (result.bgFlightInfoList || []).map(changeFlightSummary).filter(flight => Number.isFinite(flight.segmentHeadId) && flight.flightNo
+    && (!expectedRoute.departure || sameAirportCode(flight.departure.code, expectedRoute.departure))
+    && (!expectedRoute.arrival || sameAirportCode(flight.arrival.code, expectedRoute.arrival)));
+  return { source: 'Spring Airlines', pnr, date, orderHeadId: String(orderHeadId), orderHeadIds: orderHeadIds.map(String), expectedRoute, flights };
+}
+
 const springSucceeded = result => String(result?.ifSuccess || '').toUpperCase() === 'Y';
 
 async function ticketedSpringBooking(profile, pnr) {
@@ -1179,6 +1217,13 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     const month = url.searchParams.get('month');
     if (!/^\d+$/.test(String(orderItemId || ''))) throw new Error('A valid Spring order item is required.');
     return send(res, 200, await getLiveChangeCalendar(profile, changeCalendarMatch[1], orderItemId, month, url.searchParams.get('departure'), url.searchParams.get('arrival'), url.searchParams.get('leg')));
+  }
+  const changeOptionsMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-options$/);
+  if (changeOptionsMatch && req.method === 'GET') {
+    const orderItemId = url.searchParams.get('orderItemId');
+    const date = url.searchParams.get('date');
+    if (!/^\d+$/.test(String(orderItemId || ''))) throw new Error('A valid Spring order item is required.');
+    return send(res, 200, await getLiveChangeOptions(profile, changeOptionsMatch[1], orderItemId, date, url.searchParams.get('departure'), url.searchParams.get('arrival'), url.searchParams.get('leg')));
   }
   const syncMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/sync$/);
   if (syncMatch && req.method === 'POST') return send(res, 200, { booking: await syncSpringOrder(profile, syncMatch[1]) });
