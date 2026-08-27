@@ -202,16 +202,16 @@ const ticketPdf = async (booking, agency = {}) => {
     y -= 52;
   }
   flights.forEach((flight, index) => {
-    ensure(128);
+    ensure(146);
     const label = flights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'DEPARTURE';
     const date = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || 'Travel date pending';
     const departure = airport(flight.departure);
     const arrival = airport(flight.arrival);
     fill(36, y, 523, 22, '0.93 0.96 1');
     text(`${label}  |  ${date}`, 48, y - 14, 10, true, '0.10 0.30 0.70');
-    text(`${flight.airline || 'Spring Airlines'} - Flight ${flight.number || 'Pending'}`, 357, y - 14, 8, true, '0.10 0.30 0.70');
+    text(`${flight.airline || 'Spring Airlines'}  ·  Flight ${flight.number || 'Pending'}`, 365, y - 14, 8, true, '0.10 0.30 0.70');
     y -= 30;
-    stroke(36, y, 523, 80);
+    stroke(36, y, 523, 104);
     text('DEPARTURE', 50, y - 17, 8, true, '0.36 0.43 0.54');
     text(String(flight.departure?.time || '').slice(-5) || '--:--', 50, y - 40, 17, true);
     text(departure.code, 127, y - 40, 14, true);
@@ -230,9 +230,10 @@ const ticketPdf = async (booking, agency = {}) => {
     const checked = baggage.checked || baggage.checkedKg;
     const carryText = carry ? `1 x ${carry}${String(carry).includes('kg') ? '' : ' kg'}` : 'check with airline';
     const checkedText = checked ? `${checked}${String(checked).includes('kg') ? '' : ' kg'} included` : 'not included';
-    text(`Cabin: ${flight.fare?.cabin || 'Economy'}  |  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 96, 8, false, '0.36 0.43 0.54');
-    text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - 110, 8, false, '0.10 0.30 0.70');
-    y -= 108;
+    rule(50, y - 78, 545, '0.88 0.91 0.96');
+    text(`Cabin: ${flight.fare?.cabin || 'Economy'}  ·  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 91, 8, false, '0.36 0.43 0.54');
+    text(`Baggage: Carry-on ${carryText}  ·  Checked ${checkedText}`, 50, y - 103, 8, false, '0.10 0.30 0.70');
+    y -= 122;
   });
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
