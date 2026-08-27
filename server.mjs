@@ -152,6 +152,32 @@ const ticketPdf = async booking => {
   const rate = await getCnyMntRate();
   const mnt = value => `MNT ${quoteCnyToMnt(Number(value || 0), rate).toLocaleString('en-US')}`;
   const pages = []; let commands = []; let y = 790;
+  const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+  const short = (value, max = 29) => {
+    const safe = pdfSafeText(clean(value)).replace(/\?+/g, '').trim();
+    if (!safe) return '';
+    return safe.length > max ? `${safe.slice(0, Math.max(1, max - 3))}...` : safe;
+  };
+  const flights = (Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [])
+    .filter(flight => flight?.active !== false && flight?.status !== 'replaced' && flight?.status !== 'inactive');
+  const airportLabels = new Map();
+  await Promise.all(flights.flatMap(flight => [flight.departure?.id, flight.arrival?.id])
+    .filter(Boolean)
+    .map(async code => {
+      const normalized = clean(code).toUpperCase();
+      if (airportLabels.has(normalized)) return;
+      const airport = await airportByCode(normalized);
+      airportLabels.set(normalized, short(airport?.airport || airport?.city || '', 27));
+    }));
+  const airport = endpoint => {
+    const code = clean(endpoint?.id || endpoint?.code || '---').toUpperCase();
+    const name = airportLabels.get(code) || short(endpoint?.name, 27);
+    const terminal = short(endpoint?.terminal || '', 8);
+    return { code, name: name && name !== code ? name : '', terminal };
+  };
+  const itineraryChangedAt = Array.isArray(booking.itinerary?.changeHistory) && booking.itinerary.changeHistory.length
+    ? booking.itinerary.changeHistory.at(-1)?.changedAt
+    : null;
   const text = (value, x, top, size = 10, bold = false, colour = '0.06 0.15 0.29') => {
     commands.push(`${colour} rg BT /${bold ? 'F2' : 'F1'} ${size} Tf 1 0 0 1 ${x} ${top} Tm (${pdfSafeText(value)}) Tj ET`);
   };
@@ -162,40 +188,65 @@ const ticketPdf = async booking => {
     if (commands.length) pages.push(commands.join('\n')); commands = []; y = 790;
     fill(0, 842, 595, 42, '0.08 0.25 0.55');
     text('FLIGHT B2B  |  ELECTRONIC TICKET', 36, 817, 15, true, '1 1 1');
-    text(`PNR ${booking.pnr}`, 440, 817, 11, true, '1 1 1');
+    text(`PNR ${booking.pnr}`, 438, 817, 11, true, '1 1 1');
     y = 775;
   };
   const ensure = required => { if (y - required < 55) newPage(); };
   newPage();
-  text('Travel itinerary', 36, y, 18, true); text(`Status: ${booking.status}`, 430, y + 2, 10, true, booking.status === 'Ticketed' ? '0 0.48 0.29' : '0.52 0.34 0'); y -= 26;
-  text(`Prepared on ${new Date(booking.created_at).toLocaleString('en-GB')}`, 36, y, 9, false, '0.36 0.43 0.54'); y -= 20;
-  const flights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
+  text('Current travel itinerary', 36, y, 18, true);
+  text(`Status: ${booking.status}`, 430, y + 2, 10, true, booking.status === 'Ticketed' ? '0 0.48 0.29' : '0.52 0.34 0'); y -= 24;
+  text(`Generated ${new Date().toLocaleString('en-GB')}`, 36, y, 8, false, '0.36 0.43 0.54');
+  if (itineraryChangedAt) text(`Itinerary last updated ${new Date(itineraryChangedAt).toLocaleString('en-GB')}`, 255, y, 8, false, '0.10 0.30 0.70');
+  y -= 20;
+  if (!flights.length) {
+    fill(36, y, 523, 42, '0.99 0.95 0.90');
+    text('No active flight segments are available for this ticket.', 49, y - 25, 10, true, '0.52 0.34 0');
+    y -= 52;
+  }
   flights.forEach((flight, index) => {
-    ensure(132);
+    ensure(128);
     const label = flights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'DEPARTURE';
     const date = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || 'Travel date pending';
-    fill(36, y, 523, 23, '0.93 0.96 1'); text(`${label}  |  ${date}`, 47, y - 15, 10, true, '0.10 0.30 0.70'); y -= 32;
-    stroke(36, y, 523, 83);
-    text(`${flight.airline || 'Spring Airlines'}  ${flight.number || ''}`, 49, y - 21, 13, true);
-    text(`Cabin: ${flight.fare?.cabin || 'Economy'}   |   ${flight.duration || 'Nonstop'}`, 49, y - 40, 9, false, '0.36 0.43 0.54');
-    rule(230, y - 29, 230, '0.86 0.89 0.94');
-    text(String(flight.departure?.time || '').slice(-5) || '--:--', 250, y - 22, 14, true);
-    text(`${flight.departure?.id || '---'}  ${flight.departure?.name || ''}`, 250, y - 43, 10, true);
-    text('to', 386, y - 35, 9, false, '0.36 0.43 0.54');
-    text(String(flight.arrival?.time || '').slice(-5) || '--:--', 414, y - 22, 14, true);
-    text(`${flight.arrival?.id || '---'}  ${flight.arrival?.name || ''}`, 414, y - 43, 10, true);
-    y -= 99;
+    const departure = airport(flight.departure);
+    const arrival = airport(flight.arrival);
+    fill(36, y, 523, 22, '0.93 0.96 1');
+    text(`${label}  |  ${date}`, 48, y - 14, 10, true, '0.10 0.30 0.70');
+    text(`${flight.airline || 'Spring Airlines'} - Flight ${flight.number || 'Pending'}`, 357, y - 14, 8, true, '0.10 0.30 0.70');
+    y -= 30;
+    stroke(36, y, 523, 80);
+    text('DEPARTURE', 50, y - 17, 8, true, '0.36 0.43 0.54');
+    text(String(flight.departure?.time || '').slice(-5) || '--:--', 50, y - 40, 17, true);
+    text(departure.code, 127, y - 40, 14, true);
+    text(departure.name || 'Airport', 127, y - 55, 8, false, '0.36 0.43 0.54');
+    if (departure.terminal) text(departure.terminal, 127, y - 68, 8, false, '0.36 0.43 0.54');
+    rule(264, y - 38, 334, '0.28 0.48 0.88');
+    text(flight.duration || 'Nonstop', 270, y - 27, 8, false, '0.10 0.30 0.70');
+    text('>', 330, y - 42, 10, true, '0.10 0.30 0.70');
+    text('ARRIVAL', 365, y - 17, 8, true, '0.36 0.43 0.54');
+    text(String(flight.arrival?.time || '').slice(-5) || '--:--', 365, y - 40, 17, true);
+    text(arrival.code, 442, y - 40, 14, true);
+    text(arrival.name || 'Airport', 442, y - 55, 8, false, '0.36 0.43 0.54');
+    if (arrival.terminal) text(arrival.terminal, 442, y - 68, 8, false, '0.36 0.43 0.54');
+    text(`Cabin: ${flight.fare?.cabin || 'Economy'}  |  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 96, 8, false, '0.36 0.43 0.54');
+    y -= 93;
   });
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
   travellers.forEach((traveller, index) => {
-    ensure(67); fill(36, y, 523, 20, '0.95 0.97 1');
+    ensure(70); fill(36, y, 523, 20, '0.95 0.97 1');
     text(`${index + 1}. ${traveller.lastName || ''} / ${traveller.firstName || ''}`, 47, y - 14, 11, true);
     text(traveller.type || 'ADT', 515, y - 14, 9, true, '0.10 0.30 0.70'); y -= 29;
-    text(`Passport: ${traveller.documentNumber || '—'}     Date of birth: ${traveller.dateOfBirth || '—'}     Gender: ${traveller.gender || '—'}`, 47, y - 13, 9);
-    text(`Nationality: ${traveller.nationality || '—'}     Passport expiry: ${traveller.documentExpiry || '—'}`, 47, y - 30, 9);
-    y -= 46;
+    text(`Passport: ${traveller.documentNumber || '-'}     Date of birth: ${traveller.dateOfBirth || '-'}     Gender: ${traveller.gender || '-'}`, 47, y - 13, 9);
+    text(`Nationality: ${traveller.nationality || '-'}     Passport expiry: ${traveller.documentExpiry || '-'}`, 47, y - 30, 9);
+    y -= 48;
   });
+  const contact = booking.passengers?.contact || {};
+  if (contact.name || contact.phone || contact.email) {
+    ensure(53); rule(36, y, 559); y -= 17; text('Contact', 36, y, 13, true); y -= 17;
+    text(short(contact.name, 34) || 'Not provided', 47, y, 9, true);
+    text(short(contact.phone, 26) || '-', 245, y, 9);
+    text(short(contact.email, 32) || '-', 395, y, 9); y -= 20;
+  }
   ensure(100); rule(36, y, 559); y -= 20; text('Fare summary', 36, y, 16, true); y -= 20;
   const fares = flights.map(flight => flight.fare || {}); const base = fares.reduce((sum, fare) => sum + Number(fare.baseFare || 0), 0); const taxes = fares.reduce((sum, fare) => sum + Number(fare.taxes || 0), 0); const total = Number(booking.total_cny || 0); const fareAmount = base + taxes ? total * (base / (base + taxes)) : total;
   text('Fare', 48, y, 10); text(mnt(fareAmount), 425, y, 10, true); y -= 19;
