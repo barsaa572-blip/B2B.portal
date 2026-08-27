@@ -120,7 +120,7 @@ export async function updateOfficeAgent(manager, id, { fullName, branchId, activ
 
 export async function getAdminOverview() {
   const [agencies, branches, profiles, wallets, topups] = await Promise.all([
-    secretRequest('/rest/v1/agencies?select=id,name,registration_number,email,phone,active,created_at&order=name.asc'),
+    secretRequest('/rest/v1/agencies?select=id,name,registration_number,email,phone,address,active,created_at&order=name.asc'),
     secretRequest('/rest/v1/branches?select=id,agency_id,name&order=name.asc'),
     secretRequest('/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,active,created_at&order=full_name.asc'),
     secretRequest('/rest/v1/wallets?select=agency_id,balance_cny,updated_at'),
@@ -129,8 +129,8 @@ export async function getAdminOverview() {
   return { agencies, branches, profiles, wallets, topups };
 }
 
-export async function createAgency({ name, registrationNumber, email, phone, branchName, initialBalance = 0 }) {
-  const created = await secretRequest('/rest/v1/agencies', { method: 'POST', body: { name, registration_number: registrationNumber, email, phone, active: true } });
+export async function createAgency({ name, registrationNumber, email, phone, address, branchName, initialBalance = 0 }) {
+  const created = await secretRequest('/rest/v1/agencies', { method: 'POST', body: { name, registration_number: registrationNumber, email, phone, address, active: true } });
   const agency = created[0];
   await secretRequest('/rest/v1/wallets', { method: 'POST', body: { agency_id: agency.id, balance_cny: Number(initialBalance) || 0 } });
   if (branchName?.trim()) await secretRequest('/rest/v1/branches', { method: 'POST', body: { agency_id: agency.id, name: branchName.trim() } });
@@ -182,12 +182,13 @@ export async function clearAllWalletBalancesAndHistory({ createdBy }) {
   });
 }
 
-export async function updateAgency(id, { name, registrationNumber, email, phone, active }) {
+export async function updateAgency(id, { name, registrationNumber, email, phone, address, active }) {
   const body = {};
   if (name !== undefined) body.name = name;
   if (registrationNumber !== undefined) body.registration_number = registrationNumber;
   if (email !== undefined) body.email = email;
   if (phone !== undefined) body.phone = phone;
+  if (address !== undefined) body.address = address;
   if (active !== undefined) body.active = active;
   const updated = await secretRequest(`/rest/v1/agencies?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body });
   return updated[0];
@@ -476,9 +477,15 @@ export async function getTopupInvoice(profile, id) {
   if (!request) throw new Error('Invoice not found.');
   const allowed = profile.role === 'platform_admin' || request.requested_by === profile.id || (profile.role === 'office_manager' && request.agency_id === profile.agency_id);
   if (!allowed) throw new Error('You do not have access to this invoice.');
-  const agencies = await secretRequest(`/rest/v1/agencies?select=name,registration_number,email,phone&id=eq.${encodeURIComponent(request.agency_id)}&limit=1`);
+  const agencies = await secretRequest(`/rest/v1/agencies?select=name,registration_number,email,phone,address&id=eq.${encodeURIComponent(request.agency_id)}&limit=1`);
   const agency = agencies[0] || {};
-  return { ...request, agencyName: agency.name || 'Agency', agencyRegistrationNumber: agency.registration_number || '—', agencyEmail: agency.email || '—', agencyPhone: agency.phone || '—' };
+  return { ...request, agencyName: agency.name || 'Agency', agencyRegistrationNumber: agency.registration_number || '—', agencyEmail: agency.email || '—', agencyPhone: agency.phone || '—', agencyAddress: agency.address || '—' };
+}
+
+export async function getAgencyForTicket(agencyId) {
+  if (!agencyId) return null;
+  const agencies = await secretRequest(`/rest/v1/agencies?select=name,registration_number,email,phone,address&id=eq.${encodeURIComponent(agencyId)}&limit=1`);
+  return agencies[0] || null;
 }
 
 export async function approveTopupRequest(id, approvedBy) {

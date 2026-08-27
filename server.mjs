@@ -8,7 +8,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingChange, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getAgencyForTicket, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingChange, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const springIssueInFlight = new Set();
@@ -148,9 +148,7 @@ const bookingDocumentLines = async (booking, type) => {
 // A compact, airline-style document for the downloadable electronic ticket.
 // Passengers deliberately remain on the same PNR document and are printed one
 // below another; this avoids producing a separate file for each traveller.
-const ticketPdf = async booking => {
-  const rate = await getCnyMntRate();
-  const mnt = value => `MNT ${quoteCnyToMnt(Number(value || 0), rate).toLocaleString('en-US')}`;
+const ticketPdf = async (booking, agency = {}) => {
   const pages = []; let commands = []; let y = 790;
   const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
   const short = (value, max = 29) => {
@@ -227,8 +225,14 @@ const ticketPdf = async booking => {
     text(arrival.code, 442, y - 40, 14, true);
     text(arrival.name || 'Airport', 442, y - 55, 8, false, '0.36 0.43 0.54');
     if (arrival.terminal) text(arrival.terminal, 442, y - 68, 8, false, '0.36 0.43 0.54');
+    const baggage = flight.fare?.baggage || flight.baggage || {};
+    const carry = baggage.carryOn || baggage.carryOnKg || baggage.cabinKg;
+    const checked = baggage.checked || baggage.checkedKg;
+    const carryText = carry ? `1 x ${carry}${String(carry).includes('kg') ? '' : ' kg'}` : 'check with airline';
+    const checkedText = checked ? `${checked}${String(checked).includes('kg') ? '' : ' kg'} included` : 'not included';
     text(`Cabin: ${flight.fare?.cabin || 'Economy'}  |  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 96, 8, false, '0.36 0.43 0.54');
-    y -= 93;
+    text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - 110, 8, false, '0.10 0.30 0.70');
+    y -= 108;
   });
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
@@ -247,12 +251,14 @@ const ticketPdf = async booking => {
     text(short(contact.phone, 26) || '-', 245, y, 9);
     text(short(contact.email, 32) || '-', 395, y, 9); y -= 20;
   }
-  ensure(100); rule(36, y, 559); y -= 20; text('Fare summary', 36, y, 16, true); y -= 20;
-  const fares = flights.map(flight => flight.fare || {}); const base = fares.reduce((sum, fare) => sum + Number(fare.baseFare || 0), 0); const taxes = fares.reduce((sum, fare) => sum + Number(fare.taxes || 0), 0); const total = Number(booking.total_cny || 0); const fareAmount = base + taxes ? total * (base / (base + taxes)) : total;
-  text('Fare', 48, y, 10); text(mnt(fareAmount), 425, y, 10, true); y -= 19;
-  text('Taxes and fees', 48, y, 10); text(mnt(Math.max(0, total - fareAmount)), 425, y, 10, true); y -= 19;
-  rule(36, y + 7, 559); text('TOTAL', 48, y - 8, 12, true); text(mnt(total), 405, y - 8, 14, true, '0.86 0.40 0'); y -= 35;
-  text('Please verify all flight times before travel. Present this document with the traveller passport at check-in.', 36, y, 8, false, '0.36 0.43 0.54');
+  ensure(88); rule(36, y, 559); y -= 20; text('Issuing office', 36, y, 16, true); y -= 18;
+  text(agency.name || 'Flight B2B partner agency', 48, y, 11, true); y -= 16;
+  text(`Registration: ${agency.registration_number || '-'}     Phone: ${agency.phone || '-'}`, 48, y, 9); y -= 15;
+  text(`Address: ${short(agency.address, 64) || '-'}     Email: ${short(agency.email, 32) || '-'}`, 48, y, 9); y -= 24;
+  fill(36, y, 523, 45, '0.94 0.98 0.96');
+  text('Attention', 48, y - 15, 10, true, '0 0.45 0.25');
+  text('Bring a valid travel document for check-in. Verify flight times and terminal before travel.', 48, y - 30, 8, false, '0.18 0.25 0.34');
+  y -= 56;
   pages.push(commands.join('\n'));
   const objects = []; const pageRefs = pages.map((_, index) => 3 + index * 2); const normalFont = 3 + pages.length * 2; const boldFont = normalFont + 1;
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
@@ -266,7 +272,7 @@ const ticketPdf = async booking => {
   output += `trailer\n<< /Size ${boldFont + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(output, 'ascii');
 };
-const invoiceDocument = invoice => {
+let invoiceDocument = invoice => {
   const amount = Number(invoice.amount_mnt || 0);
   const fee = Number(invoice.service_fee_mnt || 0);
   const correspondentFee = Number(invoice.correspondent_fee_mnt || 0);
@@ -276,6 +282,28 @@ const invoiceDocument = invoice => {
   const currency = value => `₮ ${Number(value || 0).toLocaleString('en-US')}`;
   const created = new Date(invoice.created_at).toLocaleDateString('en-GB');
   return `<!doctype html><html lang="mn"><head><meta charset="utf-8"><title>${escapeHtml(invoice.invoice_number)}</title><style>body{font-family:Arial,"Segoe UI",sans-serif;color:#10284b;max-width:780px;margin:28px auto;padding:0 18px;background:#fff}.invoice{border:1px solid #e0e8f2;border-radius:12px;padding:26px;box-shadow:0 8px 24px #17325a0d}h1{font-size:24px;margin:0 0 22px}.head{display:flex;justify-content:space-between;gap:24px}.party{font-size:13px;line-height:1.65}.label{font-weight:800;color:#314869}.invoice-no{text-align:right}.invoice-no strong{display:block;color:#1e5ee9;font-size:15px;margin-top:5px}.table{width:100%;border-collapse:separate;border-spacing:0;margin-top:24px;border:1px solid #d7e1ee;border-radius:10px;overflow:hidden;font-size:13px}.table th{background:#f1f5fa;text-align:left;padding:11px 12px;font-size:12px;color:#395370}.table td{padding:12px;border-top:1px solid #d7e1ee}.table td:not(:first-child),.table th:not(:first-child){text-align:right}.summary{margin:18px 0 0 auto;width:min(100%,360px);background:#f8fafc;border-radius:10px;padding:12px 16px;font-size:13px}.row{display:flex;justify-content:space-between;padding:8px 0}.total{border-top:1px dashed #b9c9df;margin-top:5px;padding-top:11px;font-size:15px;font-weight:800}.muted{color:#697b96;font-size:12px;line-height:1.55}.wallet{margin-top:14px;padding:12px 14px;background:#eef5ff;border-left:3px solid #2863e8;border-radius:5px;font-size:13px}.status{display:inline-block;padding:3px 9px;border-radius:999px;background:#e6f7ee;color:#087c4c;font-size:12px;font-weight:700}footer{margin-top:22px;color:#71819a;font-size:11px}</style></head><body><main class="invoice"><div class="head"><div><h1>Нэхэмжлэх</h1><div class="party"><span class="label">Илгээгч</span><br>Flight B2B<br>РД: —</div></div><div class="invoice-no"><span class="label">Хүлээн авагч</span><br>${escapeHtml(invoice.agencyName)}<br><span class="muted">РД: ${escapeHtml(invoice.agencyRegistrationNumber)}<br>Имэйл: ${escapeHtml(invoice.agencyEmail)}<br>Утас: ${escapeHtml(invoice.agencyPhone)}</span><br><span class="label">Нэхэмжлэх №</span><strong>${escapeHtml(invoice.invoice_number)}</strong><span class="muted">Огноо: ${created}</span></div></div><table class="table"><thead><tr><th>Бараа / үйлчилгээ</th><th>Тоо ширхэг</th><th>Нэгж үнэ</th><th>Дүн</th></tr></thead><tbody><tr><td>Wallet цэнэглэлт</td><td>1</td><td>${currency(amount)}</td><td>${currency(amount)}</td></tr><tr><td>Үйлчилгээний хөлс (3%)</td><td>1</td><td>${currency(fee)}</td><td>${currency(fee)}</td></tr><tr><td>Корреспондент банкны шимтгэл (OUR)</td><td>1</td><td>${currency(correspondentFee)}</td><td>${currency(correspondentFee)}</td></tr><tr><td>${escapeHtml(bankName)}-ны гадаад гүйлгээний шимтгэл</td><td>1</td><td>${currency(bankFee)}</td><td>${currency(bankFee)}</td></tr></tbody></table><section class="summary"><div class="row"><span>Wallet цэнэглэх дүн</span><span>${currency(amount)}</span></div><div class="row"><span>Нэмэлт шимтгэлүүд</span><span>${currency(fee + correspondentFee + bankFee)}</span></div><div class="row total"><span>Төлөх нийт дүн</span><span>${currency(total)}</span></div></section>${invoice.note ? `<p class="muted"><strong>Тайлбар:</strong> ${escapeHtml(invoice.note)}</p>` : ''}</main></body></html>`;
+};
+
+// Keep this separate from the original template so deployed portals can show
+// all agency contact details once the corresponding database migration runs.
+invoiceDocument = invoice => {
+  const amount = Number(invoice.amount_mnt || 0);
+  const fee = Number(invoice.service_fee_mnt || 0);
+  const correspondentFee = Number(invoice.correspondent_fee_mnt || 0);
+  const bankFee = Number(invoice.bank_transfer_fee_mnt ?? invoice.khaan_transfer_fee_mnt ?? 0);
+  const total = Number(invoice.total_mnt ?? amount + fee + correspondentFee + bankFee);
+  const currency = value => `₮ ${Number(value || 0).toLocaleString('en-US')}`;
+  const created = new Date(invoice.created_at).toLocaleDateString('en-GB');
+  return `<!doctype html>
+<html lang="mn"><head><meta charset="utf-8"><title>${escapeHtml(invoice.invoice_number)}</title>
+<style>
+body{font-family:Arial,"Segoe UI",sans-serif;color:#10284b;max-width:780px;margin:28px auto;padding:0 18px;background:#fff}.invoice{border:1px solid #dbe6f4;border-radius:12px;padding:28px}.head{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #1e5ee9;padding-bottom:20px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:1.2px;color:#60728f}.title{font-size:27px;font-weight:800;margin:5px 0}.meta{text-align:right;font-size:13px;line-height:1.6}.party{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:24px 0;font-size:13px;line-height:1.65}.label{font-weight:800;color:#314869}.card{border:1px solid #dbe6f4;border-radius:9px;overflow:hidden}.row{display:flex;justify-content:space-between;padding:12px 15px;border-bottom:1px solid #e9eef6}.row:last-child{border-bottom:0}.total{font-size:17px;font-weight:800;background:#eef5ff}.note{margin-top:22px;padding:14px 16px;background:#f3f8ff;border-left:3px solid #1e5ee9;font-size:12px;line-height:1.6}@media print{body{margin:0;padding:0}.invoice{border:0;box-shadow:none}}
+</style></head><body><main class="invoice">
+<header class="head"><div><div class="eyebrow">FLIGHT B2B PORTAL</div><div class="title">Нэхэмжлэх</div><div class="eyebrow">TOP-UP PAYMENT INVOICE</div></div><div class="meta"><span class="label">Нэхэмжлэх №</span><br><strong>${escapeHtml(invoice.invoice_number)}</strong><br>${created}</div></header>
+<section class="party"><div><span class="label">Илгээгч</span><br>Flight B2B</div><div><span class="label">Хүлээн авагч</span><br><strong>${escapeHtml(invoice.agencyName || '-')}</strong><br>РД: ${escapeHtml(invoice.agencyRegistrationNumber || '-')}<br>Имэйл: ${escapeHtml(invoice.agencyEmail || '-')}<br>Утас: ${escapeHtml(invoice.agencyPhone || '-')}<br>Хаяг: ${escapeHtml(invoice.agencyAddress || '-')}</div></section>
+<section class="card"><div class="row"><span>Wallet funding amount</span><strong>${currency(amount)}</strong></div><div class="row"><span>Үйлчилгээний шимтгэл (3%)</span><strong>${currency(fee)}</strong></div><div class="row"><span>Корреспондент банк (OUR)</span><strong>${currency(correspondentFee)}</strong></div><div class="row"><span>Банкны гүйлгээний шимтгэл</span><strong>${currency(bankFee)}</strong></div><div class="row total"><span>Төлөх нийт дүн</span><span>${currency(total)}</span></div></section>
+<p class="note">Төлбөр баталгаажсаны дараа wallet автоматаар цэнэглэгдэнэ.</p>
+</main></body></html>`;
 };
 const normalise = item => { const flights = item.flights ?? [];
 const first = flights[0] ?? {};
@@ -1248,7 +1276,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     if (!booking) throw new Error('Booking not found or you do not have access to it.');
     if (booking.status !== 'Ticketed') throw new Error('Ticket and receipt PDFs are available after the ticket is issued.');
     const content = documentType === 'ticket'
-      ? await ticketPdf(booking)
+      ? await ticketPdf(booking, await getAgencyForTicket(booking.agency_id))
       : simplePdf(await bookingDocumentLines(booking, documentType));
     return sendPdf(res, `${pnr}-${documentType}.pdf`, content);
   }
@@ -1334,6 +1362,30 @@ if (body.confirmation !== 'RESET WALLETS') throw new Error('Confirmation text mu
 await clearAllWalletBalancesAndHistory({ createdBy: admin.id }); return send(res, 200, { ok: true }); }
 const approveMatch = url.pathname.match(/^\/api\/admin\/topups\/([\w-]+)\/approve$/);
 if (approveMatch && req.method === 'POST') { await approveTopupRequest(approveMatch[1], admin.id); return send(res, 200, { ok: true }); } const agencyMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)$/);
+if (agencyMatch && req.method === 'PATCH') {
+  const body = await readJson(req);
+  return send(res, 200, await updateAgency(agencyMatch[1], {
+    name: requiredText(body.name, 'Agency name'),
+    registrationNumber: requiredText(body.registrationNumber, 'Registration number'),
+    email: requiredText(body.email, 'Email address'),
+    phone: requiredText(body.phone, 'Contact phone'),
+    address: requiredText(body.address, 'Office address'),
+    active: Boolean(body.active)
+  }));
+}
+if (url.pathname === '/api/admin/agencies' && req.method === 'POST') {
+  const body = await readJson(req);
+  const name = requiredText(body.name, 'Agency name');
+  const registrationNumber = requiredText(body.registrationNumber, 'Registration number');
+  const email = requiredText(body.email, 'Email address');
+  const phone = requiredText(body.phone, 'Contact phone');
+  const address = requiredText(body.address, 'Office address');
+  const initialBalanceMnt = Number(body.initialBalanceMnt || 0);
+  if (!Number.isFinite(initialBalanceMnt) || initialBalanceMnt < 0) throw new Error('Opening balance must be a valid MNT amount.');
+  const rate = await getCnyMntRate();
+  const initialBalance = initialBalanceMnt / Number(rate.effectiveRateMnt);
+  return send(res, 201, await createAgency({ name, registrationNumber, email, phone, address, branchName: body.branchName, initialBalance }));
+}
 const userMatch = url.pathname.match(/^\/api\/admin\/users\/([\w-]+)$/);
 if (agencyMatch && req.method === 'PATCH') { const body = await readJson(req); return send(res, 200, await updateAgency(agencyMatch[1], { name: requiredText(body.name, 'Agency name'), registrationNumber: requiredText(body.registrationNumber, 'Registration number'), email: requiredText(body.email, 'Email address'), phone: requiredText(body.phone, 'Contact phone'), active: Boolean(body.active) })); } if (agencyMatch && req.method === 'DELETE') { await deleteAgency(agencyMatch[1]); return send(res, 200, { ok: true }); } if (userMatch && req.method === 'PATCH') { const body = await readJson(req);
 if (userMatch[1] === admin.id && body.active === false) throw new Error('You cannot deactivate your own administrator account.');

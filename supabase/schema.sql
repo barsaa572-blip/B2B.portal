@@ -8,6 +8,7 @@ create table public.agencies (
   registration_number text,
   email text,
   phone text,
+  address text,
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
