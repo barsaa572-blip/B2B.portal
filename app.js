@@ -738,7 +738,7 @@ const passengerTotal = () => activePassengerCounts.adults + activePassengerCount
 const passengerFareCaption = () => `Total · ${passengerTotal()} passenger${passengerTotal() === 1 ? '' : 's'}`;
 const resultFare = price => {
   const adultTotal = cnyAmount(price) * activePassengerCounts.adults;
-  return `<small>${passengerFareCaption()}</small><strong>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'Price unavailable'}</strong><span>Details per passenger</span>`;
+  return `<strong>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'Price unavailable'}</strong>`;
 };
 const renderRoundPairs = pairs => { resultArea.classList.remove('hidden'); resultArea.innerHTML = `<div class="results-head"><h2>Round trip combinations</h2><span>Departure and arrival flights shown together</span></div>${pairs.length ? pairs.map((pair, index) => `<article class="round-pair">${searchRow(pair.outbound, 'DEPARTURE', `departure-detail-${index}`)}${searchRow(pair.returnFlight, 'ARRIVAL', `arrival-detail-${index}`)}<div class="pair-footer"><span>${pair.sameAirline ? 'Same airline return' : 'Alternative airline return'}</span><strong>${pairTotal(pair)}</strong><button class="primary select-round-pair" data-pair-index="${index}">Select itinerary</button></div></article>`).join('') : '<div class="no-results">No return combinations were found for the first outbound options.</div>'}`; document.querySelectorAll('.segment-toggle').forEach(button => button.addEventListener('click', () => { const detail = document.querySelector(`#${button.dataset.detailId}`); const open = detail.hidden; detail.hidden = !open; button.textContent = open ? '⌃' : '⌄'; button.setAttribute('aria-expanded', String(open)); })); document.querySelectorAll('.select-round-pair').forEach(button => button.addEventListener('click', () => { if (passengerSearchStale) return toast('Search again after changing passenger count before selecting an itinerary.'); const pair = pairs[Number(button.dataset.pairIndex)]; selectedOutbound = pair.outbound; selectedReturn = pair.returnFlight; showItinerary(); })); };
 const loadRoundPairs = async outboundFlights => { resultArea.classList.remove('hidden'); resultArea.innerHTML = '<div class="no-results"><strong>Building round trip combinations...</strong><br>Searching return flights for the best outbound options.</div>'; const shortlisted = outboundFlights.filter(flight => flight.departureToken).slice(0, 3); const resolved = await Promise.all(shortlisted.map(async outbound => { try { const returned = await getReturnFlights(outbound); return returned ? { outbound, returnFlight: returned.flight, sameAirline: returned.sameAirline } : null; } catch { return null; } })); renderRoundPairs(resolved.filter(Boolean)); };
@@ -814,7 +814,7 @@ const inlineFareBreakdown = ({ baseFare = 0, taxes = 0, total = 0 }) => {
 const farePriceMarkup = (fare, multiplier = 1) => {
   const total = cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier;
   const adultTotal = total * activePassengerCounts.adults;
-  return `<div class="fare-family-price"><span>${passengerFareCaption()}</span><b>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'To be confirmed'}</b></div>`;
+  return `<div class="fare-family-price"><b>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'To be confirmed'}</b></div>`;
 };
 const fareBreakdownMarkup = (fare, multiplier = 1) => inlineFareBreakdown({
   baseFare: cnyAmount(fare?.baseFare ?? fare?.price ?? 0) * multiplier,
