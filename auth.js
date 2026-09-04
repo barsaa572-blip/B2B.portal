@@ -20,6 +20,7 @@
   });
   const signOut = () => {
     stopRefresh(); sessionStorage.removeItem(storageKey); sessionStorage.removeItem('flightb2b-demo-session');
+    window.resetDashboard?.();
     // A session can expire while an invoice or ticket dialog is open. Close every
     // native dialog before revealing the sign-in screen so stale forms never sit
     // above it or display the internal session-expiry marker.
@@ -58,7 +59,7 @@
     root.hidden = true; document.body.classList.remove('role-agent', 'role-office', 'role-platform');
     const role = roleKey(value.profile.role); document.body.classList.add(`role-${role}`);
     window.applyBookingScope?.(role); if (role === 'platform') window.loadAdministration?.(); if (role === 'office') window.loadTeamAccess?.();
-    window.loadTopupInvoices?.(); window.loadWallet?.(); window.loadBookings?.(); bindSidebarAccount(value); scheduleRefresh(value);
+    window.loadTopupInvoices?.(); window.loadWallet?.(); window.loadBookings?.(); window.loadDashboard?.(); bindSidebarAccount(value); scheduleRefresh(value);
   };
   const render = () => {
     root.innerHTML = `<section class="auth-card"><div class="auth-intro"><div class="auth-mark">F</div><h1>Flight B2B Portal</h1><p>Secure airline ticketing for agencies and office operations.</p><div class="auth-permissions"><div><strong>Agent</strong><br>Own bookings only</div><div><strong>Office manager</strong><br>Agency / branch control</div></div></div><form class="auth-form"><h2>Sign in</h2><p>Use your company email and password to continue.</p><label>Email address<input type="email" id="login-email" placeholder="name@company.mn" required autocomplete="email" /></label><label>Password<input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" /></label><p class="auth-error" role="alert" hidden></p><button class="primary auth-signin" type="submit">Sign in</button><p class="auth-note">Your access level is assigned by the platform administrator.</p></form></section>`;

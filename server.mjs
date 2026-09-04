@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { getDashboardSummary } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -1302,6 +1303,11 @@ if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getC
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
 if (url.pathname.startsWith('/api/bookings')) { try {
   const profile = await profileForAccessToken(bearer(req));
+  if (url.pathname === '/api/bookings/dashboard' && req.method === 'GET') {
+    const summary = await getDashboardSummary(profile);
+    const rate = await getCnyMntRate().catch(() => null);
+    return send(res, 200, { ...summary, effectiveRateMnt: rate?.effectiveRateMnt || null });
+  }
   if (url.pathname === '/api/bookings' && req.method === 'GET') {
     await expireTicketingDeadlineBookings();
     return send(res, 200, await listPortalBookings(profile));

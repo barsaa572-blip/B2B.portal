@@ -565,7 +565,7 @@ const showNoShowFlow = (modal, booking) => {
 };
 document.addEventListener('click', event => { const button = event.target.closest('.view-booking'); if (button) openBookingDetail(button.dataset.bookingRef); });
 document.querySelector('#ledger').innerHTML = '<tr><td colspan="6" class="no-bookings">No wallet transactions yet.</td></tr>';
-const showView = id => { resetFlightSearchFlow(); document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.view===id)); document.querySelector('main > header').hidden = id === 'bookings'; document.querySelector('#page-title').textContent = id==='dashboard' ? 'Good morning, Bayar' : id==='search' ? 'Flight search' : id[0].toUpperCase()+id.slice(1); window.scrollTo({top:0,behavior:'smooth'}); };
+const showView = id => { resetFlightSearchFlow(); document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id)); document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.view===id)); document.querySelector('main > header').hidden = id === 'bookings'; document.querySelector('#page-title').textContent = id==='dashboard' ? 'Dashboard' : id==='search' ? 'Flight search' : id[0].toUpperCase()+id.slice(1); window.scrollTo({top:0,behavior:'smooth'}); };
 document.querySelectorAll('[data-view], [data-view-target]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view || btn.dataset.viewTarget)));
 const formatMinutes = minutes => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 const resultArea = document.querySelector('#flight-results');
@@ -1377,6 +1377,45 @@ document.querySelectorAll('[data-open-topup]').forEach(b=>b.addEventListener('cl
 document.querySelector('#topup-form').addEventListener('submit', async e=>{ e.preventDefault(); const error = document.querySelector('#topup-error'); const submit = e.target.querySelector('.primary'); error.hidden = true; submit.disabled = true; try { const form = Object.fromEntries(new FormData(e.target)); form.amountMnt = String(form.amountMnt || '').replace(/,/g, ''); const response = await secureFetch('/api/topups', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(form) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); topup.close(); e.target.reset(); await Promise.all([loadTopupInvoices(), loadWallet()]); toast(`Invoice ${result.invoice.invoice_number} created.`); downloadInvoice(result.invoice.id, result.invoice.invoice_number); } catch (issue) { if (issue.message === '__SESSION_EXPIRED__') return; error.textContent = issue.message; error.hidden = false; } finally { submit.disabled = false; } });
 document.addEventListener('click', async event => { const view = event.target.closest('.view-invoice'); if (view) return viewInvoice(view.dataset.invoiceId, view.dataset.invoiceNumber); const download = event.target.closest('.download-invoice'); if (download) return downloadInvoice(download.dataset.invoiceId, download.dataset.invoiceNumber); const remove = event.target.closest('.delete-invoice'); if (!remove || !confirm('Delete this pending invoice?')) return; const response = await secureFetch(`/api/topups/${remove.dataset.invoiceId}`, { method: 'DELETE' }); const result = await response.json(); if (!response.ok) return toast(result.error || 'Invoice could not be deleted.'); await Promise.all([loadTopupInvoices(), loadWallet()]); toast('Pending invoice deleted.'); });
 window.loadTopupInvoices = loadTopupInvoices;
+let dashboardRequest = 0;
+let dashboardOwner = '';
+const resetDashboard = () => {
+  dashboardRequest++;
+  dashboardOwner = '';
+  ['issued', 'sales', 'pending'].forEach(key => { document.querySelector(`#dashboard-${key}`).textContent = '—'; });
+  ['period', 'sales-note', 'pending-note'].forEach(key => { document.querySelector(`#dashboard-${key}`).textContent = 'Loading…'; });
+};
+const loadDashboard = async () => {
+  document.querySelector('#portal-date').textContent = new Date().toLocaleDateString('en-GB', { timeZone: 'Asia/Ulaanbaatar', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  const session = portalSession();
+  const owner = `${session.profile?.id}:${session.profile?.agency_id}:${session.profile?.role}`;
+  if (!session.accessToken) { resetDashboard(); return; }
+  if (dashboardOwner !== owner) resetDashboard();
+  dashboardOwner = owner;
+  const request = ++dashboardRequest;
+  try {
+    const response = await secureFetch('/api/bookings/dashboard');
+    const data = await response.json();
+    if (request !== dashboardRequest || !portalSession().accessToken) return;
+    if (!response.ok) throw new Error(data.error || 'Dashboard unavailable.');
+    document.querySelector('#dashboard-issued').textContent = Number(data.issuedBookings).toLocaleString('en-US');
+    document.querySelector('#dashboard-sales').textContent = data.effectiveRateMnt ? mnt(data.salesCny * data.effectiveRateMnt) : `${cny(data.salesCny)} CNY`;
+    document.querySelector('#dashboard-pending').textContent = Number(data.pendingBookings).toLocaleString('en-US');
+    document.querySelector('#dashboard-period').textContent = `${data.month} · ${data.scope === 'agency' ? 'Your agency' : data.scope === 'agent' ? 'Your activity' : 'All agencies'}`;
+    document.querySelector('#dashboard-sales-note').textContent = `${cny(data.salesCny)} CNY · Gross ticket charges${data.effectiveRateMnt ? ' · Current FX' : ''}`;
+    document.querySelector('#dashboard-pending-note').textContent = 'Reserved bookings within payment deadline';
+  } catch {
+    if (request !== dashboardRequest) return;
+    ['issued', 'sales', 'pending'].forEach(key => { document.querySelector(`#dashboard-${key}`).textContent = '—'; });
+    ['period', 'sales-note', 'pending-note'].forEach(key => { document.querySelector(`#dashboard-${key}`).textContent = 'Could not load. Retrying…'; });
+  }
+};
+window.resetDashboard = resetDashboard;
+window.loadDashboard = loadDashboard;
+loadDashboard();
+setInterval(() => {
+  if (document.visibilityState === 'visible' && portalSession().accessToken) loadDashboard();
+}, 30000);
 window.loadWallet = loadWallet;
 window.loadBookings = loadBookings;
 loadPricingRate();

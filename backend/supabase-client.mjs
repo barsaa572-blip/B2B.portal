@@ -268,6 +268,34 @@ export async function listPortalBookings(profile) {
   return secretRequest(`/rest/v1/bookings?select=*&order=created_at.desc${bookingAccessFilter(profile)}`);
 }
 
+export async function getDashboardSummary(profile, now = new Date()) {
+  if (!['agent', 'office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Dashboard access denied.');
+  if (profile.role !== 'platform_admin' && !profile.agency_id) throw new Error('Agency is required.');
+  const local = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const start = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - 8 * 60 * 60 * 1000).toISOString();
+  const agencyScope = profile.role === 'platform_admin' ? '' : `&agency_id=eq.${encodeURIComponent(profile.agency_id)}`;
+  const actorScope = profile.role === 'agent' ? `&created_by=eq.${encodeURIComponent(profile.id)}` : '';
+  const readAll = async url => {
+    const rows = [];
+    for (let offset = 0; ; offset += 500) {
+      const page = await secretRequest(`${url}&limit=500&offset=${offset}`);
+      rows.push(...page);
+      if (page.length < 500) return rows;
+    }
+  };
+  const [issues, pending] = await Promise.all([
+    readAll(`/rest/v1/wallet_transactions?select=id,amount_cny,reason&entry_type=eq.debit&reason=like.Ticket%20issue%3A%20*&created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(now.toISOString())}${agencyScope}${actorScope}&order=created_at.asc,id.asc`),
+    readAll(`/rest/v1/bookings?select=id&status=eq.Reserved&created_at=gt.${encodeURIComponent(new Date(now.getTime() - 30 * 60 * 1000).toISOString())}&created_at=lte.${encodeURIComponent(now.toISOString())}${agencyScope}${actorScope}&order=created_at.asc,id.asc`)
+  ]);
+  return {
+    issuedBookings: new Set(issues.map(row => row.reason)).size,
+    salesCny: issues.reduce((sum, row) => sum + Math.abs(Number(row.amount_cny) || 0), 0),
+    pendingBookings: pending.length,
+    month: `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`,
+    scope: profile.role === 'platform_admin' ? 'platform' : profile.role === 'office_manager' ? 'agency' : 'agent'
+  };
+}
+
 // Spring automatically releases unpaid PNRs after 30 minutes. Keep the portal
 // status in step with that rule without sending a duplicate cancel request.
 export async function expireTicketingDeadlineBookings() {
