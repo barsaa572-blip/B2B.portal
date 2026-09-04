@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { getTicketIssuedAt } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -148,7 +149,9 @@ const bookingDocumentLines = async (booking, type) => {
 // A compact, airline-style document for the downloadable electronic ticket.
 // Passengers deliberately remain on the same PNR document and are printed one
 // below another; this avoids producing a separate file for each traveller.
-const ticketPdf = async (booking, agency = {}) => {
+const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
+  agency = agency || {};
+  const dateOnly = value => value && !Number.isNaN(new Date(value).getTime()) ? new Date(value).toLocaleDateString('en-GB', { timeZone: 'Asia/Ulaanbaatar' }) : 'Not available';
   const pages = []; let commands = []; let y = 790;
   const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
   const short = (value, max = 29) => {
@@ -185,16 +188,16 @@ const ticketPdf = async (booking, agency = {}) => {
   const newPage = () => {
     if (commands.length) pages.push(commands.join('\n')); commands = []; y = 790;
     fill(0, 842, 595, 42, '0.08 0.25 0.55');
-    text('FLIGHT B2B  |  ELECTRONIC TICKET', 36, 817, 15, true, '1 1 1');
-    text(`PNR ${booking.pnr}`, 438, 817, 11, true, '1 1 1');
+    text('Itinerary', 36, 817, 17, true, '1 1 1');
+    text(`PNR: ${booking.pnr}`, 430, 817, 11, true, '1 1 1');
     y = 775;
   };
   const ensure = required => { if (y - required < 55) newPage(); };
   newPage();
-  text('Current travel itinerary', 36, y, 18, true);
+  text('Travel itinerary', 36, y, 18, true);
   text(`Status: ${booking.status}`, 430, y + 2, 10, true, booking.status === 'Ticketed' ? '0 0.48 0.29' : '0.52 0.34 0'); y -= 24;
-  text(`Generated ${new Date().toLocaleString('en-GB')}`, 36, y, 8, false, '0.36 0.43 0.54');
-  if (itineraryChangedAt) text(`Itinerary last updated ${new Date(itineraryChangedAt).toLocaleString('en-GB')}`, 255, y, 8, false, '0.10 0.30 0.70');
+  text(`Ticket issued date: ${dateOnly(issuedAt)}`, 36, y, 9, false, '0.36 0.43 0.54');
+  if (itineraryChangedAt) text(`Itinerary updated: ${dateOnly(itineraryChangedAt)}`, 340, y, 8, false, '0.10 0.30 0.70');
   y -= 20;
   if (!flights.length) {
     fill(36, y, 523, 42, '0.99 0.95 0.90');
@@ -202,38 +205,40 @@ const ticketPdf = async (booking, agency = {}) => {
     y -= 52;
   }
   flights.forEach((flight, index) => {
-    ensure(146);
+    ensure(174);
     const label = flights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'DEPARTURE';
     const date = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || 'Travel date pending';
     const departure = airport(flight.departure);
     const arrival = airport(flight.arrival);
     fill(36, y, 523, 22, '0.93 0.96 1');
     text(`${label}  |  ${date}`, 48, y - 14, 10, true, '0.10 0.30 0.70');
-    text(`${flight.airline || 'Spring Airlines'}  ·  Flight ${flight.number || 'Pending'}`, 365, y - 14, 8, true, '0.10 0.30 0.70');
+    text(`${flight.airline || 'Spring Airlines'}  |  Flight ${flight.number || 'Pending'}`, 350, y - 14, 8, true, '0.10 0.30 0.70');
     y -= 30;
-    stroke(36, y, 523, 104);
+    stroke(36, y, 523, 120);
     text('DEPARTURE', 50, y - 17, 8, true, '0.36 0.43 0.54');
     text(String(flight.departure?.time || '').slice(-5) || '--:--', 50, y - 40, 17, true);
     text(departure.code, 127, y - 40, 14, true);
-    text(departure.name || 'Airport', 127, y - 55, 8, false, '0.36 0.43 0.54');
-    if (departure.terminal) text(departure.terminal, 127, y - 68, 8, false, '0.36 0.43 0.54');
+    text(departure.name || 'Airport', 50, y - 57, 8, false, '0.36 0.43 0.54');
+    if (departure.terminal) text(`Terminal: ${departure.terminal}`, 50, y - 70, 8, false, '0.36 0.43 0.54');
     rule(264, y - 38, 334, '0.28 0.48 0.88');
-    text(flight.duration || 'Nonstop', 270, y - 27, 8, false, '0.10 0.30 0.70');
+    const minutes = Number(flight.duration);
+    const duration = minutes > 0 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : short(flight.duration || 'Nonstop', 16);
+    text(duration, 270, y - 27, 8, false, '0.10 0.30 0.70');
     text('>', 330, y - 42, 10, true, '0.10 0.30 0.70');
     text('ARRIVAL', 365, y - 17, 8, true, '0.36 0.43 0.54');
     text(String(flight.arrival?.time || '').slice(-5) || '--:--', 365, y - 40, 17, true);
     text(arrival.code, 442, y - 40, 14, true);
-    text(arrival.name || 'Airport', 442, y - 55, 8, false, '0.36 0.43 0.54');
-    if (arrival.terminal) text(arrival.terminal, 442, y - 68, 8, false, '0.36 0.43 0.54');
+    text(arrival.name || 'Airport', 365, y - 57, 8, false, '0.36 0.43 0.54');
+    if (arrival.terminal) text(`Terminal: ${arrival.terminal}`, 365, y - 70, 8, false, '0.36 0.43 0.54');
     const baggage = flight.fare?.baggage || flight.baggage || {};
     const carry = baggage.carryOn || baggage.carryOnKg || baggage.cabinKg;
     const checked = baggage.checked || baggage.checkedKg;
     const carryText = carry ? `1 x ${carry}${String(carry).includes('kg') ? '' : ' kg'}` : 'check with airline';
     const checkedText = checked ? `${checked}${String(checked).includes('kg') ? '' : ' kg'} included` : 'not included';
     rule(50, y - 78, 545, '0.88 0.91 0.96');
-    text(`Cabin: ${flight.fare?.cabin || 'Economy'}  ·  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 91, 8, false, '0.36 0.43 0.54');
-    text(`Baggage: Carry-on ${carryText}  ·  Checked ${checkedText}`, 50, y - 103, 8, false, '0.10 0.30 0.70');
-    y -= 122;
+    text(`Cabin: ${flight.fare?.cabin || 'Economy'}  |  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 93, 8, false, '0.36 0.43 0.54');
+    text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - 107, 8, false, '0.10 0.30 0.70');
+    y -= 144;
   });
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
@@ -256,7 +261,7 @@ const ticketPdf = async (booking, agency = {}) => {
   text(agency.name || 'Flight B2B partner agency', 48, y, 11, true); y -= 16;
   text(`Registration: ${agency.registration_number || '-'}     Phone: ${agency.phone || '-'}`, 48, y, 9); y -= 15;
   text(`Address: ${short(agency.address, 64) || '-'}     Email: ${short(agency.email, 32) || '-'}`, 48, y, 9); y -= 24;
-  fill(36, y, 523, 45, '0.94 0.98 0.96');
+  ensure(56); fill(36, y, 523, 45, '0.94 0.98 0.96');
   text('Attention', 48, y - 15, 10, true, '0 0.45 0.25');
   text('Bring a valid travel document for check-in. Verify flight times and terminal before travel.', 48, y - 30, 8, false, '0.18 0.25 0.34');
   y -= 56;
@@ -1277,7 +1282,7 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     if (!booking) throw new Error('Booking not found or you do not have access to it.');
     if (booking.status !== 'Ticketed') throw new Error('Ticket and receipt PDFs are available after the ticket is issued.');
     const content = documentType === 'ticket'
-      ? await ticketPdf(booking, await getAgencyForTicket(booking.agency_id))
+      ? await ticketPdf(booking, await getAgencyForTicket(booking.agency_id), await getTicketIssuedAt(booking))
       : simplePdf(await bookingDocumentLines(booking, documentType));
     return sendPdf(res, `${pnr}-${documentType}.pdf`, content);
   }

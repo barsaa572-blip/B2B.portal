@@ -488,6 +488,11 @@ export async function getAgencyForTicket(agencyId) {
   return agencies[0] || null;
 }
 
+export async function getTicketIssuedAt(booking) {
+  const rows = await secretRequest(`/rest/v1/wallet_transactions?select=created_at&agency_id=eq.${encodeURIComponent(booking.agency_id)}&entry_type=eq.debit&reason=eq.${encodeURIComponent(`Ticket issue: ${booking.pnr}`)}&order=created_at.asc&limit=1`);
+  return rows[0]?.created_at || null;
+}
+
 export async function approveTopupRequest(id, approvedBy) {
   return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });
 }
