@@ -188,7 +188,7 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
   const newPage = () => {
     if (commands.length) pages.push(commands.join('\n')); commands = []; y = 790;
     fill(0, 842, 595, 42, '0.08 0.25 0.55');
-    text('Travel itinerary', 36, 817, 17, true, '1 1 1');
+    text('E-ticket itinerary', 36, 817, 17, true, '1 1 1');
     text(`PNR: ${booking.pnr}`, 430, 817, 11, true, '1 1 1');
     y = 775;
   };
