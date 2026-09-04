@@ -188,13 +188,12 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
   const newPage = () => {
     if (commands.length) pages.push(commands.join('\n')); commands = []; y = 790;
     fill(0, 842, 595, 42, '0.08 0.25 0.55');
-    text('Itinerary', 36, 817, 17, true, '1 1 1');
+    text('Travel itinerary', 36, 817, 17, true, '1 1 1');
     text(`PNR: ${booking.pnr}`, 430, 817, 11, true, '1 1 1');
     y = 775;
   };
   const ensure = required => { if (y - required < 55) newPage(); };
   newPage();
-  text('Travel itinerary', 36, y, 18, true);
   text(`Status: ${booking.status}`, 430, y + 2, 10, true, booking.status === 'Ticketed' ? '0 0.48 0.29' : '0.52 0.34 0'); y -= 24;
   text(`Ticket issued date: ${dateOnly(issuedAt)}`, 36, y, 9, false, '0.36 0.43 0.54');
   if (itineraryChangedAt) text(`Itinerary updated: ${dateOnly(itineraryChangedAt)}`, 340, y, 8, false, '0.10 0.30 0.70');
