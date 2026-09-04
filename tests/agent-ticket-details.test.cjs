@@ -49,6 +49,7 @@ const extract = (source, start, end) => source.slice(source.indexOf(start), sour
   const content = pdf.toString('ascii');
   for (const value of ['Agency Information', 'Agent Details', 'TEST ISSUING AGENT', '+976 12345678', 'TEST AIR SALES LLC']) assert(content.includes(value));
   assert(!content.includes('Issuing office'));
+  assert(!content.includes('Registration:'));
   assert(!content.includes('DIFFERENT CONTACT'));
   assert(!content.includes('(Contact)'));
   assert(!content.includes('0.95 0.97 1 rg'));

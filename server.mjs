@@ -280,7 +280,6 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
     { value: 'Agency Information', heading: true },
     ...airportLines(agency.name || 'Agency unavailable').map(value => ({ value })),
     ...airportLines(agency.address || 'Address: Not provided').map(value => ({ value })),
-    { value: `Registration: ${agency.registration_number || '-'}` },
     { value: `Tel: ${agency.phone || 'Not provided'}` },
     { value: 'Agent Details', heading: true },
     ...airportLines(issuingAgent?.full_name || 'Issuing agent unavailable').map(value => ({ value })),
