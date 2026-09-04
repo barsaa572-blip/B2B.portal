@@ -242,12 +242,9 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
   travellers.forEach((traveller, index) => {
-    ensure(70); fill(36, y, 523, 20, '0.95 0.97 1');
+    ensure(32); fill(36, y, 523, 20, '0.95 0.97 1');
     text(`${index + 1}. ${traveller.lastName || ''} / ${traveller.firstName || ''}`, 47, y - 14, 11, true);
     text(traveller.type || 'ADT', 515, y - 14, 9, true, '0.10 0.30 0.70'); y -= 29;
-    text(`Passport: ${traveller.documentNumber || '-'}     Date of birth: ${traveller.dateOfBirth || '-'}     Gender: ${traveller.gender || '-'}`, 47, y - 13, 9);
-    text(`Nationality: ${traveller.nationality || '-'}     Passport expiry: ${traveller.documentExpiry || '-'}`, 47, y - 30, 9);
-    y -= 48;
   });
   const contact = booking.passengers?.contact || {};
   if (contact.name || contact.phone || contact.email) {
