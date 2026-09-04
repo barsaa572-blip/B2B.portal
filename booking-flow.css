@@ -61,3 +61,5 @@
   .booking-detail .booking-itinerary-leg > footer { gap: 5px; }
   .booking-detail .booking-itinerary-leg > footer > span::before { margin-right: 5px; }
 }
+.booking-table-passengers { display: grid; gap: 5px; min-width: 170px; max-width: 280px; white-space: normal; }
+.booking-table-passengers > span { display: block; line-height: 1.4; overflow-wrap: anywhere; }

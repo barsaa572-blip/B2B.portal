@@ -7,7 +7,13 @@ const quoteMnt = value => pricingRate ? mnt(cnyAmount(value) * pricingRate.effec
 // Demo orders must never appear in an agency-facing portal.
 const bookings = [];
 const ledger = [];
-const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${b.route}</td><td>${b.passenger}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
+const bookingPassengerNames = booking => {
+  const names = Array.isArray(booking.passengers) && booking.passengers.length
+    ? booking.passengers : String(booking.passenger || 'Passenger').split(',').map(name => name.trim()).filter(Boolean);
+  const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+  return `<div class="booking-table-passengers">${names.map(name => `<span>${escape(name)}</span>`).join('')}</div>`;
+};
+const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${b.route}</td><td>${bookingPassengerNames(b)}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
 const ownBookings = () => bookings;
 let bookingScope = 'agent';
 const renderBookings = (query = '') => {
