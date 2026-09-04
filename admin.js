@@ -103,7 +103,26 @@
     if (!confirm(`Delete ${name}? If it has booking or financial history, the system will require deactivation instead.`)) return;
     try { await api(`/api/admin/${type}/${id}`, { method: 'DELETE' }); await load(); notify(`${type === 'agencies' ? 'Agency' : 'User'} deleted.`); } catch (issue) { notify(issue.message); }
   };
-  const load = async () => { try { const [nextOverview, rateResponse] = await Promise.all([api('/api/admin/overview'), fetch('/api/fx/cny-mnt')]); overview = nextOverview; if (rateResponse.ok) fxRate = await rateResponse.json(); render(byId('#agency-filter')?.value); } catch (error) { notify(error.message); } };
+  const isPlatformAdmin = () => {
+    const current = session();
+    return Boolean(current.accessToken && current.profile?.role === 'platform_admin');
+  };
+  let loading = false;
+  const load = async () => {
+    if (!isPlatformAdmin() || loading) return;
+    const token = session().accessToken;
+    loading = true;
+    try {
+      const [nextOverview, rateResponse] = await Promise.all([api('/api/admin/overview'), fetch('/api/fx/cny-mnt')]);
+      const nextRate = rateResponse.ok ? await rateResponse.json() : fxRate;
+      if (!isPlatformAdmin() || session().accessToken !== token) return;
+      overview = nextOverview;
+      fxRate = nextRate;
+      render(byId('#agency-filter')?.value);
+    } catch (error) {
+      if (isPlatformAdmin() && session().accessToken === token && error.message !== '__SESSION_EXPIRED__') notify(error.message);
+    } finally { loading = false; }
+  };
   const setup = () => {
     byId('#agency-filter')?.addEventListener('input', event => render(event.target.value));
     byId('#add-agency')?.addEventListener('click', openAgency);
@@ -127,7 +146,7 @@
     byId('#admin-topups')?.addEventListener('click', async event => { const approve = event.target.closest('.topup-approve'); const remove = event.target.closest('.topup-delete'); const button = approve || remove; if (!button) return; const deleting = Boolean(remove); if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { if (deleting) await api(`/api/topups/${button.dataset.topupId}`, { method: 'DELETE' }); else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
-    setInterval(() => { if (document.visibilityState === 'visible' && session().accessToken) load(); }, 5000);
+    setInterval(() => { if (document.visibilityState === 'visible' && isPlatformAdmin()) load(); }, 5000);
   };
   window.loadAdministration = load;
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', setup) : setup();
