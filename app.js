@@ -803,15 +803,13 @@ const fareDetailButton = (fare, phase) => `<button type="button" class="text-btn
 let fareDetailsByBound = {};
 const inlineFareBreakdown = ({ baseFare = 0, taxes = 0, total = 0 }) => {
   const counts = activePassengerCounts;
-  const adultFare = baseFare * counts.adults;
-  const adultTaxes = taxes * counts.adults;
   const adultTotal = total * counts.adults;
   const typeBlock = (label, count, fare, tax, isLiveOnly = false) => {
     if (!count) return '';
     if (isLiveOnly) return `<div class="fare-breakdown-row pending"><span>${label} × ${count}</span><b>Live verification required</b></div>`;
-    return `<div class="fare-breakdown-row"><span><b>${label} × ${count}</b><small>Fare ${quoteMnt(fare)} · Taxes & fees ${quoteMnt(tax)}</small></span><b>${quoteMnt(total)}</b></div>`;
+    return `<div class="fare-breakdown-group"><div class="fare-breakdown-row"><b>${label}</b><b>${quoteMnt(total)} × ${count}</b></div><div class="fare-breakdown-row fare-breakdown-detail"><span>Ticket fare</span><span>${quoteMnt(fare)} × ${count}</span></div><div class="fare-breakdown-row fare-breakdown-detail"><span>Taxes &amp; fees</span><span>${quoteMnt(tax)} × ${count}</span></div></div>`;
   };
-  return `<div class="fare-price-breakdown"><span class="fare-breakdown-title">Price breakdown</span>${typeBlock('Adult', counts.adults, adultFare, adultTaxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<div class="fare-breakdown-total"><span>${passengerFareCaption()}</span><b>${quoteMnt(adultTotal)}</b></div></div>`;
+  return `<div class="fare-price-breakdown"><span class="fare-breakdown-title">Price breakdown</span>${typeBlock(counts.adults === 1 ? 'Adult' : 'Adults', counts.adults, baseFare, taxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<div class="fare-breakdown-total"><span>Total</span><b>${counts.children || counts.infants ? 'To be confirmed' : quoteMnt(adultTotal)}</b></div></div>`;
 };
 const farePriceMarkup = (fare, multiplier = 1) => {
   const total = cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier;

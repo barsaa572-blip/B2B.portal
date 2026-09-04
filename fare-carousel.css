@@ -120,6 +120,10 @@
 .fare-breakdown-row, .fare-breakdown-total { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 9px 11px; border-top: 1px solid #e3e9f1; color: #233a5b; font-size: 12px; }
 .fare-breakdown-row small { display: block; margin-top: 3px; color: #718099; font-size: 11px; font-weight: 500; }
 .fare-breakdown-row > b { color: #183f91; white-space: nowrap; }
+.fare-breakdown-group { padding: 9px 11px; border-top: 1px solid #e3e9f1; }
+.fare-breakdown-group .fare-breakdown-row { padding: 3px 0; border-top: 0; align-items: baseline; gap: 12px; }
+.fare-breakdown-detail { color: #61728c; font-weight: 400; }
+.fare-breakdown-detail > span:last-child { white-space: nowrap; text-align: right; }
 .fare-breakdown-row.pending > b { color: #6f7d92; font-size: 11px; font-weight: 600; }
 .fare-breakdown-total { background: #f2f6fd; font-weight: 800; }
 .fare-breakdown-total b { color: #1960e6; }
