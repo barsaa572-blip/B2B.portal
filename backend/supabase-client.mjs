@@ -94,20 +94,20 @@ export async function getOfficeUserAccess(manager) {
   const [agency, branches, profiles] = await Promise.all([
     secretRequest(`/rest/v1/agencies?select=id,name,active&id=eq.${encodeURIComponent(manager.agency_id)}&limit=1`),
     secretRequest(`/rest/v1/branches?select=id,agency_id,name&agency_id=eq.${encodeURIComponent(manager.agency_id)}&order=name.asc`),
-    secretRequest(`/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,active,created_at&agency_id=eq.${encodeURIComponent(manager.agency_id)}&order=full_name.asc`)
+    secretRequest(`/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,email,phone,active,created_at&agency_id=eq.${encodeURIComponent(manager.agency_id)}&order=full_name.asc`)
   ]);
   return { agency: agency[0] || null, branches, profiles };
 }
 
-export async function createOfficeAgent(manager, { email, password, fullName, branchId }) {
+export async function createOfficeAgent(manager, { email, password, fullName, phone, branchId }) {
   if (branchId) {
     const branches = await secretRequest(`/rest/v1/branches?select=id&agency_id=eq.${encodeURIComponent(manager.agency_id)}&id=eq.${encodeURIComponent(branchId)}&limit=1`);
     if (!branches.length) throw new Error('The selected office does not belong to your agency.');
   }
-  return createUser({ email, password, fullName, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent' });
+  return createUser({ email, password, fullName, phone, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent' });
 }
 
-export async function updateOfficeAgent(manager, id, { fullName, branchId, active }) {
+export async function updateOfficeAgent(manager, id, { fullName, phone, branchId, active }) {
   const users = await secretRequest(`/rest/v1/profiles?select=id,role,agency_id&id=eq.${encodeURIComponent(id)}&limit=1`);
   const user = users[0];
   if (!user || user.agency_id !== manager.agency_id || user.role !== 'agent') throw new Error('You can manage ticketing agents in your own agency only.');
@@ -115,14 +115,14 @@ export async function updateOfficeAgent(manager, id, { fullName, branchId, activ
     const branches = await secretRequest(`/rest/v1/branches?select=id&agency_id=eq.${encodeURIComponent(manager.agency_id)}&id=eq.${encodeURIComponent(branchId)}&limit=1`);
     if (!branches.length) throw new Error('The selected office does not belong to your agency.');
   }
-  return updateUser(id, { fullName, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent', active });
+  return updateUser(id, { fullName, phone, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent', active });
 }
 
 export async function getAdminOverview() {
   const [agencies, branches, profiles, wallets, topups] = await Promise.all([
     secretRequest('/rest/v1/agencies?select=id,name,registration_number,email,phone,address,active,created_at&order=name.asc'),
     secretRequest('/rest/v1/branches?select=id,agency_id,name&order=name.asc'),
-    secretRequest('/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,active,created_at&order=full_name.asc'),
+    secretRequest('/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,email,phone,active,created_at&order=full_name.asc'),
     secretRequest('/rest/v1/wallets?select=agency_id,balance_cny,updated_at'),
     secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,amount_mnt,total_mnt,status,created_at&order=created_at.desc')
   ]);
@@ -137,14 +137,15 @@ export async function createAgency({ name, registrationNumber, email, phone, add
   return agency;
 }
 
-export async function createUser({ email, password, fullName, agencyId, branchId, role }) {
+export async function createUser({ email, password, fullName, phone, agencyId, branchId, role }) {
+  if (!String(fullName || '').trim() || !String(phone || '').trim()) throw new Error('Full name and phone number are required.');
   const { secretKey, configured } = config();
   if (!configured) throw new Error('Database is not configured on this server.');
   const response = await request('/auth/v1/admin/users', { method: 'POST', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` }, body: { email, password, email_confirm: true } });
   const authUser = await response.json().catch(() => ({}));
   if (!response.ok || !authUser.id) throw new Error(authUser.msg || authUser.message || 'Unable to create the login account.');
   try {
-    await secretRequest('/rest/v1/profiles', { method: 'POST', body: { id: authUser.id, agency_id: agencyId || null, branch_id: branchId || null, role, full_name: fullName, active: true } });
+    await secretRequest('/rest/v1/profiles', { method: 'POST', body: { id: authUser.id, agency_id: agencyId || null, branch_id: branchId || null, role, full_name: fullName.trim(), email: authUser.email || email, phone: phone.trim(), active: true } });
   } catch (error) {
     await request(`/auth/v1/admin/users/${authUser.id}`, { method: 'DELETE', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` } });
     throw error;
@@ -204,8 +205,9 @@ export async function deleteAgency(id) {
   await secretRequest(`/rest/v1/agencies?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export async function updateUser(id, { fullName, agencyId, branchId, role, active }) {
-  const updated = await secretRequest(`/rest/v1/profiles?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: { full_name: fullName, agency_id: agencyId || null, branch_id: branchId || null, role, active } });
+export async function updateUser(id, { fullName, phone, agencyId, branchId, role, active }) {
+  if (phone !== undefined && !String(phone).trim()) throw new Error('Phone number is required.');
+  const updated = await secretRequest(`/rest/v1/profiles?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: { full_name: fullName, ...(phone !== undefined ? { phone: String(phone).trim() } : {}), agency_id: agencyId || null, branch_id: branchId || null, role, active } });
   return updated[0];
 }
 
@@ -488,9 +490,12 @@ export async function getAgencyForTicket(agencyId) {
   return agencies[0] || null;
 }
 
-export async function getTicketIssuedAt(booking) {
-  const rows = await secretRequest(`/rest/v1/wallet_transactions?select=created_at&agency_id=eq.${encodeURIComponent(booking.agency_id)}&entry_type=eq.debit&reason=eq.${encodeURIComponent(`Ticket issue: ${booking.pnr}`)}&order=created_at.asc&limit=1`);
-  return rows[0]?.created_at || null;
+export async function getTicketIssueDetails(booking) {
+  const rows = await secretRequest(`/rest/v1/wallet_transactions?select=created_at,created_by&agency_id=eq.${encodeURIComponent(booking.agency_id)}&entry_type=eq.debit&reason=eq.${encodeURIComponent(`Ticket issue: ${booking.pnr}`)}&order=created_at.asc&limit=1`);
+  const issue = rows[0];
+  if (!issue?.created_by) return { issuedAt: issue?.created_at || null, agent: null };
+  const agents = await secretRequest(`/rest/v1/profiles?select=full_name,phone&id=eq.${encodeURIComponent(issue.created_by)}&limit=1`);
+  return { issuedAt: issue.created_at, agent: agents[0] || null };
 }
 
 export async function approveTopupRequest(id, approvedBy) {

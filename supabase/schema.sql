@@ -27,6 +27,8 @@ create table public.profiles (
   branch_id uuid references public.branches(id),
   role public.user_role not null default 'agent',
   full_name text not null,
+  email text,
+  phone text,
   active boolean not null default true,
   created_at timestamptz not null default now(),
   check ((role = 'platform_admin') or agency_id is not null)

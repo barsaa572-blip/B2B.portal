@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { getTicketIssuedAt } from './backend/supabase-client.mjs';
+import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -149,7 +149,7 @@ const bookingDocumentLines = async (booking, type) => {
 // A compact, airline-style document for the downloadable electronic ticket.
 // Passengers deliberately remain on the same PNR document and are printed one
 // below another; this avoids producing a separate file for each traveller.
-const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
+const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = null) => {
   agency = agency || {};
   const dateOnly = value => value && !Number.isNaN(new Date(value).getTime()) ? new Date(value).toLocaleDateString('en-GB', { timeZone: 'Asia/Ulaanbaatar' }) : 'Not available';
   const pages = []; let commands = []; let y = 790;
@@ -283,10 +283,31 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
     text(short(contact.phone, 26) || '-', 245, y, 9);
     text(short(contact.email, 32) || '-', 395, y, 9); y -= 20;
   }
-  ensure(88); rule(36, y, 559); y -= 20; text('Issuing office', 36, y, 16, true); y -= 18;
-  text(agency.name || 'Flight B2B partner agency', 48, y, 11, true); y -= 16;
-  text(`Registration: ${agency.registration_number || '-'}     Phone: ${agency.phone || '-'}`, 48, y, 9); y -= 15;
-  text(`Address: ${short(agency.address, 64) || '-'}     Email: ${short(agency.email, 32) || '-'}`, 48, y, 9); y -= 24;
+  const normalWidths = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+  const officeRows = [
+    { value: 'Agency Information', heading: true },
+    ...airportLines(agency.name || 'Agency unavailable').map(value => ({ value })),
+    ...airportLines(agency.address || 'Address: Not provided').map(value => ({ value })),
+    { value: `Registration: ${agency.registration_number || '-'}` },
+    { value: `Tel: ${agency.phone || 'Not provided'}` },
+    { value: 'Agent Details', heading: true },
+    ...airportLines(issuingAgent?.full_name || 'Issuing agent unavailable').map(value => ({ value })),
+    { value: `Tel: ${issuingAgent?.phone || 'Not provided'}` }
+  ];
+  const boldWidths = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+  const officeHeight = officeRows.reduce((height, row) => height + (row.heading ? 22 : 14), 20);
+  ensure(officeHeight + 12);
+  fill(300, y, 259, officeHeight, '0.95 0.96 0.98');
+  let officeY = y - 4;
+  for (const row of officeRows) {
+    officeY -= row.heading ? 22 : 14;
+    const value = clean(row.value);
+    const size = row.heading ? 10 : 9;
+    const widths = row.heading ? boldWidths : normalWidths;
+    const width = [...value.normalize('NFKD')].reduce((sum, ch) => sum + (widths[ch.charCodeAt(0) - 32] || 556), 0) * size / 1000;
+    text(value, 547 - width, officeY, size, Boolean(row.heading), row.heading ? '0.06 0.15 0.40' : '0.06 0.15 0.29');
+  }
+  y -= officeHeight + 16;
   ensure(56); fill(36, y, 523, 45, '0.94 0.98 0.96');
   text('Attention', 48, y - 15, 10, true, '0 0.45 0.25');
   text('Bring a valid travel document for check-in. Verify flight times and terminal before travel.', 48, y - 30, 8, false, '0.18 0.25 0.34');
@@ -517,6 +538,7 @@ async function handleOfficeUsers(req, res, url) {
       return send(res, 201, await createOfficeAgent(manager, {
         email: requiredText(body.email, 'Email'),
         password: requiredText(body.password, 'Password'),
+        phone: requiredText(body.phone, 'Phone number'),
         fullName: requiredText(body.fullName, 'Full name'),
         branchId: body.branchId
       }));
@@ -525,6 +547,7 @@ async function handleOfficeUsers(req, res, url) {
     if (userMatch && req.method === 'PATCH') {
       const body = await readJson(req);
       return send(res, 200, await updateOfficeAgent(manager, userMatch[1], {
+        phone: body.phone === undefined ? undefined : requiredText(body.phone, 'Phone number'),
         fullName: requiredText(body.fullName, 'Full name'),
         branchId: body.branchId,
         active: Boolean(body.active)
@@ -1307,8 +1330,9 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
     if (!booking) throw new Error('Booking not found or you do not have access to it.');
     if (booking.status !== 'Ticketed') throw new Error('Ticket and receipt PDFs are available after the ticket is issued.');
+    const issueDetails = documentType === 'ticket' ? await getTicketIssueDetails(booking) : null;
     const content = documentType === 'ticket'
-      ? await ticketPdf(booking, await getAgencyForTicket(booking.agency_id), await getTicketIssuedAt(booking))
+      ? await ticketPdf(booking, await getAgencyForTicket(booking.agency_id), issueDetails.issuedAt, issueDetails.agent)
       : simplePdf(await bookingDocumentLines(booking, documentType));
     return sendPdf(res, `${pnr}-${documentType}.pdf`, content);
   }
@@ -1422,12 +1446,12 @@ const userMatch = url.pathname.match(/^\/api\/admin\/users\/([\w-]+)$/);
 if (agencyMatch && req.method === 'PATCH') { const body = await readJson(req); return send(res, 200, await updateAgency(agencyMatch[1], { name: requiredText(body.name, 'Agency name'), registrationNumber: requiredText(body.registrationNumber, 'Registration number'), email: requiredText(body.email, 'Email address'), phone: requiredText(body.phone, 'Contact phone'), active: Boolean(body.active) })); } if (agencyMatch && req.method === 'DELETE') { await deleteAgency(agencyMatch[1]); return send(res, 200, { ok: true }); } if (userMatch && req.method === 'PATCH') { const body = await readJson(req);
 if (userMatch[1] === admin.id && body.active === false) throw new Error('You cannot deactivate your own administrator account.');
 const role = ['agent', 'office_manager', 'platform_admin'].includes(body.role) ? body.role : null;
-if (!role) throw new Error('Valid role is required.'); return send(res, 200, await updateUser(userMatch[1], { fullName: requiredText(body.fullName, 'Full name'), agencyId: body.agencyId, branchId: body.branchId, role, active: Boolean(body.active) })); } if (userMatch && req.method === 'DELETE') { if (userMatch[1] === admin.id) throw new Error('You cannot delete your own administrator account.'); await deleteUser(userMatch[1]); return send(res, 200, { ok: true }); } const body = await readJson(req);
+if (!role) throw new Error('Valid role is required.'); return send(res, 200, await updateUser(userMatch[1], { fullName: requiredText(body.fullName, 'Full name'), phone: body.phone === undefined ? undefined : requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role, active: Boolean(body.active) })); } if (userMatch && req.method === 'DELETE') { if (userMatch[1] === admin.id) throw new Error('You cannot delete your own administrator account.'); await deleteUser(userMatch[1]); return send(res, 200, { ok: true }); } const body = await readJson(req);
 if (url.pathname === '/api/admin/agencies' && req.method === 'POST') { const name = requiredText(body.name, 'Agency name'); const registrationNumber = requiredText(body.registrationNumber, 'Registration number'); const email = requiredText(body.email, 'Email address'); const phone = requiredText(body.phone, 'Contact phone'); const initialBalanceMnt = Number(body.initialBalanceMnt || 0); if (!Number.isFinite(initialBalanceMnt) || initialBalanceMnt < 0) throw new Error('Opening balance must be a valid MNT amount.'); const rate = await getCnyMntRate(); const initialBalance = initialBalanceMnt / Number(rate.effectiveRateMnt); return send(res, 201, await createAgency({ name, registrationNumber, email, phone, branchName: body.branchName, initialBalance })); } if (url.pathname === '/api/admin/users' && req.method === 'POST') { const email = requiredText(body.email, 'Email');
 const password = requiredText(body.password, 'Password');
 const fullName = requiredText(body.fullName, 'Full name');
 const role = ['agent', 'office_manager'].includes(body.role) ? body.role : null;
-if (!role || !body.agencyId) throw new Error('Agency and valid role are required.'); return send(res, 201, await createUser({ email, password, fullName, agencyId: body.agencyId, branchId: body.branchId, role })); } if (url.pathname === '/api/admin/wallet-adjustments' && req.method === 'POST') { const agencyId = requiredText(body.agencyId, 'Agency');
+if (!role || !body.agencyId) throw new Error('Agency and valid role are required.'); return send(res, 201, await createUser({ email, password, fullName, phone: requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role })); } if (url.pathname === '/api/admin/wallet-adjustments' && req.method === 'POST') { const agencyId = requiredText(body.agencyId, 'Agency');
 const reason = requiredText(body.reason, 'Reason');
 const amount = Number(body.amount);
 if (!Number.isFinite(amount) || amount === 0) throw new Error('Adjustment amount must not be zero.'); await adjustWallet({ agencyId, amount, reason, createdBy: admin.id }); return send(res, 201, { ok: true }); } return send(res, 404, { error: 'Admin endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname === '/api/flights') return searchFlights(url, res);
