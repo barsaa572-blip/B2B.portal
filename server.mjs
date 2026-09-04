@@ -272,18 +272,10 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
   travellers.forEach((traveller, index) => {
-    ensure(32); fill(36, y, 523, 20, '0.95 0.97 1');
+    ensure(32);
     text(`${index + 1}. ${traveller.lastName || ''} / ${traveller.firstName || ''}`, 47, y - 14, 11, true);
     text(traveller.type || 'ADT', 515, y - 14, 9, true, '0.10 0.30 0.70'); y -= 29;
   });
-  const contact = booking.passengers?.contact || {};
-  if (contact.name || contact.phone || contact.email) {
-    ensure(53); rule(36, y, 559); y -= 17; text('Contact', 36, y, 13, true); y -= 17;
-    text(short(contact.name, 34) || 'Not provided', 47, y, 9, true);
-    text(short(contact.phone, 26) || '-', 245, y, 9);
-    text(short(contact.email, 32) || '-', 395, y, 9); y -= 20;
-  }
-  const normalWidths = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
   const officeRows = [
     { value: 'Agency Information', heading: true },
     ...airportLines(agency.name || 'Agency unavailable').map(value => ({ value })),
@@ -294,18 +286,15 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
     ...airportLines(issuingAgent?.full_name || 'Issuing agent unavailable').map(value => ({ value })),
     { value: `Tel: ${issuingAgent?.phone || 'Not provided'}` }
   ];
-  const boldWidths = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
   const officeHeight = officeRows.reduce((height, row) => height + (row.heading ? 22 : 14), 20);
   ensure(officeHeight + 12);
-  fill(300, y, 259, officeHeight, '0.95 0.96 0.98');
+  rule(36, y, 559);
   let officeY = y - 4;
   for (const row of officeRows) {
     officeY -= row.heading ? 22 : 14;
     const value = clean(row.value);
     const size = row.heading ? 10 : 9;
-    const widths = row.heading ? boldWidths : normalWidths;
-    const width = [...value.normalize('NFKD')].reduce((sum, ch) => sum + (widths[ch.charCodeAt(0) - 32] || 556), 0) * size / 1000;
-    text(value, 547 - width, officeY, size, Boolean(row.heading), row.heading ? '0.06 0.15 0.40' : '0.06 0.15 0.29');
+    text(value, 36, officeY, size, Boolean(row.heading), row.heading ? '0.06 0.15 0.40' : '0.06 0.15 0.29');
   }
   y -= officeHeight + 16;
   ensure(56); fill(36, y, 523, 45, '0.94 0.98 0.96');

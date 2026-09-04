@@ -49,6 +49,11 @@ const extract = (source, start, end) => source.slice(source.indexOf(start), sour
   const content = pdf.toString('ascii');
   for (const value of ['Agency Information', 'Agent Details', 'TEST ISSUING AGENT', '+976 12345678', 'TEST AIR SALES LLC']) assert(content.includes(value));
   assert(!content.includes('Issuing office'));
+  assert(!content.includes('DIFFERENT CONTACT'));
+  assert(!content.includes('(Contact)'));
+  assert(!content.includes('0.95 0.97 1 rg'));
+  assert(!content.includes('0.95 0.96 0.98 rg'));
+  assert(/36 [\d.]+ Tm \(Agency Information\)/.test(content));
   const output = path.resolve(root, '../../tmp/pdfs');
   fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output, 'agency-agent-preview.pdf'), pdf);
