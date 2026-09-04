@@ -13,7 +13,20 @@ const bookingPassengerNames = booking => {
   const escape = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
   return `<div class="booking-table-passengers">${names.map(name => `<span>${escape(name)}</span>`).join('')}</div>`;
 };
-const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${b.route}</td><td>${bookingPassengerNames(b)}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
+const bookingRouteMarkup = booking => {
+  const code = value => /^[A-Z]{3}$/.test(String(value || '').toUpperCase()) ? String(value).toUpperCase() : null;
+  const flights = (booking.itinerary?.flights || []).filter(flight => flight?.active !== false && !['replaced', 'inactive'].includes(flight?.status));
+  let routes = flights.map(flight => [code(flight.departure?.id), code(flight.arrival?.id)]).filter(pair => pair.every(Boolean));
+  if (!routes.length) {
+    const codes = String(booking.route || '').match(/\b[A-Z]{3}\b/g) || [];
+    if (codes.length >= 2) {
+      routes = [[codes[0], codes[1]]];
+      if (booking.oneWay === false) routes.push([codes[1], codes[0]]);
+    }
+  }
+  return `<div class="booking-table-routes">${routes.length ? routes.map(([from, to]) => `<span>${from} &rarr; ${to}</span>`).join('') : '<span>—</span>'}</div>`;
+};
+const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${bookingRouteMarkup(b)}</td><td>${bookingPassengerNames(b)}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
 const ownBookings = () => bookings;
 let bookingScope = 'agent';
 const renderBookings = (query = '') => {

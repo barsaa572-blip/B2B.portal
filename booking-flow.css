@@ -63,3 +63,5 @@
 }
 .booking-table-passengers { display: grid; gap: 5px; min-width: 170px; max-width: 280px; white-space: normal; }
 .booking-table-passengers > span { display: block; line-height: 1.4; overflow-wrap: anywhere; }
+.booking-table-routes { display: grid; gap: 5px; }
+.booking-table-routes > span { display: block; white-space: nowrap; line-height: 1.4; }
