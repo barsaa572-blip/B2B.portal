@@ -24,3 +24,9 @@
 .booking-fare-line > :last-child { white-space: nowrap; text-align: right; }
 .booking-fare-line > strong { color: #203c69; }
 .booking-fare-detail { color: #61728c; font-weight: 400; }
+.booking-itinerary-leg > footer { flex-wrap: nowrap; align-items: center; gap: 7px; overflow-x: auto; }
+.booking-itinerary-leg > footer > b,
+.booking-itinerary-leg > footer > span,
+.booking-itinerary-leg > footer > .segment-status { display: inline-flex; align-items: center; flex-shrink: 0; margin-top: 0; margin-bottom: 0; line-height: 21px; white-space: nowrap; }
+.booking-itinerary-leg > footer > span { font-size: 11px; letter-spacing: 0; }
+.booking-itinerary-leg > footer > .segment-status { margin-left: auto; padding-top: 0; padding-bottom: 0; }
