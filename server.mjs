@@ -194,9 +194,12 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
   };
   const ensure = required => { if (y - required < 55) newPage(); };
   newPage();
-  text(`Status: ${booking.status}`, 430, y + 2, 10, true, booking.status === 'Ticketed' ? '0 0.48 0.29' : '0.52 0.34 0'); y -= 24;
+  text(`Status: ${booking.status}`, 430, y, 10, true, booking.status === 'Ticketed' ? '0 0.48 0.29' : '0.52 0.34 0');
   text(`Ticket issued date: ${dateOnly(issuedAt)}`, 36, y, 9, false, '0.36 0.43 0.54');
-  if (itineraryChangedAt) text(`Itinerary updated: ${dateOnly(itineraryChangedAt)}`, 340, y, 8, false, '0.10 0.30 0.70');
+  if (itineraryChangedAt) {
+    y -= 14;
+    text(`Itinerary updated: ${dateOnly(itineraryChangedAt)}`, 36, y, 8, false, '0.10 0.30 0.70');
+  }
   y -= 20;
   if (!flights.length) {
     fill(36, y, 523, 42, '0.99 0.95 0.90');
@@ -235,7 +238,12 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
     const carryText = carry ? `1 x ${carry}${String(carry).includes('kg') ? '' : ' kg'}` : 'check with airline';
     const checkedText = checked ? `${checked}${String(checked).includes('kg') ? '' : ' kg'} included` : 'not included';
     rule(50, y - 78, 545, '0.88 0.91 0.96');
-    text(`Cabin: ${flight.fare?.cabin || 'Economy'}  |  ${flight.fare?.class || flight.fare?.fareClass || 'Confirmed'}`, 50, y - 93, 8, false, '0.36 0.43 0.54');
+    const cabinSource = [flight.fare?.cabinName, flight.fare?.cabinType, flight.fare?.cabin, flight.cabinName, flight.cabin].filter(Boolean).join(' ');
+    const cabinLabel = /business|商务|公务/i.test(cabinSource) ? 'Business'
+      : /premium\s*economy|超级经济/i.test(cabinSource) ? 'Premium Economy'
+      : /first\s*class|头等/i.test(cabinSource) ? 'First Class'
+      : 'Economy';
+    text(`Cabin: ${cabinLabel}  |  Confirmed`, 50, y - 93, 8, false, '0.36 0.43 0.54');
     text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - 107, 8, false, '0.10 0.30 0.70');
     y -= 144;
   });
