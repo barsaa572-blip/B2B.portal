@@ -1,1 +1,8 @@
 .passenger-name-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.passenger-type{border-radius:12px;background:#eaf1ff;color:#245bd4;padding:4px 7px;font-size:10px;letter-spacing:.06em}.passenger-document{grid-template-columns:minmax(110px,auto) 1fr!important}@media(max-width:650px){.passenger-document{grid-template-columns:1fr!important}}
+.booking-passenger .passenger-toggle { display: flex; align-items: center; gap: 10px; min-height: 32px; cursor: pointer; list-style: none; }
+.passenger-toggle::-webkit-details-marker { display: none; }
+.booking-passenger .passenger-toggle > strong { margin: 0; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.booking-passenger .passenger-toggle > .passenger-type { flex-shrink: 0; margin-left: 0; }
+.passenger-toggle:focus-visible { outline: 2px solid #2e63e8; outline-offset: 3px; border-radius: 3px; }
+.passenger-chevron { width: 7px; height: 7px; flex: 0 0 7px; margin-bottom: 4px; border-right: 2px solid #61718a; border-bottom: 2px solid #61718a; transform: rotate(45deg); }
+.passenger-disclosure[open] > summary .passenger-chevron { transform: rotate(225deg); margin-top: 4px; margin-bottom: 0; }
