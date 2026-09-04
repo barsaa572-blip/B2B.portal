@@ -150,12 +150,12 @@ const bookingFareBreakdown = booking => {
     const rowFare = Number.isFinite(suppliedFare) ? suppliedFare : (isAdultOnly ? fareAmount : null);
     const rowTaxes = Number.isFinite(suppliedTaxes) ? suppliedTaxes : (isAdultOnly ? taxAmount : null);
     const rowTotal = Number.isFinite(suppliedTotal) ? suppliedTotal : (isAdultOnly ? total : null);
-    const details = canShowAmounts
-      ? `Fare ${quoteMnt(rowFare)} · Taxes &amp; fees ${quoteMnt(rowTaxes)}`
-      : `Included in the booking total; exact ${labels[type].toLowerCase()} fare is confirmed by Spring Airlines.`;
-    return `<div class="booking-passenger-fare ${canShowAmounts ? '' : 'unpriced'}"><span><b>${labels[type]} × ${count}</b><small>${details}</small></span><strong>${canShowAmounts ? quoteMnt(rowTotal) : 'Included'}</strong></div>`;
+    if (!canShowAmounts) return `<div class="booking-passenger-fare unpriced"><span><b>${labels[type]} × ${count}</b><small>Included in the booking total; exact ${labels[type].toLowerCase()} fare is confirmed by Spring Airlines.</small></span><strong>Included</strong></div>`;
+    const unitAmount = amount => `${quoteMnt(amount / count)} × ${count}`;
+    const label = count === 1 ? labels[type] : ({ ADT: 'Adults', CHD: 'Children', INF: 'Infants' })[type];
+    return `<div class="booking-fare-group"><div class="booking-fare-line"><b>${label}</b><strong>${unitAmount(rowTotal)}</strong></div><div class="booking-fare-line booking-fare-detail"><span>Ticket fare</span><span>${unitAmount(rowFare)}</span></div><div class="booking-fare-line booking-fare-detail"><span>Taxes &amp; fees</span><span>${unitAmount(rowTaxes)}</span></div></div>`;
   }).join('');
-  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3>${typeRows}<div class="booking-fare-total"><span>Total · ${types.length} passenger${types.length === 1 ? '' : 's'}</span><strong>${quoteMnt(total)}</strong></div></section>`;
+  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3>${typeRows}<div class="booking-fare-total"><span>Total</span><strong>${quoteMnt(total)}</strong></div></section>`;
 };
 const downloadBookingDocument = async (pnr, type) => {
   const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${type}.pdf`);
