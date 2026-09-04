@@ -168,17 +168,32 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
       const normalized = clean(code).toUpperCase();
       if (airportLabels.has(normalized)) return;
       const airport = await airportByCode(normalized);
-      airportLabels.set(normalized, short(airport?.airport || airport?.city || '', 27));
+      airportLabels.set(normalized, clean(airport?.airport || airport?.city || ''));
     }));
   const airport = endpoint => {
     const code = clean(endpoint?.id || endpoint?.code || '---').toUpperCase();
-    const name = airportLabels.get(code) || short(endpoint?.name, 27);
+    const name = airportLabels.get(code) || clean(endpoint?.name);
     const terminal = short(endpoint?.terminal || '', 8);
     return { code, name: name && name !== code ? name : '', terminal };
   };
   const itineraryChangedAt = Array.isArray(booking.itinerary?.changeHistory) && booking.itinerary.changeHistory.length
     ? booking.itinerary.changeHistory.at(-1)?.changedAt
     : null;
+  // Conservative Helvetica width estimate, with long-word splitting and no truncation.
+  const airportLines = value => {
+    const lines = []; let line = ''; let width = 0;
+    for (const word of clean(value || 'Airport').split(' ')) {
+      const measure = str => [...str].reduce((sum, ch) => sum + (/[MW@]/.test(ch) ? 8 : /[ilI.,' ]/.test(ch) ? 2.5 : 5), 0);
+      if (line && width + 2.5 + measure(word) > 180) { lines.push(line); line = ''; width = 0; }
+      for (const ch of (line ? ' ' : '') + word) {
+        const size = measure(ch);
+        if (width + size > 180 && line) { lines.push(line); line = ''; width = 0; }
+        line += ch; width += size;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
   const text = (value, x, top, size = 10, bold = false, colour = '0.06 0.15 0.29') => {
     commands.push(`${colour} rg BT /${bold ? 'F2' : 'F1'} ${size} Tf 1 0 0 1 ${x} ${top} Tm (${pdfSafeText(value)}) Tj ET`);
   };
@@ -212,16 +227,23 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
     const date = flight.travelDate || (index ? booking.itinerary?.returnDate : booking.itinerary?.departureDate) || 'Travel date pending';
     const departure = airport(flight.departure);
     const arrival = airport(flight.arrival);
+    const departureLines = airportLines(departure.name);
+    const arrivalLines = airportLines(arrival.name);
+    const nameRows = Math.max(departureLines.length, arrivalLines.length);
+    const terminalOffset = 58 + nameRows * 12;
+    const dividerOffset = terminalOffset + 12;
+    const cardHeight = dividerOffset + 42;
+    ensure(cardHeight + 54);
     fill(36, y, 523, 22, '0.93 0.96 1');
     text(`${label}  |  ${date}`, 48, y - 14, 10, true, '0.10 0.30 0.70');
     text(`${flight.airline || 'Spring Airlines'}  |  Flight ${flight.number || 'Pending'}`, 350, y - 14, 8, true, '0.10 0.30 0.70');
     y -= 30;
-    stroke(36, y, 523, 120);
+    stroke(36, y, 523, cardHeight);
     text('DEPARTURE', 50, y - 17, 8, true, '0.36 0.43 0.54');
     text(String(flight.departure?.time || '').slice(-5) || '--:--', 50, y - 40, 17, true);
     text(departure.code, 127, y - 40, 14, true);
-    text(departure.name || 'Airport', 50, y - 57, 8, false, '0.36 0.43 0.54');
-    if (departure.terminal) text(`Terminal: ${departure.terminal}`, 50, y - 70, 8, false, '0.36 0.43 0.54');
+    departureLines.forEach((line, row) => text(line, 50, y - 58 - row * 12, 8, false, '0.36 0.43 0.54'));
+    if (departure.terminal) text(`Terminal: ${departure.terminal}`, 50, y - terminalOffset, 8, false, '0.36 0.43 0.54');
     rule(264, y - 38, 334, '0.28 0.48 0.88');
     const minutes = Number(flight.duration);
     const duration = minutes > 0 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : short(flight.duration || 'Nonstop', 16);
@@ -230,22 +252,22 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null) => {
     text('ARRIVAL', 365, y - 17, 8, true, '0.36 0.43 0.54');
     text(String(flight.arrival?.time || '').slice(-5) || '--:--', 365, y - 40, 17, true);
     text(arrival.code, 442, y - 40, 14, true);
-    text(arrival.name || 'Airport', 365, y - 57, 8, false, '0.36 0.43 0.54');
-    if (arrival.terminal) text(`Terminal: ${arrival.terminal}`, 365, y - 70, 8, false, '0.36 0.43 0.54');
+    arrivalLines.forEach((line, row) => text(line, 365, y - 58 - row * 12, 8, false, '0.36 0.43 0.54'));
+    if (arrival.terminal) text(`Terminal: ${arrival.terminal}`, 365, y - terminalOffset, 8, false, '0.36 0.43 0.54');
     const baggage = flight.fare?.baggage || flight.baggage || {};
     const carry = baggage.carryOn || baggage.carryOnKg || baggage.cabinKg;
     const checked = baggage.checked || baggage.checkedKg;
     const carryText = carry ? `1 x ${carry}${String(carry).includes('kg') ? '' : ' kg'}` : 'check with airline';
     const checkedText = checked ? `${checked}${String(checked).includes('kg') ? '' : ' kg'} included` : 'not included';
-    rule(50, y - 78, 545, '0.88 0.91 0.96');
+    rule(50, y - dividerOffset, 545, '0.88 0.91 0.96');
     const cabinSource = [flight.fare?.cabinName, flight.fare?.cabinType, flight.fare?.cabin, flight.cabinName, flight.cabin].filter(Boolean).join(' ');
     const cabinLabel = /business|商务|公务/i.test(cabinSource) ? 'Business'
       : /premium\s*economy|超级经济/i.test(cabinSource) ? 'Premium Economy'
       : /first\s*class|头等/i.test(cabinSource) ? 'First Class'
       : 'Economy';
-    text(`Cabin: ${cabinLabel}  |  Confirmed`, 50, y - 93, 8, false, '0.36 0.43 0.54');
-    text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - 107, 8, false, '0.10 0.30 0.70');
-    y -= 144;
+    text(`Cabin: ${cabinLabel}  |  Confirmed`, 50, y - dividerOffset - 15, 8, false, '0.36 0.43 0.54');
+    text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - dividerOffset - 29, 8, false, '0.10 0.30 0.70');
+    y -= cardHeight + 24;
   });
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
