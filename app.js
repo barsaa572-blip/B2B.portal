@@ -153,7 +153,7 @@ const bookingFareBreakdown = booking => {
     if (!canShowAmounts) return `<div class="booking-passenger-fare unpriced"><span><b>${labels[type]} × ${count}</b><small>Included in the booking total; exact ${labels[type].toLowerCase()} fare is confirmed by Spring Airlines.</small></span><strong>Included</strong></div>`;
     const unitAmount = amount => `${quoteMnt(amount / count)} × ${count}`;
     const label = count === 1 ? labels[type] : ({ ADT: 'Adults', CHD: 'Children', INF: 'Infants' })[type];
-    return `<div class="booking-fare-group"><div class="booking-fare-line"><b>${label}</b><strong>${unitAmount(rowTotal)}</strong></div><div class="booking-fare-line booking-fare-detail"><span>Ticket fare</span><span>${unitAmount(rowFare)}</span></div><div class="booking-fare-line booking-fare-detail"><span>Taxes &amp; fees</span><span>${unitAmount(rowTaxes)}</span></div></div>`;
+    return `<details class="booking-fare-group"><summary class="booking-fare-toggle"><b>${label}</b><strong>${unitAmount(rowTotal)}</strong><span class="booking-fare-chevron" aria-hidden="true"></span></summary><div class="booking-fare-components"><div class="booking-fare-line booking-fare-detail"><span>Ticket fare</span><span>${unitAmount(rowFare)}</span></div><div class="booking-fare-line booking-fare-detail"><span>Taxes &amp; fees</span><span>${unitAmount(rowTaxes)}</span></div></div></details>`;
   }).join('');
   return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3>${typeRows}<div class="booking-fare-total"><span>Total</span><strong>${quoteMnt(total)}</strong></div></section>`;
 };
