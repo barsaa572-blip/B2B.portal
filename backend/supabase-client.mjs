@@ -251,7 +251,7 @@ export async function getWalletDetails(profile) {
   const [wallets, transactions, rate] = await Promise.all([
     secretRequest(`/rest/v1/wallets?select=agency_id,balance_cny,updated_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&limit=1`),
     secretRequest(`/rest/v1/wallet_transactions?select=id,entry_type,amount_cny,reason,created_at&agency_id=eq.${encodeURIComponent(profile.agency_id)}&order=created_at.desc&limit=100`),
-    getCnyMntRate()
+    getCnyMntRate().catch(() => null)
   ]);
   return { wallet: wallets[0] || { balance_cny: 0 }, transactions, rate };
 }
