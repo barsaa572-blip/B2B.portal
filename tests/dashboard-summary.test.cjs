@@ -10,15 +10,17 @@ test('manager uses agency scope and Ulaanbaatar calendar month; real amounts onl
   const urls = [];
   const summary = await run(async url => {
     urls.push(decodeURIComponent(url));
-    return url.includes('wallet_transactions') ? [{ reason: 'Ticket issue: A', amount_cny: -100 }, { reason: 'Ticket issue: B', amount_cny: -250.5 }] : [{ id: 'pending' }];
+    return url.includes('wallet_transactions') ? [{ reason: 'Ticket issue: A', amount_cny: -100 }, { reason: 'Ticket issue: B', amount_cny: -250.5 }] : [{ id: 'pending', total_mnt: 1200000 }];
   })({ role: 'office_manager', agency_id: 'agency1' }, new Date('2026-08-31T16:15:00Z'));
   assert.equal(summary.issuedBookings, 2);
   assert.equal(summary.salesCny, 350.5);
-  assert.equal(summary.pendingBookings, 1);
+  assert.equal(summary.pendingTopupRequests, 1);
+  assert.equal(summary.pendingTopupMnt, 1200000);
   assert.equal(summary.month, '2026-09');
   assert.ok(urls.every(url => url.includes('agency_id=eq.agency1')));
   assert.ok(urls[0].includes('created_at=gte.2026-08-31T16:00:00.000Z'));
-  assert.ok(urls[1].includes('created_at=gt.2026-08-31T15:45:00.000Z'));
+  assert.ok(urls[1].includes('/rest/v1/topup_requests'));
+  assert.ok(urls[1].includes('status=eq.pending'));
 });
 test('agent scope, empty data, and missing agency protection', async () => {
   const urls = [];
@@ -26,8 +28,10 @@ test('agent scope, empty data, and missing agency protection', async () => {
   const summary = await get({ role: 'agent', id: 'user1', agency_id: 'agency1' });
   assert.equal(summary.salesCny, 0);
   assert.equal(summary.issuedBookings, 0);
-  assert.equal(summary.pendingBookings, 0);
-  assert.ok(urls.every(url => url.includes('created_by=eq.user1') && url.includes('agency_id=eq.agency1')));
+  assert.equal(summary.pendingTopupRequests, 0);
+  assert.equal(summary.pendingTopupMnt, 0);
+  assert.ok(urls[0].includes('created_by=eq.user1') && urls[1].includes('requested_by=eq.user1'));
+  assert.ok(urls.every(url => url.includes('agency_id=eq.agency1')));
   await assert.rejects(get({ role: 'office_manager' }), /Agency is required/);
   await assert.rejects(get({ role: 'unknown' }), /access denied/);
 });

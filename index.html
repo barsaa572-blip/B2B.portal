@@ -57,7 +57,7 @@
 
       <section id="dashboard" class="view active">
         <div class="wallet-banner"><div><p>AVAILABLE WALLET BALANCE</p><strong id="wallet-balance">₮ 0</strong><small id="wallet-balance-cny">¥ 0.00 CNY</small></div><div class="wallet-actions"><button class="secondary" data-view-target="wallet">View transactions</button><button class="primary" data-open-topup>Request top-up</button></div></div>
-        <div class="grid-3 stats" aria-live="polite"><article><span class="icon blue">✈</span><div><small>BOOKINGS ISSUED THIS MONTH</small><strong id="dashboard-issued">—</strong><em id="dashboard-period">Loading…</em></div></article><article><span class="icon purple">₮</span><div><small>MONTHLY TICKET SALES</small><strong id="dashboard-sales">—</strong><em id="dashboard-sales-note">Loading…</em></div></article><article><span class="icon orange">◷</span><div><small>AWAITING TICKET PAYMENT</small><strong id="dashboard-pending">—</strong><em id="dashboard-pending-note">Loading…</em></div></article></div>
+        <div class="grid-3 stats" aria-live="polite"><article><span class="icon blue">✈</span><div><small>BOOKINGS ISSUED THIS MONTH</small><strong id="dashboard-issued">—</strong><em id="dashboard-period">Loading…</em></div></article><article><span class="icon purple">₮</span><div><small>MONTHLY TICKET SALES</small><strong id="dashboard-sales">—</strong><em id="dashboard-sales-note">Loading…</em></div></article><article><span class="icon orange">◷</span><div><small>PENDING TOP-UP REQUESTS</small><strong id="dashboard-pending">—</strong><em id="dashboard-pending-note">Loading…</em></div></article></div>
         <section class="panel"><div class="panel-title"><div><h2>Recent bookings</h2><p>Your latest orders and their current status.</p></div><button class="text-btn" data-view-target="bookings">View all</button></div><div class="table-wrap"><table><thead><tr><th>BOOKING REF.</th><th>ROUTE</th><th>PASSENGER</th><th>ISSUED</th><th>TOTAL</th><th>STATUS</th></tr></thead><tbody id="recent-bookings"></tbody></table></div></section>
       </section>
 
@@ -89,6 +89,7 @@
     <div id="toast" role="status"></div>
     <div id="calendar-popover" class="calendar-popover" hidden></div>
     <div id="auth-root"></div>
+    <style>.role-office [data-open-topup]{display:inline-flex!important}</style>
     <script src="app.js"></script>
     <script src="flight-detail-card.js"></script>
     <script src="admin.js"></script>

@@ -283,14 +283,15 @@ export async function getDashboardSummary(profile, now = new Date()) {
       if (page.length < 500) return rows;
     }
   };
-  const [issues, pending] = await Promise.all([
+  const [issues, pendingTopups] = await Promise.all([
     readAll(`/rest/v1/wallet_transactions?select=id,amount_cny,reason&entry_type=eq.debit&reason=like.Ticket%20issue%3A%20*&created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(now.toISOString())}${agencyScope}${actorScope}&order=created_at.asc,id.asc`),
-    readAll(`/rest/v1/bookings?select=id&status=eq.Reserved&created_at=gt.${encodeURIComponent(new Date(now.getTime() - 30 * 60 * 1000).toISOString())}&created_at=lte.${encodeURIComponent(now.toISOString())}${agencyScope}${actorScope}&order=created_at.asc,id.asc`)
+    readAll(`/rest/v1/topup_requests?select=id,total_mnt&status=eq.pending${agencyScope}${actorScope.replace('created_by=', 'requested_by=')}&order=created_at.asc,id.asc`)
   ]);
   return {
     issuedBookings: new Set(issues.map(row => row.reason)).size,
     salesCny: issues.reduce((sum, row) => sum + Math.abs(Number(row.amount_cny) || 0), 0),
-    pendingBookings: pending.length,
+    pendingTopupRequests: pendingTopups.length,
+    pendingTopupMnt: pendingTopups.reduce((sum, row) => sum + (Number(row.total_mnt) || 0), 0),
     month: `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}`,
     scope: profile.role === 'platform_admin' ? 'platform' : profile.role === 'office_manager' ? 'agency' : 'agent'
   };
