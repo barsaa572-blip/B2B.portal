@@ -30,7 +30,7 @@
     byId('#agency-list').innerHTML = visible.map(item => {
       const offices = overview.branches.filter(entry => entry.agency_id === item.id).length;
       const users = overview.profiles.filter(entry => entry.agency_id === item.id).length;
-      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td>${moneyWithCny(wallet(item.id)?.balance_cny)}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td>${moneyWithCny(wallet(item.id)?.balance_cny)}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-status" data-agency-id="${item.id}" role="switch" aria-checked="${Boolean(item.active)}">${item.active ? 'Deactivate' : 'Activate'}</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No agencies found.</td></tr>';
     byId('#user-list').innerHTML = overview.profiles.map(item => {
       const company = agency(item.agency_id)?.name || 'Platform';
@@ -124,6 +124,18 @@
     } finally { loading = false; }
   };
   const setup = () => {
+    byId('#agency-list')?.addEventListener('click', async event => {
+      const button = event.target.closest('.agency-status');
+      if (!button) return;
+      const item = agency(button.dataset.agencyId);
+      if (!item) return;
+      button.disabled = true;
+      try {
+        await api(`/api/admin/agencies/${item.id}/status`, { method: 'PATCH', body: JSON.stringify({ active: !item.active }) });
+        await load();
+        notify('Agency status updated.');
+      } catch (issue) { notify(issue.message); } finally { button.disabled = false; }
+    });
     byId('#agency-filter')?.addEventListener('input', event => render(event.target.value));
     byId('#add-agency')?.addEventListener('click', openAgency);
     byId('#clear-wallets')?.addEventListener('click', async event => {

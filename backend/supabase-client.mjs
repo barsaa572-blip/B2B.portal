@@ -75,6 +75,10 @@ export async function profileForAccessToken(accessToken) {
   const profiles = await profileResponse.json().catch(() => []);
   const profile = Array.isArray(profiles) ? profiles[0] : null;
   if (!profile || !profile.active) throw new Error('Your account is not active or has not been assigned to an agency.');
+  if (profile.agency_id && profile.role !== 'platform_admin') {
+    const agencies = await secretRequest(`/rest/v1/agencies?select=active&id=eq.${encodeURIComponent(profile.agency_id)}&limit=1`);
+    if (!agencies[0]?.active) throw new Error('Your agency is inactive. Please contact the platform administrator.');
+  }
   return { id: user.id, email: user.email, ...profile };
 }
 
@@ -212,6 +216,11 @@ export async function updateUser(id, { fullName, phone, agencyId, branchId, role
 }
 
 export async function deleteUser(id) {
+  const [topups, transactions] = await Promise.all([
+    secretRequest(`/rest/v1/topup_requests?select=id&or=(requested_by.eq.${encodeURIComponent(id)},approved_by.eq.${encodeURIComponent(id)})&limit=1`),
+    secretRequest(`/rest/v1/wallet_transactions?select=id&created_by=eq.${encodeURIComponent(id)}&limit=1`)
+  ]);
+  if (topups.length || transactions.length) throw new Error('This user has top-up or wallet history. Open Edit and switch Account is active off instead.');
   const bookings = await secretRequest(`/rest/v1/bookings?select=id&created_by=eq.${encodeURIComponent(id)}&limit=1`);
   if (bookings.length) throw new Error('This user has booking history. Deactivate the account instead to preserve the audit trail.');
   const { secretKey } = config();

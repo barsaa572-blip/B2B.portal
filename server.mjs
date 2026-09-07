@@ -1407,6 +1407,12 @@ const invoice = await createTopupRequest({ profile, amountMnt, paymentReference:
 if (topupMatch && req.method === 'DELETE') { await deleteTopupRequest(profile, topupMatch[1]); return send(res, 200, { ok: true }); } const invoiceMatch = url.pathname.match(/^\/api\/invoices\/([\w-]+)$/);
 if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); return send(res, 200, invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
 if (url.pathname === '/api/admin/overview' && req.method === 'GET') return send(res, 200, await getAdminOverview());
+const agencyStatusMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)\/status$/);
+if (agencyStatusMatch && req.method === 'PATCH') {
+  const body = await readJson(req);
+  if (typeof body.active !== 'boolean') throw new Error('Agency active status must be true or false.');
+  return send(res, 200, await updateAgency(agencyStatusMatch[1], { active: body.active }));
+}
 if (url.pathname === '/api/admin/wallet-reset' && req.method === 'POST') { const body = await readJson(req);
 if (body.confirmation !== 'RESET WALLETS') throw new Error('Confirmation text must be RESET WALLETS.');
 await clearAllWalletBalancesAndHistory({ createdBy: admin.id }); return send(res, 200, { ok: true }); }
