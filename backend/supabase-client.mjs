@@ -170,6 +170,12 @@ export async function adjustWallet({ agencyId, amount, reason, createdBy }) {
   return secretRequest('/rest/v1/rpc/platform_adjust_wallet', { method: 'POST', body: { p_agency_id: agencyId, p_amount: Number(amount), p_reason: reason, p_created_by: createdBy } });
 }
 
+export async function recordChangePayment({ pnr, appId, amount, actorId, checkOnly = false }) {
+  return secretRequest('/rest/v1/rpc/record_change_payment', { method: 'POST', body: {
+    p_pnr: pnr, p_app_id: String(appId), p_amount: amount, p_actor: actorId, p_check_only: checkOnly
+  } });
+}
+
 // Used by change quotes until Spring's change submission endpoint is live.
 // Issuing a ticket uses issueBookingFromWallet below, which performs the
 // check, debit and status change in one database transaction.

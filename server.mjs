@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { getDashboardSummary } from './backend/supabase-client.mjs';
+import { getDashboardSummary, recordChangePayment } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -1237,6 +1237,14 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
     if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
     await assertWalletFunds({ agencyId: booking.agency_id, amountCny: amount, actorId: profile.id });
 
+    if (amount > 0) {
+      const state = await recordChangePayment({ pnr: normalizedPnr, appId: numericAppId, amount, actorId: profile.id, checkOnly: true });
+      if (state.recorded) {
+        const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes });
+        return { paymentRequired: false, booking: updatedBooking };
+      }
+    }
+
     const submission = await submitLiveSpringChange(profile, normalizedPnr, numericAppId);
     // A zero-fee change is submitted to Spring but does not require a credit
     // charge. For a positive fee, do not update the portal wallet until Spring
@@ -1266,12 +1274,7 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
       orderType: Number(process.env.SPRING_CREDIT_CHANGE_ORDER_TYPE || 2)
     });
     try {
-      await adjustWallet({
-        agencyId: booking.agency_id,
-        amount: -amount,
-        reason: `Change fee payment: ${normalizedPnr}`,
-        createdBy: profile.id
-      });
+      await recordChangePayment({ pnr: normalizedPnr, appId: numericAppId, amount, actorId: profile.id });
     } catch (error) {
       console.error(`Spring change payment succeeded but the local wallet update failed for ${normalizedPnr}: ${error.message}`);
       throw new Error('Spring change payment succeeded, but the portal wallet could not be updated. Do not retry; contact support with this PNR.');
