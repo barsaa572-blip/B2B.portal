@@ -133,11 +133,20 @@ export async function getAdminOverview() {
   return { agencies, branches, profiles, wallets, topups };
 }
 
-export async function createAgency({ name, registrationNumber, email, phone, address, branchName, initialBalance = 0 }) {
+export async function createAgency({ name, registrationNumber, email, phone, address, initialBalance = 0, createdBy }) {
+  const openingBalance = Math.round(Number(initialBalance) * 100) / 100;
+  if (!Number.isFinite(openingBalance) || openingBalance < 0) throw new Error('Opening balance must be a valid amount.');
+  if (openingBalance > 0 && !createdBy) throw new Error('Opening balance requires an administrator.');
   const created = await secretRequest('/rest/v1/agencies', { method: 'POST', body: { name, registration_number: registrationNumber, email, phone, address, active: true } });
   const agency = created[0];
-  await secretRequest('/rest/v1/wallets', { method: 'POST', body: { agency_id: agency.id, balance_cny: Number(initialBalance) || 0 } });
-  if (branchName?.trim()) await secretRequest('/rest/v1/branches', { method: 'POST', body: { agency_id: agency.id, name: branchName.trim() } });
+  await secretRequest('/rest/v1/wallets', { method: 'POST', body: { agency_id: agency.id, balance_cny: 0 } });
+  if (openingBalance > 0) {
+    try {
+      await adjustWallet({ agencyId: agency.id, amount: openingBalance, reason: 'Opening balance', createdBy });
+    } catch (error) {
+      throw new Error(`Agency created, but opening balance could not be confirmed. Check its wallet history before adding funds: ${error.message}`);
+    }
+  }
   return agency;
 }
 
