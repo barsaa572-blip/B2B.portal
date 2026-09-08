@@ -130,7 +130,18 @@ export async function getAdminOverview() {
     secretRequest('/rest/v1/wallets?select=agency_id,balance_cny,updated_at'),
     secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,amount_mnt,total_mnt,status,created_at&order=created_at.desc')
   ]);
-  return { agencies, branches, profiles, wallets, topups };
+  const statistics = { ticketSalesCny: 0, topupsCny: 0, changePaymentsCny: 0 };
+  for (let offset = 0; ; offset += 500) {
+    const entries = await secretRequest(`/rest/v1/wallet_transactions?select=id,entry_type,amount_cny,reason&order=created_at.asc,id.asc&limit=500&offset=${offset}`);
+    for (const entry of entries) {
+      const amount = Number(entry.amount_cny) || 0;
+      if (amount < 0 && entry.reason?.startsWith('Ticket issue: ')) statistics.ticketSalesCny += -amount;
+      if (amount < 0 && entry.reason?.startsWith('Change fee payment: ')) statistics.changePaymentsCny += -amount;
+      if (amount > 0 && (entry.reason?.startsWith('Top-up approved: ') || entry.reason === 'Opening balance')) statistics.topupsCny += amount;
+    }
+    if (entries.length < 500) break;
+  }
+  return { agencies, branches, profiles, wallets, topups, statistics };
 }
 
 export async function createAgency({ name, registrationNumber, email, phone, address, initialBalance = 0, createdBy }) {
@@ -450,13 +461,14 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
 // A confirmed Spring change replaces the active segment, but retains the
 // original segment in the itinerary audit trail so agents can see exactly
 // when and what was changed without treating the old flight as active.
-export async function recordPortalBookingChange(profile, pnr, { appId, changes = [] }) {
+export async function recordPortalBookingChange(profile, pnr, { appId, changes = [], amountCny = null }) {
   const rows = await secretRequest(`/rest/v1/bookings?select=*&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
   const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
   if (!allowed) throw new Error('You do not have access to this booking.');
   if (booking.status !== 'Ticketed') throw new Error('Only ticketed bookings can be changed.');
+  if ((booking.itinerary?.changeHistory || []).some(entry => Number(entry.appId) === Number(appId))) return booking;
   const originalFlights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
   const byLeg = new Map((changes || []).filter(item => item?.key && item?.newFlight).map(item => [item.key, item]));
   const changedAt = new Date().toISOString();
@@ -500,10 +512,21 @@ export async function recordPortalBookingChange(profile, pnr, { appId, changes =
     flights,
     ...(flights[0]?.travelDate ? { departureDate: flights[0].travelDate } : {}),
     ...(flights[1]?.travelDate ? { returnDate: flights[1].travelDate } : {}),
-    changeHistory: [...(booking.itinerary?.changeHistory || []), { appId: Number(appId), changedAt, legs: applied }]
+    changeHistory: [...(booking.itinerary?.changeHistory || []), { appId: Number(appId), changedAt, legs: applied,
+      payment: booking.itinerary?.changeQuotes?.[String(appId)] || (amountCny !== null ? { amountsCny: { additionalPayment: Number(amountCny) } } : null) }]
   };
   const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { itinerary } });
   return updated[0];
+}
+
+export async function saveBookingFinancialData(profile, pnr, kind, data) {
+  const booking = (await listPortalBookings(profile)).find(row => row.pnr === pnr);
+  if (!booking) throw new Error('Booking access denied.');
+  const itinerary = { ...(booking.itinerary || {}) };
+  if (kind === 'changeQuote') itinerary.changeQuotes = { ...(itinerary.changeQuotes || {}), [String(data.appId)]: data };
+  if (kind === 'refund') itinerary.refundHistory = [...(itinerary.refundHistory || []), { ...data, submittedAt: new Date().toISOString(), settlementStatus: 'pending' }];
+  const rows = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { itinerary, ...(kind === 'refund' ? { status: 'Cancelled' } : {}) } });
+  return rows[0];
 }
 
 export async function recordPortalBookingNoShow(profile, pnr, { legs, passengerIndexes }) {

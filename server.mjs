@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { getDashboardSummary, recordChangePayment } from './backend/supabase-client.mjs';
+import { getDashboardSummary, recordChangePayment, saveBookingFinancialData } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -201,12 +201,16 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
   const fill = (x, top, width, height, colour) => commands.push(`${colour} rg ${x} ${top - height} ${width} ${height} re f`);
   const stroke = (x, top, width, height, colour = '0.79 0.84 0.92') => commands.push(`${colour} RG 0.7 w ${x} ${top - height} ${width} ${height} re S`);
   const rule = (x1, top, x2, colour = '0.79 0.84 0.92') => commands.push(`${colour} RG 0.6 w ${x1} ${top} m ${x2} ${top} l S`);
+  const roundedCard = (x, top, width, height, colour, radius = 12) => {
+    const bottom = top - height, right = x + width, k = radius * 0.5522848;
+    commands.push(`${colour} rg ${x + radius} ${top} m ${right - radius} ${top} l ${right - radius + k} ${top} ${right} ${top - radius + k} ${right} ${top - radius} c ${right} ${bottom + radius} l ${right} ${bottom + radius - k} ${right - radius + k} ${bottom} ${right - radius} ${bottom} c ${x + radius} ${bottom} l ${x + radius - k} ${bottom} ${x} ${bottom + radius - k} ${x} ${bottom + radius} c ${x} ${top - radius} l ${x} ${top - radius + k} ${x + radius - k} ${top} ${x + radius} ${top} c h f`);
+  };
   const newPage = () => {
     if (commands.length) pages.push(commands.join('\n')); commands = []; y = 790;
-    fill(0, 842, 595, 42, '0.08 0.25 0.55');
-    text('E-ticket itinerary', 36, 817, 17, true, '1 1 1');
-    text(`PNR: ${booking.pnr}`, 430, 817, 11, true, '1 1 1');
-    y = 775;
+    roundedCard(24, 824, 547, 58, '0.08 0.18 0.33', 16);
+    text('E-ticket itinerary', 40, 790, 19, true, '1 1 1');
+    text(`PNR: ${booking.pnr}`, 425, 792, 11, true, '1 1 1');
+    y = 747;
   };
   const ensure = required => { if (y - required < 55) newPage(); };
   newPage();
@@ -235,11 +239,11 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
     const dividerOffset = terminalOffset + 12;
     const cardHeight = dividerOffset + 42;
     ensure(cardHeight + 54);
-    fill(36, y, 523, 22, '0.93 0.96 1');
+    roundedCard(36, y, 523, 22, '0.92 0.95 0.99', 7);
     text(`${label}  |  ${date}`, 48, y - 14, 10, true, '0.10 0.30 0.70');
     text(`${flight.airline || 'Spring Airlines'}  |  Flight ${flight.number || 'Pending'}`, 350, y - 14, 8, true, '0.10 0.30 0.70');
     y -= 30;
-    stroke(36, y, 523, cardHeight);
+    roundedCard(36, y, 523, cardHeight, '0.965 0.971 0.983');
     text('DEPARTURE', 50, y - 17, 8, true, '0.36 0.43 0.54');
     text(String(flight.departure?.time || '').slice(-5) || '--:--', 50, y - 40, 17, true);
     text(departure.code, 127, y - 40, 14, true);
@@ -268,14 +272,14 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
       : 'Economy';
     text(`Cabin: ${cabinLabel}  |  Confirmed`, 50, y - dividerOffset - 15, 8, false, '0.36 0.43 0.54');
     text(`Baggage: Carry-on ${carryText}  |  Checked ${checkedText}`, 50, y - dividerOffset - 29, 8, false, '0.10 0.30 0.70');
-    y -= cardHeight + 24;
+    y -= cardHeight + 16;
   });
   ensure(48); text('Passengers', 36, y, 16, true); y -= 18;
   const travellers = booking.passengers?.travellers || [];
   travellers.forEach((traveller, index) => {
     ensure(32);
     text(`${index + 1}. ${traveller.lastName || ''} / ${traveller.firstName || ''}`, 47, y - 14, 11, true);
-    text(traveller.type || 'ADT', 515, y - 14, 9, true, '0.10 0.30 0.70'); y -= 29;
+    text(traveller.type || 'ADT', 515, y - 14, 9, true, '0.10 0.30 0.70'); y -= 24;
   });
   const officeRows = [
     { value: 'Agency Information', heading: true },
@@ -296,7 +300,7 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
     const size = row.heading ? 10 : 9;
     text(value, 36, officeY, size, Boolean(row.heading), row.heading ? '0.06 0.15 0.40' : '0.06 0.15 0.29');
   }
-  y -= officeHeight + 16;
+  y -= officeHeight + 8;
   ensure(56); fill(36, y, 523, 45, '0.94 0.98 0.96');
   text('Attention', 48, y - 15, 10, true, '0 0.45 0.25');
   text('Bring a valid travel document for check-in. Verify flight times and terminal before travel.', 48, y - 30, 8, false, '0.18 0.25 0.34');
@@ -1234,13 +1238,15 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
   springChangePaymentInFlight.add(requestKey);
   try {
     const booking = await ticketedSpringBooking(profile, normalizedPnr);
+    const savedQuote = booking.itinerary?.changeQuotes?.[String(numericAppId)];
+    if (savedQuote && Math.round(Number(savedQuote.amountsCny?.additionalPayment) * 100) !== Math.round(amount * 100)) throw new Error('Change amount differs from the Spring quote. Please calculate again.');
     if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
     await assertWalletFunds({ agencyId: booking.agency_id, amountCny: amount, actorId: profile.id });
 
     if (amount > 0) {
       const state = await recordChangePayment({ pnr: normalizedPnr, appId: numericAppId, amount, actorId: profile.id, checkOnly: true });
       if (state.recorded) {
-        const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes });
+        const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes, amountCny: amount });
         return { paymentRequired: false, booking: updatedBooking };
       }
     }
@@ -1250,7 +1256,7 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
     // charge. For a positive fee, do not update the portal wallet until Spring
     // has acknowledged payment—retrying after an ambiguous response could pay twice.
     if (amount <= 0) {
-      const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes });
+      const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes, amountCny: amount });
       return { submission: { ifSuccess: submission.ifSuccess }, paymentRequired: false, booking: updatedBooking };
     }
 
@@ -1279,7 +1285,7 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
       console.error(`Spring change payment succeeded but the local wallet update failed for ${normalizedPnr}: ${error.message}`);
       throw new Error('Spring change payment succeeded, but the portal wallet could not be updated. Do not retry; contact support with this PNR.');
     }
-    const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes });
+    const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes, amountCny: amount });
     console.info(`Spring change payment succeeded and change was completed for ${normalizedPnr}.`);
     return { submission: { ifSuccess: submission.ifSuccess }, payment: { ifSuccess: payment.ifSuccess }, paymentRequired: true, booking: updatedBooking };
   } finally {
@@ -1289,6 +1295,7 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
 
 async function submitLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) {
   const booking = await ticketedSpringBooking(profile, pnr);
+  const quote = await calculateLiveSpringRefund(profile, pnr, requestedOrderHeadIds);
   const orderHeadIds = await resolveSpringOrderHeadIds(booking.pnr, requestedOrderHeadIds);
   const client = createSpringClient();
   const token = await client.getAccessToken();
@@ -1296,7 +1303,7 @@ async function submitLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) 
   // It accepts only the selected passenger/order-head IDs as `orderHeadList`.
   const result = await client.refundTicket({ orderHeadList: orderHeadIds }, token.accessToken);
   if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring refund submission failed.');
-  return updatePortalBooking(profile, booking.pnr, 'Cancelled');
+  return saveBookingFinancialData(profile, booking.pnr, 'refund', { quote });
 }
 
 createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
@@ -1371,7 +1378,9 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   const changeQuoteMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-quote$/);
   if (changeQuoteMatch && req.method === 'POST') {
     const body = await readJson(req);
-    return send(res, 200, { quote: await calculateLiveSpringChange(profile, changeQuoteMatch[1], body.bgPairList) });
+    const quote = await calculateLiveSpringChange(profile, changeQuoteMatch[1], body.bgPairList);
+    await saveBookingFinancialData(profile, changeQuoteMatch[1], 'changeQuote', quote);
+    return send(res, 200, { quote });
   }
   const changeSubmitMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-submit$/);
   if (changeSubmitMatch && req.method === 'POST') {

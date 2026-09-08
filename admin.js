@@ -43,6 +43,10 @@
     const total = overview.wallets.reduce((sum, item) => sum + Number(item.balance_cny || 0), 0);
     byId('#admin-agency-count').textContent = activeAgencies;
     byId('#admin-user-count').textContent = activeUsers;
+    for (const [id, key] of [['admin-total-sales', 'ticketSalesCny'], ['admin-total-topups', 'topupsCny'], ['admin-total-changes', 'changePaymentsCny']]) {
+      const target = byId(`#${id}`);
+      if (target) target.innerHTML = overview.statistics ? moneyWithCny(overview.statistics[key]) : '—';
+    }
     byId('#admin-network-balance').innerHTML = moneyWithCny(total);
     const topupTarget = byId('#admin-topups');
     if (topupTarget) topupTarget.innerHTML = (overview.topups || []).map(item => {

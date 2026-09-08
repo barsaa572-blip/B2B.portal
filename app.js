@@ -174,7 +174,19 @@ const bookingFareBreakdown = booking => {
     const label = count === 1 ? labels[type] : ({ ADT: 'Adults', CHD: 'Children', INF: 'Infants' })[type];
     return `<details class="booking-fare-group"><summary class="booking-fare-toggle"><b>${label}</b><strong>${unitAmount(rowTotal)}</strong><span class="booking-fare-chevron" aria-hidden="true"></span></summary><div class="booking-fare-components"><div class="booking-fare-line booking-fare-detail"><span>Ticket fare</span><span>${unitAmount(rowFare)}</span></div><div class="booking-fare-line booking-fare-detail"><span>Taxes &amp; fees</span><span>${unitAmount(rowTaxes)}</span></div></div></details>`;
   }).join('');
-  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3>${typeRows}<div class="booking-fare-total"><span>Total</span><strong>${quoteMnt(total)}</strong></div></section>`;
+  const eventAmount = (quote, key) => {
+    const originalMnt = quote?.amountsMnt?.[key];
+    const originalCny = quote?.amountsCny?.[key];
+    if (originalMnt !== null && originalMnt !== undefined) return mnt(originalMnt);
+    if (originalCny !== null && originalCny !== undefined) return `${quoteMnt(originalCny)} (¥ ${Number(originalCny).toFixed(2)})`;
+    return 'Not recorded';
+  };
+  const eventLine = (label, quote, key) => `<div class="financial-line"><span>${label}</span><strong>${eventAmount(quote, key)}</strong></div>`;
+  const eventDate = value => value ? new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ulaanbaatar' }) : 'Date not recorded';
+  const changes = (booking.itinerary?.changeHistory || []).map(entry => `<article class="financial-event"><p><b>Flight change</b> <small>${eventDate(entry.changedAt)}</small></p>${eventLine('Airline change fee', entry.payment, 'changeFee')}${eventLine('Fare difference', entry.payment, 'fareDifference')}${eventLine('Payment fee', entry.payment, 'paymentFee')}${eventLine('Additional payment', entry.payment, 'additionalPayment')}</article>`).join('');
+  const refunds = (booking.itinerary?.refundHistory || []).map(entry => `<article class="financial-event"><p><b>Cancelled / refund submitted</b> <small>${eventDate(entry.submittedAt)}</small></p>${eventLine('Refundable fare', entry.quote, 'refundableFare')}${eventLine('Refundable taxes', entry.quote, 'refundableTaxes')}${eventLine('Cancellation fee', entry.quote, 'cancellationFee')}${eventLine('Non-refundable amount', entry.quote, 'nonRefundable')}${eventLine('Quoted refund amount', entry.quote, 'refund')}<small>Airline settlement pending; not yet credited to wallet.</small></article>`).join('');
+  const missingRefund = booking.status === 'Cancelled' && !refunds ? '<p>Cancelled. Refund amount and cancellation date were not recorded for this booking.</p>' : '';
+  return `<section class="booking-fare-breakdown"><h3>Price breakdown</h3>${typeRows}<div class="booking-fare-total"><span>Original ticket total</span><strong>${quoteMnt(total)}</strong></div>${changes || refunds || missingRefund ? `<details class="booking-financial-history"><summary>Change &amp; refund history</summary>${changes}${refunds}${missingRefund}</details>` : ''}</section>`;
 };
 const downloadBookingDocument = async (pnr, type) => {
   const response = await secureFetch(`/api/bookings/${encodeURIComponent(pnr)}/${type}.pdf`);

@@ -1,0 +1,29 @@
+.theme-toggle { position: fixed; bottom: 18px; left: 22px; z-index: 101; font-size: 12px; }
+.sidebar-foot { margin-bottom: 55px; }
+#toast[popover] { inset: auto 22px 22px auto; margin: 0; border: 0; max-width: min(620px, calc(100vw - 32px)); white-space: normal; filter: none; backdrop-filter: none; z-index: 2147483647; }
+#toast::backdrop { background: transparent; backdrop-filter: none; pointer-events: none; }
+.booking-financial-history { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
+.booking-financial-history summary { cursor: pointer; font-weight: 600; }
+.financial-event { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.financial-event p { margin: 0 0 8px; }
+.financial-event small { color: var(--muted); }
+.financial-line { display: flex; justify-content: space-between; gap: 18px; margin: 7px 0; font-size: 12px; }
+html[data-theme="dark"] { color-scheme: dark; --bg:#111216; --ink:#f1f2f6; --muted:#acb0bd; --line:#373a45; --sky:#202f48; --blue:#70afff; }
+html[data-theme="dark"] body { background:#111216; color:#f1f2f6; }
+html[data-theme="dark"] :is(.sidebar,.auth-form,#auth-root) { background:#181b22; color:#f1f2f6; }
+html[data-theme="dark"] :is(.panel,.stats article,.admin-stats article,.flight,dialog,.auth-card,.suggestions,.calendar-popover,.profile-menu,.sidebar-account-menu) { background:#20232b; color:#f1f2f6; border-color:#373a45; }
+html[data-theme="dark"] :is(.booking-detail section,.booking-fare-breakdown,.booking-passenger-details,.summary-selection,.fee-summary,.flight-choice,.selection-group,.route-row,.counter>div,.fare-card,.booking-flight-history) { background:#252932; color:#e6e9f1; border-color:#3b414f; }
+html[data-theme="dark"] :is(h1,h2,h3,strong,b,label,.brand,.stats strong,.nav-link,.booking-fare-line,.booking-fare-toggle,.booking-passenger-name) { color:#edf0f7; }
+html[data-theme="dark"] :is(.eyebrow,.stats small,.stats em,.modal-copy,.panel-title p,.section-heading p,.sidebar-foot small,.currency-secondary) { color:#acb0bd; }
+html[data-theme="dark"] :is(input,select,textarea,.secondary,.counter button) { background:#292e39!important; color:#edf0f7!important; border-color:#484e5d!important; }
+html[data-theme="dark"] :is(.nav-link.active,.nav-link:hover,.trip-tabs,.trip-tabs button.selected,th) { background:#303642!important; color:#d2e6ff!important; }
+html[data-theme="dark"] :is(td,.sidebar-foot) { border-color:#373a45; }
+html[data-theme="dark"] tbody tr:hover { background:#2a303b; }
+html[data-theme="dark"] .text-btn { color:#85baff; }
+html[data-theme="dark"] .tag.ticketed { background:#153f30; color:#8fe0b5; }
+html[data-theme="dark"] .tag.pending { background:#48371a; color:#ffd392; }
+html[data-theme="dark"] dialog .close { background:#343b48; color:#edf0f7; }
+html[data-theme="dark"] .booking-fare-total strong { color:#ffb55b; }
+html[data-theme="dark"] :is(.booking-fare-total,.booking-flight-detail,.booking-flight-detail span,.booking-detail p,.booking-detail small,.booking-passenger-details span) { color:#c3cbd9; }
+html[data-theme="dark"] .booking-detail :is(.segment-status,.tag) { color:#8fe0b5; background:#153f30; }
+@media(max-width:650px) { .theme-toggle { bottom:12px; left:auto; right:14px; } }
