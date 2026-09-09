@@ -644,9 +644,6 @@ const airportNames = {
   HKG: 'Hong Kong International Airport', NRT: 'Tokyo Narita International Airport',
   ICN: 'Seoul Incheon International Airport'
 };
-const mockFlight = (departure, arrival, number, departureTime, arrivalTime, price, airline = 'Spring') => ({ airline, number, duration: 250, stops: 0, price: String(price), departure: { id: departure, time: departureTime, name: airportNames[departure] || `${departure} Airport` }, arrival: { id: arrival, time: arrivalTime, name: airportNames[arrival] || `${arrival} Airport` }, segments: [{ airline, number, duration: 250, departure: { id: departure, time: departureTime, name: airportNames[departure] || `${departure} Airport` }, arrival: { id: arrival, time: arrivalTime, name: airportNames[arrival] || `${arrival} Airport` }, airplane: 'Airbus A320', travelClass: 'Economy' }] });
-const mockSearchResults = (departure, arrival) => [mockFlight(departure, arrival, '9C 7058', '13:00', '17:00', 2095), mockFlight(departure, arrival, '9C 7012', '08:10', '12:05', 2360), mockFlight(departure, arrival, '9C 7026', '18:30', '22:30', 2580)];
-const showMockSearch = (departure, arrival) => { const outbound = mockSearchResults(departure, arrival); if (tripType === 'round') { const returns = [mockFlight(arrival, departure, '9C 7057', '08:10', '12:00', 1960), mockFlight(arrival, departure, '9C 7011', '14:15', '18:05', 2150), mockFlight(arrival, departure, '9C 7025', '19:20', '23:15', 2290)]; renderRoundPairs(outbound.map((flight, index) => ({ outbound: flight, returnFlight: returns[index], sameAirline: true }))); } else renderFlights(outbound, 'outbound'); };
 const showItinerary = () => { resultArea.classList.remove('hidden'); resultArea.innerHTML = `<section class="final-itinerary"><div class="selected-title"><span>✓</span><div><p class="eyebrow">ROUND TRIP SELECTED</p><h2>Your selected itinerary</h2></div></div>${flightCard(selectedOutbound, 'OUTBOUND')} ${flightCard(selectedReturn, 'RETURN')}<div class="fare-total"><span>${passengerFareCaption()} · selected flights</span><strong>${totalPrice()}</strong></div><button class="primary continue-ticket">Continue to passenger details</button></section>`; document.querySelector('.continue-ticket').addEventListener('click', () => { document.querySelector('#ticket-modal-total').textContent = totalPrice(); document.querySelector('#ticket-modal').showModal(); }); };
 const checkoutFlight = (flight, label) => flight ? `<article class="checkout-flight"><div><span class="journey-tag ${label.toLowerCase()}">${label}</span><b>${flight.airline || 'Airline'} ${flight.number || ''}</b></div><div class="checkout-times"><strong>${(flight.departure?.time || '').slice(-5)}</strong><i></i><strong>${(flight.arrival?.time || '').slice(-5)}</strong></div><div class="checkout-airports"><span>${flight.departure?.name || flight.departure?.id || ''} (${flight.departure?.id || ''})</span><span>${flight.arrival?.name || flight.arrival?.id || ''} (${flight.arrival?.id || ''})</span></div></article>` : '';
 const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1100,8 +1097,16 @@ document.querySelector('#search-form').addEventListener('submit', async e => {
   if (!departure || !arrival || !outboundDate || (tripType === 'round' && !returnDate)) { toast('Choose From, To and travel date before searching.'); return; }
   activePassengerCounts = passengerCounts(); passengerSearchStale = false;
   selectedOutbound = null; selectedReturn = null; roundReturnFlights = []; button.disabled = true; button.textContent = 'Searching…';
+  visibleFlights = []; searchPhase = 'outbound';
+  resultArea.classList.remove('hidden');
+  resultArea.innerHTML = '<div class="no-results" role="status">Searching flights…</div>';
   try { const query = new URLSearchParams({ departure, arrival, date: document.querySelector('#outbound-date').value, returnDate: document.querySelector('#return-date').value, adults: document.querySelector('#adults').value, children: document.querySelector('#children').value, infants: document.querySelector('#infants').value, trip: tripType }); const response = await fetch(`/api/flights?${query}`); const data = await response.json(); if (!response.ok) throw new Error(data.error); activePassengerCounts = data.passengers || activePassengerCounts; if (tripType === 'round') { const seen = new Set(); roundReturnFlights = (data.roundPairs ?? []).map(pair => pair.returnFlight).filter(flight => { const key = `${flight.number}|${flight.departure?.time}|${flight.arrival?.time}`; if (seen.has(key)) return false; seen.add(key); return true; }); renderFlights(data.results, 'outbound'); } else renderFlights(data.results, 'outbound'); }
-  catch (error) { showMockSearch(departure, arrival); }
+  catch (error) {
+    visibleFlights = []; selectedOutbound = null; selectedReturn = null; roundReturnFlights = [];
+    const message = error.message || 'Flight search is unavailable.';
+    resultArea.innerHTML = `<div class="no-results" role="alert"><strong>Flight search failed</strong><p>${escapeHtml(message)}</p><p>No flight availability could be confirmed. Please try searching again.</p></div>`;
+    toast(`Flight search failed: ${message}`);
+  }
   finally { button.disabled = false; button.textContent = 'Search flights'; }
 });
 bindFlightButtons();
