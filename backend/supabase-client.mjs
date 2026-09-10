@@ -13,6 +13,7 @@ async function request(path, { method = 'GET', headers = {}, body } = {}) {
   const { url } = config();
   return fetch(`${url}${path}`, {
     method,
+    signal: AbortSignal.timeout(15_000),
     headers: { 'content-type': 'application/json', ...headers },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
@@ -60,6 +61,7 @@ export async function refreshAuthSession(refreshToken) {
 }
 
 export async function profileForAccessToken(accessToken) {
+  if (typeof accessToken !== 'string' || !accessToken || accessToken.length > 8192) throw new Error('Your login session is invalid.');
   const { publishableKey, secretKey, configured } = config();
   if (!configured) throw new Error('Authentication is not configured on this server.');
 
@@ -75,6 +77,7 @@ export async function profileForAccessToken(accessToken) {
   const profiles = await profileResponse.json().catch(() => []);
   const profile = Array.isArray(profiles) ? profiles[0] : null;
   if (!profile || !profile.active) throw new Error('Your account is not active or has not been assigned to an agency.');
+  if (!['agent', 'office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Account role is not permitted.');
   if (profile.agency_id && profile.role !== 'platform_admin') {
     const agencies = await secretRequest(`/rest/v1/agencies?select=active&id=eq.${encodeURIComponent(profile.agency_id)}&limit=1`);
     if (!agencies[0]?.active) throw new Error('Your agency is inactive. Please contact the platform administrator.');
@@ -187,6 +190,18 @@ export async function recordChangePayment({ pnr, appId, amount, actorId, checkOn
   } });
 }
 
+export async function beginFinancialOperation({ actor, pnr, action, reference, amount }) {
+  return secretRequest('/rest/v1/rpc/begin_financial_operation', { method: 'POST', body: {
+    p_actor: actor, p_pnr: pnr, p_action: action, p_reference: reference, p_amount: amount
+  } });
+}
+
+export async function finishFinancialOperation(id, actor, state) {
+  return secretRequest('/rest/v1/rpc/finish_financial_operation', { method: 'POST', body: {
+    p_id: id, p_actor: actor, p_state: state
+  } });
+}
+
 // Used by change quotes until Spring's change submission endpoint is live.
 // Issuing a ticket uses issueBookingFromWallet below, which performs the
 // check, debit and status change in one database transaction.
@@ -255,16 +270,22 @@ export async function deleteUser(id) {
 }
 
 export async function createTopupRequest({ profile, amountMnt, paymentReference, note }) {
+  if (!['agent', 'office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Top-up access denied.');
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
   const walletAmountMnt = Math.round(Number(amountMnt));
   if (!Number.isFinite(walletAmountMnt) || walletAmountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
+  if (!Number.isSafeInteger(walletAmountMnt) || walletAmountMnt > 1_000_000_000) throw new Error('Top-up amount exceeds the supported limit (1 billion MNT).');
+  if (note != null && (typeof note !== 'string' || note.length > 1000)) throw new Error('Note must be at most 1000 characters.');
+  if (paymentReference != null && (typeof paymentReference !== 'string' || paymentReference.length > 200)) throw new Error('Payment reference must be at most 200 characters.');
   const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const rate = await getCnyMntRate();
   // The wallet credit itself is bought at Golomt Bank's non-cash sell rate.
   // Portal, Golomt and correspondent-bank fees are payable charges; they do
   // not increase the CNY wallet credit.
   const sellRate = Number(rate.nonCashSellMnt);
+  if (!Number.isFinite(sellRate) || sellRate <= 0) throw new Error('A valid exchange rate is required.');
   const amountCny = Number((walletAmountMnt / sellRate).toFixed(2));
+  if (!Number.isFinite(amountCny) || amountCny <= 0) throw new Error('Top-up amount is too small or invalid.');
   const serviceFeeMnt = Math.round(walletAmountMnt * 0.03);
   // Golomt Bank CNY OUR tariff: through ¥100k = ¥50; above ¥100k = ¥150.
   const correspondentFeeCny = amountCny <= 100_000 ? 50 : 150;
@@ -453,7 +474,9 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
       lastSyncedAt: new Date().toISOString()
     }
   };
-  const status = springOrder.ticketed ? 'Ticketed' : booking.status;
+  // Sync is not a substitute for the payment/ledger transaction.
+  if (springOrder.ticketed && booking.status !== 'Ticketed') throw new Error('Spring reports an issued ticket, but local payment requires reconciliation. Contact support.');
+  const status = booking.status;
   const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}`, { method: 'PATCH', body: { status, itinerary } });
   return updated[0];
 }

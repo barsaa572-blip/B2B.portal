@@ -29,7 +29,7 @@ async function run(fetchImpl, trip = 'oneway') {
     toast: message => messages.push(message),
     escapeHtml: value => String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;'),
     renderFlights: results => rendered.push(results),
-    fetch: async () => {
+    secureFetch: async () => {
       assert.equal(resultArea.innerHTML.includes('old selectable'), false);
       assert.equal(context.visibleFlights.length, 0);
       assert.equal(button.disabled, true);

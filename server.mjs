@@ -1,4 +1,7 @@
 import { createServer } from 'node:http';
+import { requireChangeQuote, cleanBookingItinerary, guardedPayment } from './backend/payment-security.mjs';
+import { beginFinancialOperation, finishFinancialOperation } from './backend/supabase-client.mjs';
+import { securityHeaders, isPublicAsset, clientAddress, checkRequest, createLimiter, readJsonBody } from './backend/request-security.mjs';
 import { getDashboardSummary, recordChangePayment, saveBookingFinancialData } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
@@ -27,20 +30,12 @@ const sendPdf = (res, filename, content) => {
   });
   res.end(content);
 };
-const readJson = req => new Promise((resolve, reject) => {
-  let raw = ''; let tooLarge = false;
-  req.on('data', chunk => {
-    if (tooLarge) return;
-    raw += chunk;
-    if (raw.length > 100_000) { tooLarge = true; raw = ''; }
-  });
-  req.on('end', () => {
-    if (tooLarge) return reject(new Error('Request is too large.'));
-    try { resolve(raw ? JSON.parse(raw) : {}); }
-    catch { reject(new Error('Invalid JSON request.')); }
-  });
-  req.on('error', reject);
-});
+const readJson = readJsonBody;
+const limitRequest = createLimiter();
+const protectPayment = (profile, pnr, action, reference, amount, execute) => guardedPayment({
+  begin: beginFinancialOperation, finish: finishFinancialOperation, actor: profile.id, pnr, action, reference, amount
+}, execute);
+const authenticatedProfile = req => req.securityProfile || profileForAccessToken(bearer(req));
 const bearer = req => req.headers.authorization?.replace(/^Bearer\s+/i, '');
 const requiredText = (value, label) => { const text = String(value || '').trim();
 if (!text && label === 'Payment reference') return 'Not provided';
@@ -694,6 +689,7 @@ const springResponseShape = (value, depth = 0) => {
 };
 
 async function createLiveSpringBooking(profile, body) {
+  body = { ...body, itinerary: cleanBookingItinerary(body.itinerary) };
   if (process.env.SPRING_BOOKING_ENABLED !== 'true') throw new Error('Spring test booking is disabled on this server. Set SPRING_BOOKING_ENABLED=true only after confirming the test environment.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
   const payload = createSpringBookingPayload(body);
@@ -744,6 +740,7 @@ async function issueSpringCreditTicket(profile, pnr) {
     }
     const springBooking = await setPortalBookingSpringAmount(profile, normalizedPnr, finalCny);
     await assertWalletFunds({ agencyId: springBooking.agency_id, amountCny: finalCny, actorId: profile.id });
+    return await protectPayment(profile, normalizedPnr, 'issue', normalizedPnr, finalCny, async () => {
     const springResult = await createSpringSoapClient().payInCredit4OTA({
       orderNo: normalizedPnr,
       orderMoney: finalCny,
@@ -758,6 +755,7 @@ async function issueSpringCreditTicket(profile, pnr) {
       console.error(`Spring credit payment succeeded but the local update failed for ${normalizedPnr}: ${error.message}`);
       throw new Error('Spring payment succeeded, but the portal could not update this booking. Do not retry ticket issue; contact support with this PNR.');
     }
+    });
   } finally {
     springIssueInFlight.delete(normalizedPnr);
   }
@@ -783,8 +781,11 @@ const normaliseSpringOrderHeadIds = values => [...new Set((Array.isArray(values)
   .filter(value => Number.isSafeInteger(value) && value > 0))];
 
 async function resolveSpringOrderHeadIds(pnr, requestedIds = []) {
+  if (!Array.isArray(requestedIds) || requestedIds.length > 18) throw new Error('Invalid passenger order selection.');
+  if (requestedIds.some(id => !Number.isSafeInteger(Number(id)) || Number(id) <= 0)) throw new Error('Invalid passenger order selection.');
   const detail = await createSpringSoapClient().getOrderDetailInfoC2({ orderNo: pnr, lang: 'zh_cn' });
   const available = normaliseSpringOrderHeadIds(detail.orderHeadIds);
+  if (!available.length) throw new Error('No Spring passenger orders were found for this booking.');
   const requested = normaliseSpringOrderHeadIds(requestedIds);
   if (!requested.length) return available;
   const unsupported = requested.filter(id => !available.includes(id));
@@ -943,6 +944,8 @@ const springOrderSummary = result => {
 };
 
 async function syncSpringOrder(profile, pnr) {
+  const booking = (await listPortalBookings(profile)).find(item => item.pnr === pnr);
+  if (!booking) throw new Error('Booking not found or you do not have access to it.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
   const client = createSpringClient();
   const token = await client.getAccessToken();
@@ -1169,18 +1172,32 @@ async function ticketedSpringBooking(profile, pnr) {
   return booking;
 }
 
-async function calculateLiveSpringChange(profile, pnr, bgPairList) {
+async function calculateLiveSpringChange(profile, pnr, bgPairList, requestedChanges) {
   await ticketedSpringBooking(profile, pnr);
-  if (!Array.isArray(bgPairList) || !bgPairList.length) throw new Error('Select at least one replacement flight.');
+  if (!Array.isArray(bgPairList) || !bgPairList.length || bgPairList.length > 18) throw new Error('Select between 1 and 18 passenger flight changes.');
   const pairs = bgPairList.map(pair => ({
     flightsOrderHeadId: Number(pair.flightsOrderHeadId),
     segHeadId: Number(pair.segHeadId)
-  })).filter(pair => Number.isFinite(pair.flightsOrderHeadId) && Number.isFinite(pair.segHeadId));
-  if (!pairs.length) throw new Error('The selected Spring order item or replacement flight is invalid.');
+  }));
+  if (pairs.some(pair => !Number.isSafeInteger(pair.flightsOrderHeadId) || pair.flightsOrderHeadId <= 0 || !Number.isSafeInteger(pair.segHeadId) || pair.segHeadId <= 0)) throw new Error('The selected Spring order item or replacement flight is invalid.');
   const liveOrderHeadIds = await resolveSpringOrderHeadIds(pnr);
   if (pairs.some(pair => !liveOrderHeadIds.includes(pair.flightsOrderHeadId))) {
     throw new Error('Passenger order data has changed in Spring. Please reopen the change screen and select the flight again.');
   }
+  if (!Array.isArray(requestedChanges) || !requestedChanges.length || requestedChanges.length > 2
+    || new Set(requestedChanges.map(change => change?.key)).size !== requestedChanges.length) throw new Error('Select valid replacement flights.');
+  const verifiedChanges = [];
+  for (const change of requestedChanges) {
+    if (!['outbound', 'return'].includes(change?.key)) throw new Error('Invalid flight leg.');
+    const pair = pairs.find(item => item.segHeadId === Number(change.newFlight?.segmentHeadId));
+    if (!pair) throw new Error('Replacement flight does not match the requested change.');
+    const date = String(change.newFlight?.travelDate || '');
+    const available = await getLiveChangeOptions(profile, pnr, pair.flightsOrderHeadId, date, '', '', change.key);
+    const flight = available.flights.find(item => item.segmentHeadId === pair.segHeadId);
+    if (!flight || !available.orderHeadIds.includes(String(pair.flightsOrderHeadId))) throw new Error('Replacement flight is not available for this booking.');
+    verifiedChanges.push({ key: change.key, newFlight: { ...flight, travelDate: date } });
+  }
+  if (pairs.some(pair => !verifiedChanges.some(change => change.newFlight.segmentHeadId === pair.segHeadId))) throw new Error('Missing replacement flight information.');
   const client = createSpringClient();
   const token = await client.getAccessToken();
   const result = await client.getChangeAvailability({
@@ -1200,6 +1217,10 @@ async function calculateLiveSpringChange(profile, pnr, bgPairList) {
   const rate = await getCnyMntRate();
   return {
     appId: Number(application.id),
+    securityVersion: 1,
+    quotedAt: new Date().toISOString(),
+    pairs,
+    changes: verifiedChanges,
     amountsCny: cny,
     // quoteCnyToMnt expects the complete rate object so it can apply the
     // configured CNY sell rate consistently. Passing only the numeric rate
@@ -1210,7 +1231,8 @@ async function calculateLiveSpringChange(profile, pnr, bgPairList) {
 }
 
 async function submitLiveSpringChange(profile, pnr, appId) {
-  await ticketedSpringBooking(profile, pnr);
+  const booking = await ticketedSpringBooking(profile, pnr);
+  requireChangeQuote(booking, appId);
   if (!Number.isFinite(Number(appId))) throw new Error('A valid Spring change application is required.');
   const client = createSpringClient();
   const token = await client.getAccessToken();
@@ -1229,7 +1251,7 @@ async function submitLiveSpringChange(profile, pnr, appId) {
 async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, changes = [] }) {
   const normalizedPnr = String(pnr || '').trim().toUpperCase();
   const numericAppId = Number(appId);
-  const amount = Number(amountCny);
+  let amount = Number(amountCny);
   if (!normalizedPnr) throw new Error('Booking reference is required.');
   if (!Number.isFinite(numericAppId) || numericAppId <= 0) throw new Error('A valid Spring change application is required.');
   if (!Number.isFinite(amount) || amount < 0) throw new Error('A valid Spring change payment amount is required.');
@@ -1238,8 +1260,10 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
   springChangePaymentInFlight.add(requestKey);
   try {
     const booking = await ticketedSpringBooking(profile, normalizedPnr);
-    const savedQuote = booking.itinerary?.changeQuotes?.[String(numericAppId)];
-    if (savedQuote && Math.round(Number(savedQuote.amountsCny?.additionalPayment) * 100) !== Math.round(amount * 100)) throw new Error('Change amount differs from the Spring quote. Please calculate again.');
+    const savedQuote = requireChangeQuote(booking, numericAppId, amount);
+    amount = Number(savedQuote.amountsCny.additionalPayment);
+    changes = savedQuote.changes;
+    if (!Array.isArray(changes) || !changes.length || changes.length > 2 || changes.some(change => !['outbound', 'return'].includes(change?.key) || !savedQuote.pairs?.some(pair => pair.segHeadId === Number(change.newFlight?.segmentHeadId)))) throw new Error('Selected changes do not match the server quote.');
     if (!getSpringSoapStatus().creditPaymentReady) throw new Error('Spring credit payment is not configured on this server.');
     await assertWalletFunds({ agencyId: booking.agency_id, amountCny: amount, actorId: profile.id });
 
@@ -1251,6 +1275,7 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
       }
     }
 
+    return await protectPayment(profile, normalizedPnr, 'change', String(numericAppId), amount, async () => {
     const submission = await submitLiveSpringChange(profile, normalizedPnr, numericAppId);
     // A zero-fee change is submitted to Spring but does not require a credit
     // charge. For a positive fee, do not update the portal wallet until Spring
@@ -1288,6 +1313,7 @@ async function paySubmittedSpringChange(profile, pnr, { appId, amountCny, change
     const updatedBooking = await recordPortalBookingChange(profile, normalizedPnr, { appId: numericAppId, changes, amountCny: amount });
     console.info(`Spring change payment succeeded and change was completed for ${normalizedPnr}.`);
     return { submission: { ifSuccess: submission.ifSuccess }, payment: { ifSuccess: payment.ifSuccess }, paymentRequired: true, booking: updatedBooking };
+    });
   } finally {
     springChangePaymentInFlight.delete(requestKey);
   }
@@ -1299,20 +1325,50 @@ async function submitLiveSpringRefund(profile, pnr, requestedOrderHeadIds = []) 
   const orderHeadIds = await resolveSpringOrderHeadIds(booking.pnr, requestedOrderHeadIds);
   const client = createSpringClient();
   const token = await client.getAccessToken();
+  return protectPayment(profile, booking.pnr, 'refund', orderHeadIds.slice().sort((a, b) => a - b).join(','), 0, async () => {
   // Spring's refund submission endpoint does not reuse the calculation payload.
   // It accepts only the selected passenger/order-head IDs as `orderHeadList`.
   const result = await client.refundTicket({ orderHeadList: orderHeadIds }, token.accessToken);
   if (!springSucceeded(result)) throw new Error(result?.errMsg || result?.errCode || 'Spring refund submission failed.');
   return saveBookingFinancialData(profile, booking.pnr, 'refund', { quote });
+  });
 }
 
-createServer(async (req, res) => { const url = new URL(req.url, `http://${req.headers.host}`);
+createServer({ requestTimeout: 15000, headersTimeout: 10000, maxHeaderSize: 16384 }, async (req, res) => {
+for (const [name, value] of Object.entries(securityHeaders)) res.setHeader(name, value);
+let url;
+try {
+  url = new URL(req.url, 'http://localhost');
+  checkRequest(req);
+  if (url.pathname.startsWith('/api/')) {
+    const ip = clientAddress(req, process.env.TRUST_PROXY_LOOPBACK === 'true');
+    limitRequest(`ip:${ip}`, 1200, 60000);
+    if (url.pathname === '/api/auth/login') limitRequest(`login:${ip}`, 30, 900000);
+    if (url.pathname === '/api/auth/refresh') limitRequest(`refresh:${ip}`, 120, 60000);
+    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/locations', '/api/fx/cny-mnt'];
+    if (!publicPaths.includes(url.pathname)) {
+      if (!/^Bearer\s+\S+$/i.test(req.headers.authorization || '')) return send(res, 401, { error: 'Please sign in to continue.' });
+      try { req.securityProfile = await profileForAccessToken(bearer(req)); }
+      catch { return send(res, 401, { error: 'Your login session is invalid or inactive.' }); }
+      const actor = req.securityProfile.id;
+      limitRequest(`actor:${actor}`, 240, 60000);
+      if (url.pathname === '/api/flights') limitRequest(`search:${actor}`, 30, 60000);
+      if (['POST', 'PATCH', 'DELETE'].includes(req.method)) limitRequest(`write:${actor}`, 30, 60000);
+      if (url.pathname === '/api/topups' && req.method === 'POST') limitRequest(`topup:${actor}`, 5, 600000);
+      if (url.pathname === '/api/backend/status' && req.securityProfile.role !== 'platform_admin') return send(res, 403, { error: 'Administrator access required.' });
+      if (url.pathname === '/api/admin/wallet-reset') return send(res, 403, { error: 'Public wallet reset is disabled.' });
+    }
+  }
+} catch (error) {
+  if (error.retryAfter) res.setHeader('retry-after', String(error.retryAfter));
+  return send(res, error.status || 400, { error: error.message || 'Invalid request.' });
+}
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), springSoap: getSpringSoapStatus(), supabase: getSupabaseStatus() });
 if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: error.message }); } }
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
 if (url.pathname.startsWith('/api/bookings')) { try {
-  const profile = await profileForAccessToken(bearer(req));
+  const profile = await authenticatedProfile(req);
   if (url.pathname === '/api/bookings/dashboard' && req.method === 'GET') {
     const summary = await getDashboardSummary(profile);
     const rate = await getCnyMntRate().catch(() => null);
@@ -1378,14 +1434,13 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   const changeQuoteMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-quote$/);
   if (changeQuoteMatch && req.method === 'POST') {
     const body = await readJson(req);
-    const quote = await calculateLiveSpringChange(profile, changeQuoteMatch[1], body.bgPairList);
+    const quote = await calculateLiveSpringChange(profile, changeQuoteMatch[1], body.bgPairList, body.changes);
     await saveBookingFinancialData(profile, changeQuoteMatch[1], 'changeQuote', quote);
     return send(res, 200, { quote });
   }
   const changeSubmitMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-submit$/);
   if (changeSubmitMatch && req.method === 'POST') {
-    const body = await readJson(req);
-    return send(res, 200, { result: await submitLiveSpringChange(profile, changeSubmitMatch[1], body.appId) });
+    return send(res, 403, { error: 'Use the verified change quote and change-pay workflow.' });
   }
   const changePayMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/change-pay$/);
   if (changePayMatch && req.method === 'POST') {
@@ -1395,12 +1450,14 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   const match = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(issue|cancel)$/);
   if (match && req.method === 'POST') {
     if (match[2] === 'issue') return send(res, 200, await issueSpringCreditTicket(profile, match[1]));
+    const booking = (await listPortalBookings(profile)).find(item => item.pnr === match[1]);
+    if (!booking || booking.status !== 'Reserved') throw new Error('Only reserved bookings can be cancelled here. Use refund for ticketed bookings.');
     const status = match[2] === 'issue' ? 'Ticketed' : 'Cancelled';
     return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
   }
   return send(res, 404, { error: 'Booking endpoint not found.' });
 } catch (error) { return send(res, 403, { error: error.message || 'Booking request is not allowed.' }); } }
-if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await profileForAccessToken(bearer(req)))); } catch (error) { return send(res, 403, { error: error.message || 'Wallet access is not allowed.' }); } }
+if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await authenticatedProfile(req))); } catch (error) { return send(res, 403, { error: error.message || 'Wallet access is not allowed.' }); } }
 if (url.pathname === '/api/auth/login' && req.method === 'POST') { try { const { email, password } = await readJson(req);
 if (!email || !password) return send(res, 400, { error: 'Email and password are required.' });
 const session = await signInWithPassword(email, password);
@@ -1410,7 +1467,7 @@ const { refreshToken } = await readJson(req);
 const session = await refreshAuthSession(refreshToken);
 const profile = await profileForAccessToken(session.access_token);
 return send(res, 200, { accessToken: session.access_token, refreshToken: session.refresh_token, expiresIn: session.expires_in, profile });
-} catch (error) { return send(res, 401, { error: error.message || 'Your login session has expired.' }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await profileForAccessToken(bearer(req));
+} catch (error) { return send(res, 401, { error: error.message || 'Your login session has expired.' }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await authenticatedProfile(req);
 if (url.pathname === '/api/topups' && req.method === 'GET') return send(res, 200, await getTopupRequests(profile));
 if (url.pathname === '/api/topups' && req.method === 'POST') { const body = await readJson(req);
 const amountMnt = Number(body.amountMnt);
@@ -1469,6 +1526,7 @@ const amount = Number(body.amount);
 if (!Number.isFinite(amount) || amount === 0) throw new Error('Adjustment amount must not be zero.'); await adjustWallet({ agencyId, amount, reason, createdBy: admin.id }); return send(res, 201, { ok: true }); } return send(res, 404, { error: 'Admin endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname === '/api/flights') return searchFlights(url, res);
 if (url.pathname === '/api/locations') return autocompleteLocations(url, res);
 const requested = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+if (!isPublicAsset(requested)) return send(res, 404, 'Not found', 'text/plain');
 const file = normalize(join(ROOT, requested));
 if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try { send(res, 200, await readFile(file), MIME[extname(file)] || 'application/octet-stream'); } catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => {
   console.log(`Flight B2B Portal listening on http://127.0.0.1:${PORT}`);

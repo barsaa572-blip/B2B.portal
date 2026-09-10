@@ -41,6 +41,7 @@ export function createSpringClient(env = process.env) {
     required(accessToken, 'Spring access token');
     const response = await fetch(url, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         'content-type': 'application/json',
         'accept': 'application/json',
@@ -68,6 +69,7 @@ export function createSpringClient(env = process.env) {
       const sign = createHash('md5').update(`${appKey}${grantType}${secret}${timestamp}${appKey}`, 'utf8').digest('hex').toUpperCase();
       return fetch(endpoint('SPRING_TOKEN_URL', '/auth/oauth2/accessToken'), {
         method: 'POST',
+        signal: AbortSignal.timeout(15_000),
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ appKey, grantType, sign, timestamp })
       }).then(async response => {
