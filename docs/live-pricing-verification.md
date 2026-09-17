@@ -38,8 +38,8 @@ APPKEY/SECRET or passenger details. Adapt the parser only to a confirmed contrac
 ## ULN/UBN to PVG
 
 Spring support subsequently confirmed that production requires UBN. The backend
-now sends UBN for both ULN and UBN selections, including the return leg. Existing
-portal display/history aliases remain unchanged. Real availability must still be
+now sends UBN for both ULN and UBN selections, including the return leg. New search
+results and airport suggestions display UBN; saved records are not rewritten. Real availability must still be
 checked against the supplier; this mapping does not invent flights.
 `/api/flights` now includes non-secret `searchContext` containing the actual supplier
 request and returned counts. A malformed response is an error, not an empty list.

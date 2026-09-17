@@ -32,19 +32,19 @@ async function loadDirectory() {
     const row = parseCsvLine(line);
     const code = read(row, 'iata_code').trim().toUpperCase();
     const type = read(row, 'type');
-    if (!/^[A-Z]{3}$/.test(code) || read(row, 'scheduled_service') !== 'yes' || !['large_airport', 'medium_airport', 'small_airport'].includes(type) || code === 'UBN') return [];
+    if (!/^[A-Z]{3}$/.test(code) || read(row, 'scheduled_service') !== 'yes' || !['large_airport', 'medium_airport', 'small_airport'].includes(type) || ['ULN', 'UBN'].includes(code)) return [];
     return [{ code, city: read(row, 'municipality') || read(row, 'name'), airport: read(row, 'name'), country: read(row, 'iso_country') }];
   });
-  // Spring's gateway expects ULN, so keep this alias stable even if public IATA
-  // data changes it to UBN.
-  airports.unshift({ code: 'ULN', city: 'Ulaanbaatar', airport: 'Chinggis Khaan International Airport', country: 'MN' });
+  // Spring production uses UBN; offer one canonical Ulaanbaatar selection.
+  airports.unshift({ code: 'UBN', city: 'Ulaanbaatar', airport: 'Chinggis Khaan International Airport', country: 'MN' });
   return airports;
 }
 
 const getDirectory = () => directoryPromise ||= loadDirectory();
 
 export async function searchAirports(query, limit = 10) {
-  const text = String(query || '').trim().toLowerCase();
+  const rawText = String(query || '').trim().toLowerCase();
+  const text = rawText === 'uln' ? 'ubn' : rawText;
   if (text.length < 2) return [];
   const airports = await getDirectory();
   const rank = airport => {
@@ -61,7 +61,8 @@ export async function searchAirports(query, limit = 10) {
 // provides Chinese text.  This keeps the portal language independent from the
 // supplier's response language.
 export async function airportByCode(code) {
-  const normalized = String(code || '').trim().toUpperCase();
+  const rawCode = String(code || '').trim().toUpperCase();
+  const normalized = rawCode === 'ULN' ? 'UBN' : rawCode;
   if (!/^[A-Z]{3}$/.test(normalized)) return null;
   try {
     const airports = await getDirectory();

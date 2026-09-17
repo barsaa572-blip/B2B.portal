@@ -360,8 +360,8 @@ const SPRING_AIRLINES_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/2/2
 // Spring production support confirmed UBN. Translate the portal's old ULN
 // selection only at the supplier boundary, for both outbound and return legs.
 const springAirportCode = code => String(code || '').trim().toUpperCase() === 'ULN' ? 'UBN' : String(code || '').trim().toUpperCase();
-// Preserve existing portal display/history aliases independently of API requests.
-const portalAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
+// Show UBN in new results; keep accepting ULN from older saved itineraries.
+const portalAirportCode = code => springAirportCode(code);
 const springText = value => String(value ?? '')
   .replace(/春秋航空/g, 'Spring Airlines')
   .replace(/吉祥航空/g, 'Juneyao Airlines')
