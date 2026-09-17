@@ -706,10 +706,66 @@ const baggageSummary = () => {
   return `<section class="price-section"><div class="price-section-heading"><span>Baggage</span></div><div class="baggage-list">${rows.map(([name, value]) => `<button type="button" class="selected-fare-details"><span>${name}</span><span>${value}</span></button>`).join('')}</div></section>`;
 };
 const checkoutPricePanel = () => {
-  const fares = selectedReviewFares();
-  const people = passengerTotal();
-  const childNote = hasUnpricedPassengers(activePassengerCounts) ? '<div class="price-line"><span>Children / infants</span><b>Verified before issue</b></div>' : '';
-  return `<aside class="order-summary booking-price-panel"><h2>Price details</h2><section class="price-section"><div class="price-section-heading"><span>Tickets (${people} passenger${people === 1 ? '' : 's'})</span><strong>${totalPrice()}</strong></div><p class="price-passenger-note">${activePassengerCounts.adults} adult${activePassengerCounts.adults === 1 ? '' : 's'} · ${selectedReturn ? 'round trip' : 'one way'}</p><div class="price-line"><span>Fare</span><b>${Number.isFinite(fares.fare) ? quoteMnt(fares.fare) : 'To be confirmed'}</b></div><div class="price-line"><span>Taxes & fees</span><b>${Number.isFinite(fares.taxes) ? quoteMnt(fares.taxes) : 'To be confirmed'}</b></div>${childNote}</section>${baggageSummary()}<div class="price-total"><span>Total</span><strong>${totalPrice()}</strong></div><p class="price-panel-note">Final fare, taxes and baggage allowance are confirmed before ticket issuance.</p></aside>`;
+  const quote = currentBookingQuote();
+  const labels = { adults: 'Adult', children: 'Child', infants: 'Infant' };
+  const rows = quote ? quote.breakdown.map(row => `<section class="price-section"><div class="price-section-heading"><span>${labels[row.type]} × ${row.count}</span><strong>${quoteMnt(row.total)}</strong></div><div class="price-line"><span>Ticket fare</span><b>${quoteMnt(row.fare)}</b></div><div class="price-line"><span>Taxes & fees</span><b>${quoteMnt(row.taxes)}</b></div></section>`).join('') : `<p role="status">${escapeHtml(bookingQuoteError || 'Verifying all passenger prices with Spring…')}</p>`;
+  return `<aside class="order-summary booking-price-panel"><h2>Price details</h2>${rows}<div class="price-total"><span>Total</span><strong>${quote ? quoteMnt(quote.total) : 'To be confirmed'}</strong></div><p class="price-panel-note">${quote ? 'Live CNY price verified. MNT is a converted estimate. Price is rechecked before reservation; issuing a ticket requires a separate action.' : 'Booking is unavailable until all passenger prices are verified.'}</p><button type="button" class="secondary" data-verify-booking-price ${bookingQuoteLoading ? 'disabled' : ''}>${bookingQuoteLoading ? 'Verifying…' : 'Verify price again'}</button>${baggageSummary()}</aside>`;
+};
+let bookingQuote = null;
+let bookingQuoteError = '';
+let bookingQuoteLoading = false;
+let bookingQuoteSequence = 0;
+let bookingSubmissionPending = false;
+const bookingPriceKey = () => JSON.stringify({ flights: [selectedOutbound, selectedReturn].filter(Boolean).map(f => f.spring), passengers: activePassengerCounts, actor: portalSession().profile?.id });
+const currentBookingQuote = () => bookingQuote?.selectionKey === bookingPriceKey() && bookingQuote.expiresAt > Date.now() ? bookingQuote : null;
+const refreshBookingPricePanel = () => {
+  const panel = document.querySelector('.booking-price-panel');
+  if (!panel) return;
+  panel.outerHTML = checkoutPricePanel();
+  const button = document.querySelector('.issue-ticket');
+  if (button) button.disabled = !currentBookingQuote() || bookingQuoteLoading || bookingSubmissionPending;
+};
+const verifyBookingPrice = async () => {
+  if (bookingSubmissionPending) return;
+  const sequence = ++bookingQuoteSequence;
+  const selectionKey = bookingPriceKey();
+  const form = document.querySelector('#passenger-form');
+  bookingQuote = null; bookingQuoteError = ''; bookingQuoteLoading = true;
+  refreshBookingPricePanel();
+  try {
+    const response = await secureFetch('/api/flights/price', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ flights: [selectedOutbound, selectedReturn].filter(Boolean).map(f => ({ spring: f.spring })), passengers: activePassengerCounts }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Spring price verification failed.');
+    if (!data.quoteId || !Array.isArray(data.breakdown) || !Number.isFinite(data.total) || data.currency !== 'CNY') throw new Error('The price response could not be verified.');
+    if (sequence === bookingQuoteSequence && selectionKey === bookingPriceKey() && form === document.querySelector('#passenger-form')) bookingQuote = { ...data, selectionKey };
+  } catch (error) {
+    if (sequence === bookingQuoteSequence) bookingQuoteError = error.message || 'Price verification failed. Please retry.';
+  } finally {
+    if (sequence === bookingQuoteSequence) { bookingQuoteLoading = false; refreshBookingPricePanel(); }
+  }
+};
+document.addEventListener('click', event => { if (event.target.closest('[data-verify-booking-price]')) void verifyBookingPrice(); });
+const verifyFarePreview = async flights => {
+  const footer = resultArea.querySelector('.fare-choice-footer');
+  const target = footer?.querySelector('div');
+  const button = footer?.querySelector('.primary');
+  if (!target || !button) return;
+  button.disabled = true;
+  target.innerHTML = '<p role="status">Verifying all passenger prices with Spring…</p>';
+  try {
+    const response = await secureFetch('/api/flights/price', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ flights, passengers: activePassengerCounts }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Price verification failed.');
+    if (!Array.isArray(data.breakdown) || !Number.isFinite(data.total)) throw new Error('Incomplete price response.');
+    if (!footer.isConnected) return;
+    const labels = { adults: 'Adult', children: 'Child', infants: 'Infant' };
+    target.innerHTML = `<section class="fare-price-breakdown"><div class="fare-breakdown-title">Live price breakdown</div>${data.breakdown.map(row => `<div class="fare-breakdown-row"><span>${labels[row.type]} × ${row.count}</span><b>${quoteMnt(row.total)}</b></div><div class="fare-breakdown-row fare-breakdown-detail"><span>Ticket fare</span><span>${quoteMnt(row.fare)}</span></div><div class="fare-breakdown-row fare-breakdown-detail"><span>Taxes & fees</span><span>${quoteMnt(row.taxes)}</span></div>`).join('')}<div class="fare-breakdown-total"><b>Total</b><strong>${quoteMnt(data.total)}</strong></div></section>`;
+    button.disabled = false;
+  } catch (error) {
+    if (!footer.isConnected) return;
+    target.innerHTML = `<p role="alert">${escapeHtml(error.message || 'Price verification failed.')}</p><button type="button" class="secondary" data-retry-fare-price>Retry price verification</button>`;
+    target.querySelector('[data-retry-fare-price]').addEventListener('click', () => void verifyFarePreview(flights));
+  }
 };
 const showCheckout = () => { const counts = [['Adult', Number(document.querySelector('#adults').value)], ['Child', Number(document.querySelector('#children').value)], ['Infant', Number(document.querySelector('#infants').value)]]; const passengers = counts.flatMap(([type, count]) => Array.from({ length: count }, (_, index) => passengerForm(type, index))); const outboundDate = document.querySelector('#outbound-date')?.value || ''; const returnDate = document.querySelector('#return-date')?.value || ''; const destination = selectedOutbound?.arrival?.id || 'your destination'; resultArea.classList.remove('hidden'); resultArea.innerHTML = `<section class="booking-review"><div class="checkout-main"><div class="review-heading"><div><p class="eyebrow">SELECTED ITINERARY</p><h1>Trip to ${destination}</h1></div><button type="button" class="review-change-flight">Change flight</button></div><section class="review-itinerary">${reviewFlight(selectedOutbound, outboundDate)}${reviewFlight(selectedReturn, returnDate)}</section><div class="checkout-heading"><p class="eyebrow">WHO'S TRAVELING?</p><h2>Passenger details</h2><p>Names must match the travel document exactly.</p></div><form id="passenger-form" novalidate>${passengers.join('')}<datalist id="month-options">${monthOptions.map(month => `<option value="${month}"></option>`).join('')}</datalist><section class="contact-card"><h2>Contact person</h2><div class="passenger-fields"><label>Full name<input name="contact-name" required /></label><label>Contact number<span class="phone-input"><input name="contact-country-code" list="phone-country-codes" value="+976" inputmode="tel" required aria-label="Country calling code" /><input name="contact-phone" type="tel" inputmode="tel" required placeholder="Phone number" aria-label="Phone number" /></span></label><label>Email address<input name="contact-email" type="email" required /></label></div><datalist id="phone-country-codes"><option value="+976" label="Mongolia"></option><option value="+86" label="China"></option><option value="+7" label="Russia / Kazakhstan"></option><option value="+82" label="South Korea"></option><option value="+81" label="Japan"></option><option value="+66" label="Thailand"></option><option value="+84" label="Vietnam"></option><option value="+65" label="Singapore"></option><option value="+60" label="Malaysia"></option><option value="+971" label="United Arab Emirates"></option><option value="+90" label="Turkey"></option><option value="+49" label="Germany"></option><option value="+44" label="United Kingdom"></option><option value="+1" label="United States / Canada"></option></datalist><p>Booking confirmation and schedule changes will be sent to this contact.</p></section><div class="booking-actions"><button type="button" class="back-to-search">← Back to search</button><button class="primary issue-ticket" type="submit">Book</button></div></form></div>${checkoutPricePanel()}</section>`; const checkoutForm = document.querySelector('#passenger-form'); checkoutForm.addEventListener('submit', createPortalBookingFromForm); checkoutForm.querySelector('.issue-ticket')?.addEventListener('click', event => { event.preventDefault(); createPortalBookingFromForm({ preventDefault() {}, currentTarget: checkoutForm }); }); document.querySelector('.review-change-flight')?.addEventListener('click', () => document.querySelector('.back-to-search')?.click()); document.querySelectorAll('.selected-fare-details').forEach(button => button.addEventListener('click', showSelectedFareDetails)); bindCountryFields(); enhanceCountryMenus(); resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair')) showCheckout(); });
@@ -744,7 +800,7 @@ document.addEventListener('click', event => { if (event.target.closest('.select-
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair') || (event.target.closest('.book-flight') && tripType !== 'round')) setTimeout(enhanceCountryMenus, 0); });
 const countryNames = ['Mongolia','Russia','China','Japan','South Korea','North Korea','Kazakhstan','United States','United Kingdom','Germany','France','Turkey','Thailand','Singapore','Vietnam','India','Australia','Canada'];
 const bindCountryFields = () => { let list = document.querySelector('#country-options'); if (!list) { list = document.createElement('datalist'); list.id = 'country-options'; list.innerHTML = countryNames.map(country => `<option value="${country}"></option>`).join(''); document.body.append(list); } const correctCountry = value => { const query = value.trim().toLowerCase(); return countryNames.find(country => country.toLowerCase().startsWith(query) || query.startsWith(country.toLowerCase())) || value.trim(); }; document.querySelectorAll('.passenger-card').forEach(card => { const labels = [...card.querySelectorAll('label')]; const issuing = labels.find(label => label.textContent.includes('Issuing country'))?.querySelector('input'); const nationality = labels.find(label => label.textContent.includes('Nationality'))?.querySelector('input'); if (!issuing || !nationality || issuing.dataset.countryBound) return; [issuing, nationality].forEach(input => { input.setAttribute('list', 'country-options'); input.setAttribute('autocomplete', 'off'); input.dataset.countryBound = 'true'; }); const mirror = (source, target) => { const country = correctCountry(source.value); if (country) { source.value = country; target.value = country; } }; issuing.addEventListener('change', () => mirror(issuing, nationality)); issuing.addEventListener('blur', () => mirror(issuing, nationality)); nationality.addEventListener('change', () => mirror(nationality, issuing)); nationality.addEventListener('blur', () => mirror(nationality, issuing)); }); };
-const prepareBookingScreen = () => { showCheckout(); queueMicrotask(() => { openBookingScreen(); const route = document.querySelector('.booking-route'); const headerContent = document.querySelector('main > header > div'); const title = document.querySelector('#page-title'); if (!route) return; if (!route.querySelector('.back-to-search')) route.insertAdjacentHTML('beforeend', '<button type="button" class="back-to-search">← Back to search</button>'); if (headerContent) { title.hidden = true; route.classList.add('header-booking-route'); headerContent.append(route); } const back = route.querySelector('.back-to-search'); const payment = document.querySelector('.issue-ticket'); if (back && payment && !document.querySelector('.booking-actions')) { const actions = document.createElement('div'); actions.className = 'booking-actions'; payment.before(actions); actions.append(back, payment); } }); };
+const prepareBookingScreen = () => { bookingQuote = null; bookingQuoteError = ''; showCheckout(); void verifyBookingPrice(); queueMicrotask(() => { openBookingScreen(); const route = document.querySelector('.booking-route'); const headerContent = document.querySelector('main > header > div'); const title = document.querySelector('#page-title'); if (!route) return; if (!route.querySelector('.back-to-search')) route.insertAdjacentHTML('beforeend', '<button type="button" class="back-to-search">← Back to search</button>'); if (headerContent) { title.hidden = true; route.classList.add('header-booking-route'); headerContent.append(route); } const back = route.querySelector('.back-to-search'); const payment = document.querySelector('.issue-ticket'); if (back && payment && !document.querySelector('.booking-actions')) { const actions = document.createElement('div'); actions.className = 'booking-actions'; payment.before(actions); actions.append(back, payment); } }); };
 const ensureDocsModal = () => { let modal = document.querySelector('#docs-modal'); if (modal) return modal; modal = document.createElement('dialog'); modal.id = 'docs-modal'; modal.innerHTML = `<form method="dialog" id="docs-form"><button class="close" value="cancel" aria-label="Close">×</button><h2>DOCS import</h2><p class="modal-copy">Paste passenger lines from Amadeus, Galileo, or Sabre. Passenger names will be copied into the form for review.</p><textarea id="docs-input" placeholder="Example: NM1BATBOLD/BAYAR MR&#10;or N.BATBOLD/BAYAR"></textarea><div class="docs-actions"><button value="cancel" class="secondary">Cancel</button><button class="primary" value="import">Import passengers</button></div></form>`; document.body.append(modal); modal.querySelector('form').addEventListener('submit', event => { event.preventDefault(); if (event.submitter?.value === 'cancel') return modal.close(); const names = modal.querySelector('#docs-input').value.split(/\r?\n/).map(line => line.match(/(?:NM\d*|N\.|-\d*)?\s*([A-Z][A-Z' -]+)\/([A-Z][A-Z' -]+)/i)).filter(Boolean).map(match => ({ last: match[1].trim(), first: match[2].replace(/\b(MR|MRS|MS|MISS|CHD|INF)\b/ig, '').trim() })); document.querySelectorAll('.passenger-card').forEach((card, index) => { const name = names[index]; const fields = card.querySelectorAll('input'); if (name && fields.length > 1) { fields[0].value = name.last; fields[1].value = name.first; } }); modal.close(); showToast(names.length ? `${names.length} passenger name(s) imported. Please review all details.` : 'No passenger names found. Check the DOCS format.'); }); return modal; };
 const openBookingScreen = () => { document.body.classList.add('booking-mode'); };
 document.addEventListener('click', event => { if (event.target.closest('.select-round-pair')) openBookingScreen(); if (event.target.closest('.docs-import')) ensureDocsModal().showModal(); if (event.target.closest('[data-view="search"]')) document.body.classList.remove('booking-mode'); });
@@ -898,6 +954,7 @@ const showFareOptions = (flight, phase) => {
     const selectedFare = options[selections[phase]];
     resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT · FARE SELECTION</p><h2>Select your fare</h2><div class="fare-selected-flights one-way-fare-selection">${fareSelectionFlight(flight, leg, phase)}</div></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => fareChoiceCard(fare, index, phase, selections[phase] === index, flight, index === 0)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer class="fare-choice-footer"><div>${fareBreakdownMarkup(selectedFare)}</div><button class="primary confirm-single-fare">Continue to passenger details</button></footer></section>`;
     bindFareCarousel(resultArea, selections, render);
+    void verifyFarePreview([{ spring: { ...flight.spring, ...selectedFare.spring } }]);
     resultArea.querySelector('.confirm-single-fare').addEventListener('click', () => continueWithFare(flight, options[selections[phase]], phase));
   };
   render();
@@ -1044,6 +1101,7 @@ const showRoundFareOptions = () => {
       applyFareOption(selectedReturn, pair.inbound);
       prepareBookingScreen();
     });
+    void verifyFarePreview([{ spring: { ...selectedOutbound.spring, ...pair.outbound.spring } }, { spring: { ...selectedReturn.spring, ...pair.inbound.spring } }]);
   };
   render();
 };
@@ -1269,6 +1327,9 @@ document.addEventListener('focusout', event => {
 const createPortalBookingFromForm = async event => {
   event.preventDefault();
   const submit = event.currentTarget.querySelector('.issue-ticket');
+  if (submit.disabled || bookingSubmissionPending) return;
+  const confirmedQuote = currentBookingQuote();
+  if (!confirmedQuote) { toast('Verify and review all passenger prices before booking.'); void verifyBookingPrice(); return; }
   clearFormErrors(event.currentTarget);
   const invalidDate = validateSplitDateControls(event.currentTarget);
   if (invalidDate) { invalidDate.closest('label')?.querySelector('[data-date-part]')?.focus(); toast('Correct the highlighted date.'); return; }
@@ -1314,9 +1375,9 @@ const createPortalBookingFromForm = async event => {
         total: fare.total,
         baggage: fare.baggage,
         rules: fare.rules,
-        spring: { segHeadId: fare.spring?.segHeadId, combId: fare.spring?.combId, combType: fare.spring?.combType, combPrice: fare.spring?.combPrice, adultCabin: fare.spring?.adultCabin, moneyClassId: fare.spring?.moneyClassId }
+        spring: { segHeadId: fare.spring?.segHeadId, combId: fare.spring?.combId, combType: fare.spring?.combType, cabinType: fare.spring?.cabinType, combPrice: fare.spring?.combPrice, adultCabin: fare.spring?.adultCabin, moneyClassId: fare.spring?.moneyClassId }
       },
-      spring: { segHeadId: spring.segHeadId, combId: spring.combId, combType: spring.combType, combPrice: spring.combPrice, adultCabin: spring.adultCabin, moneyClassId: spring.moneyClassId }
+      spring: { segHeadId: spring.segHeadId, combId: spring.combId, combType: spring.combType, cabinType: spring.cabinType, combPrice: spring.combPrice, adultCabin: spring.adultCabin, moneyClassId: spring.moneyClassId }
     };
   };
   const route = `${selectedOutbound?.departure?.id || ''} → ${selectedOutbound?.arrival?.id || ''}`;
@@ -1331,9 +1392,10 @@ const createPortalBookingFromForm = async event => {
     areaCode: phoneCountryCode.replace(/[^\d]/g, ''),
     email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim()
   };
+  bookingSubmissionPending = true;
   submit.disabled = true; submit.textContent = 'Creating booking…';
   try {
-    const response = await secureFetch('/api/bookings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ totalCny: totalCnyForSelection(), itinerary, passengers: { travellers, contact } }) });
+    const response = await secureFetch('/api/bookings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ quoteId: confirmedQuote.quoteId, totalCny: confirmedQuote.total, itinerary, passengers: { travellers, contact } }) });
     const rawResponse = await response.text();
     let data;
     try { data = rawResponse ? JSON.parse(rawResponse) : {}; }
@@ -1351,7 +1413,7 @@ const createPortalBookingFromForm = async event => {
     modal.querySelector('.view-created-booking').addEventListener('click', () => { modal.close(); showView('bookings'); openBookingDetail(booking.ref); });
     modal.showModal();
   } catch (error) { toast(error.message || 'Booking could not be created.'); }
-  finally { submit.disabled = false; submit.textContent = 'Book'; }
+  finally { bookingSubmissionPending = false; bookingQuote = null; bookingQuoteError = 'Review the booking result before retrying. Verify the price again only if no reservation was created.'; refreshBookingPricePanel(); submit.disabled = true; submit.textContent = 'Book'; }
 };
 // Capture the booking button click before any browser/default form handling.
 // A caught error must always be visible to the agent instead of silently

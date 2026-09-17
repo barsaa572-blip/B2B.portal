@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { priceSelection, priceRequest, verifiedPrice, createPriceQuotes, flightList } from './backend/spring-pricing.mjs';
 import { requireChangeQuote, cleanBookingItinerary, guardedPayment } from './backend/payment-security.mjs';
 import { beginFinancialOperation, finishFinancialOperation } from './backend/supabase-client.mjs';
 import { securityHeaders, isPublicAsset, clientAddress, checkRequest, createLimiter, readJsonBody } from './backend/request-security.mjs';
@@ -16,6 +17,7 @@ import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOff
 import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getAgencyForTicket, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingChange, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
+const priceQuotes = createPriceQuotes();
 const springIssueInFlight = new Set();
 const springChangePaymentInFlight = new Set();
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -439,6 +441,7 @@ const normaliseSpring = async item => {
         segHeadId: basic.segHeadId ?? null,
         combId: seat.combId ?? null,
         combType: seat.combType ?? null,
+        cabinType: bookingSeats.length ? 3 : 1,
         combPrice: baseFare,
         adultCabin: seat.seatName ?? seat.cabinCode ?? null,
         moneyClassId: seat.moneyClassId ?? 0
@@ -461,14 +464,18 @@ async function searchSpringFlights({ departure, arrival, date, trip, returnDate,
   const client = createSpringClient(); const token = await client.getAccessToken();
   const payload = (oriCode, destCode, flightDay) => ({ codeType: 1, oriCode: springAirportCode(oriCode), destCode: springAirportCode(destCode), flightDay, lang: 'zh_cn', moneyClassId: 0 });
   const outboundData = await client.searchFlights(payload(departure, arrival, date), token.accessToken);
-  const outbound = (await Promise.all((outboundData.flightsList ?? []).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
+  const outbound = (await Promise.all(flightList(outboundData).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
+  if (outboundData.flightsList.length && !outbound.length) throw new Error('Spring returned flights but their airport identifiers could not be read.');
+  const searchContext = { outbound: payload(departure, arrival, date), supplierOutboundCount: outboundData.flightsList.length };
   // Spring availability returns a fare per adult seat. The supplied request
   // specification has no passenger-count fields, so CHD/INF amounts must be
   // verified by getSpecificPriceNew rather than guessed here.
-  if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, passengers, results: outbound };
+  if (trip !== 'round') return { source: 'Spring Airlines', phase: 'outbound', trip, passengers, searchContext, results: outbound };
   const returnData = await client.searchFlights(payload(arrival, departure, returnDate), token.accessToken);
-  const returns = (await Promise.all((returnData.flightsList ?? []).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
-  return { source: 'Spring Airlines', phase: 'outbound', trip, passengers, results: outbound, roundPairs: outbound.slice(0, 3).flatMap(outboundFlight => returns.slice(0, 3).map(returnFlight => ({ outbound: outboundFlight, returnFlight, sameAirline: outboundFlight.airlineCode === returnFlight.airlineCode }))) };
+  const returns = (await Promise.all(flightList(returnData).map(normaliseSpring))).filter(flight => flight.departure.id && flight.arrival.id);
+  if (returnData.flightsList.length && !returns.length) throw new Error('Spring returned flights but their airport identifiers could not be read.');
+  Object.assign(searchContext, { inbound: payload(arrival, departure, returnDate), supplierInboundCount: returnData.flightsList.length });
+  return { source: 'Spring Airlines', phase: 'outbound', trip, passengers, searchContext, results: outbound, roundPairs: outbound.slice(0, 3).flatMap(outboundFlight => returns.slice(0, 3).map(returnFlight => ({ outbound: outboundFlight, returnFlight, sameAirline: outboundFlight.airlineCode === returnFlight.airlineCode }))) };
 }
 async function searchFlights(url, res) {
   const departure = url.searchParams.get('departure')?.toUpperCase();
@@ -693,8 +700,17 @@ async function createLiveSpringBooking(profile, body) {
   if (process.env.SPRING_BOOKING_ENABLED !== 'true') throw new Error('Spring test booking is disabled on this server. Set SPRING_BOOKING_ENABLED=true only after confirming the test environment.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
   const payload = createSpringBookingPayload(body);
+  const selection = priceSelection(body.itinerary.flights, { adults: payload.adultNum, children: payload.childNum, infants: payload.infantNum });
+  const agreed = priceQuotes.require(body.quoteId, profile.id, selection);
   const client = createSpringClient();
   const token = await client.getAccessToken();
+  const checked = verifiedPrice(await client.getSpecificPrice(priceRequest(selection), token.accessToken), selection);
+  if (JSON.stringify(checked) !== JSON.stringify(agreed)) throw new Error('Spring price changed. Verify and review the new price before booking.');
+  // Claim once, after the async check and before the external booking mutation.
+  // A parallel submission or an uncertain result must not replay this quote.
+  priceQuotes.require(body.quoteId, profile.id, selection);
+  priceQuotes.consume(body.quoteId);
+  body.totalCny = checked.total;
   const result = await client.bookOrder(payload, token.accessToken);
   if (result?.success === false || result?.flag === false) {
     const code = typeof result.code === 'string' || typeof result.code === 'number' ? ` (${result.code})` : '';
@@ -709,7 +725,7 @@ async function createLiveSpringBooking(profile, body) {
     console.warn('Spring booking response has no recognised order reference:', JSON.stringify(springResponseShape(result)));
     throw new Error('Spring returned a booking response without a PNR/order number. No local booking was created.');
   }
-  const itinerary = { ...body.itinerary, springOrder: { pnr, responseCode: result.errCode || null } };
+  const itinerary = { ...body.itinerary, verifiedPrice: checked, springOrder: { pnr, responseCode: result.errCode || null } };
   return createPortalBooking(profile, { ...body, itinerary, pnr, status: 'Reserved' });
 }
 
@@ -1364,6 +1380,19 @@ try {
   return send(res, error.status || 400, { error: error.message || 'Invalid request.' });
 }
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
+if (url.pathname === '/api/flights/price' && req.method === 'POST') {
+  let selection;
+  try {
+    const body = await readJson(req);
+    selection = priceSelection(body.flights, body.passengers);
+  } catch (error) { return send(res, 400, { error: error.message }); }
+  try {
+    const client = createSpringClient();
+    const token = await client.getAccessToken();
+    const price = verifiedPrice(await client.getSpecificPrice(priceRequest(selection), token.accessToken), selection);
+    return send(res, 200, priceQuotes.save(req.securityProfile.id, selection, price));
+  } catch (error) { return send(res, 502, { error: error.message || 'Spring price verification failed.' }); }
+}
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), springSoap: getSpringSoapStatus(), supabase: getSupabaseStatus() });
 if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: error.message }); } }
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
