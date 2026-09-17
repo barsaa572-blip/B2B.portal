@@ -357,8 +357,10 @@ const springTime = value => {
   return match ? match[1].padStart(5, '0') : '';
 };
 const SPRING_AIRLINES_LOGO = 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Spring_Airlines_Logo.png';
-// Spring uses ULN for Ulaanbaatar. Accept UBN as a legacy alias if submitted.
-const springAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
+// Spring production support confirmed UBN. Translate the portal's old ULN
+// selection only at the supplier boundary, for both outbound and return legs.
+const springAirportCode = code => String(code || '').trim().toUpperCase() === 'ULN' ? 'UBN' : String(code || '').trim().toUpperCase();
+// Preserve existing portal display/history aliases independently of API requests.
 const portalAirportCode = code => String(code || '').toUpperCase() === 'UBN' ? 'ULN' : String(code || '').toUpperCase();
 const springText = value => String(value ?? '')
   .replace(/春秋航空/g, 'Spring Airlines')
