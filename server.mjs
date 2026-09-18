@@ -439,6 +439,8 @@ const normaliseSpring = async item => {
       remainingSeats: seat.remSeatNum ?? seat.remainSeatNum ?? null,
       baggage,
       rules: normaliseFareRules(allowance),
+      conditionData: allowance,
+      productGrade: seat.combGrade ?? null,
       spring: {
         segHeadId: basic.segHeadId ?? null,
         combId: seat.combId ?? null,
@@ -1382,6 +1384,30 @@ try {
   return send(res, error.status || 400, { error: error.message || 'Invalid request.' });
 }
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
+if (url.pathname === '/api/flights/prices' && req.method === 'POST') {
+  let selections;
+  try {
+    limitRequest(`price-batch:${req.securityProfile.id}`, 8, 60000);
+    const body = await readJson(req);
+    if (!Array.isArray(body.selections) || !body.selections.length || body.selections.length > 32) throw new Error('Supply 1–32 fare selections.');
+    selections = body.selections.map(flights => priceSelection(flights, body.passengers));
+  } catch (error) { return send(res, error.status || 400, { error: error.message }); }
+  try {
+    const client = createSpringClient();
+    const token = await client.getAccessToken();
+    const results = new Array(selections.length);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(3, selections.length) }, async () => {
+      while (next < selections.length) {
+        const index = next++;
+        try {
+          results[index] = { price: verifiedPrice(await client.getSpecificPrice(priceRequest(selections[index]), token.accessToken), selections[index]) };
+        } catch { results[index] = { error: 'Price could not be verified. Retry or search again.' }; }
+      }
+    }));
+    return send(res, 200, { results });
+  } catch { return send(res, 502, { error: 'Spring price verification is unavailable.' }); }
+}
 if (url.pathname === '/api/flights/price' && req.method === 'POST') {
   let selection;
   try {

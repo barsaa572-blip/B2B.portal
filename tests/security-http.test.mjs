@@ -65,6 +65,15 @@ test('HTTP boundary blocks private files, anonymous finance, forged origins and 
   quoteBody.passengers.children = -1;
   assert.equal((await call('/api/flights/price', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(quoteBody) })).status, 400);
   assert.equal(priceCalls, 1);
+  assert.equal((await call('/api/flights/prices', { method: 'POST' })).status, 401);
+  const batchBody = { selections: [quoteBody.flights, quoteBody.flights], passengers: { adults: 1, children: 1, infants: 1 } };
+  const batch = await call('/api/flights/prices', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(batchBody) });
+  assert.equal(batch.status, 200);
+  assert.deepEqual((await batch.json()).results.map(result => result.price.total), [160, 160]);
+  assert.equal(priceCalls, 3);
+  batchBody.selections = Array(33).fill(quoteBody.flights);
+  assert.equal((await call('/api/flights/prices', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(batchBody) })).status, 400);
+  assert.equal(priceCalls, 3);
   assert.equal((await call('/api/admin/overview', { headers: auth })).status, 403);
   assert.equal((await call('/api/backend/status', { headers: auth })).status, 403);
   for (const action of ['issue', 'refund-submit', 'sync']) assert.equal((await call(`/api/bookings/OTHER/${action}`, { method: 'POST', headers: auth })).status, 403);

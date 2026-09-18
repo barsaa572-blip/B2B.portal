@@ -25,6 +25,7 @@ async function run(fetchImpl, trip = 'oneway') {
     document: { querySelector: key => nodes[key] }, resultArea, URLSearchParams,
     outboundDateInput: nodes['#outbound-date'], returnDateInput: nodes['#return-date'],
     tripType: trip, passengerCounts: () => ({ adults: 1 }),
+    resetFarePricing() {},
     visibleFlights: ['old'], selectedOutbound: {}, selectedReturn: {}, roundReturnFlights: [{}],
     toast: message => messages.push(message),
     escapeHtml: value => String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;'),

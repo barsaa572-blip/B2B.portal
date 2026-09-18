@@ -200,6 +200,30 @@ const downloadBookingDocument = async (pnr, type) => {
   document.body.append(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(href), 1_000);
 };
+// Read-only snapshot: never use the currently selected search flight/date for a saved booking.
+const bookingSavedFareRules = booking => {
+  const flights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
+  const missing = 'Not provided for this saved fare. Confirm with Spring before issuing.';
+  const amountText = entry => {
+    if (entry?.value === null || entry?.value === undefined || String(entry.value).trim() === '' || !Number.isFinite(Number(entry.value)) || Number(entry.value) < 0) return 'Not provided';
+    if (Number(entry.valueType) === 2) return `${Math.round(Number(entry.value) * 10000) / 100}% of applicable fare`;
+    if (Number(entry.valueType) === 1) return `${Number(entry.value).toFixed(2)} CNY`;
+    return 'Calculation method not provided';
+  };
+  const sections = flights.map((flight, index) => {
+    const fare = flight.fare || flight.spring?.fare || {};
+    const rules = Array.isArray(fare.rules) ? fare.rules : [];
+    const allowance = value => value === null || value === undefined || value === '' ? 'Not provided' : `${escapeHtml(value)} kg`;
+    const tables = [[1, 'Refund / cancellation'], [2, 'Date change']].map(([type, label]) => {
+      const rule = rules.find(item => Number(item.type) === type);
+      const entries = Array.isArray(rule?.entries) ? rule.entries : [];
+      const rows = entries.map(entry => `<tr><td>${escapeHtml(ruleWindowText(entry))}</td><td>${escapeHtml(amountText(entry))}</td></tr>`).join('');
+      return `<h4>${label}</h4>${rows ? `<table class="fare-policy-table"><thead><tr><th>Request time</th><th>Per adult — saved rule</th></tr></thead><tbody>${rows}</tbody></table>` : `<p>${missing}</p>`}`;
+    }).join('');
+    return `<section class="fare-policy-direction"><h3>${index === 0 ? 'Departure' : 'Return'} · ${escapeHtml(flight.departure?.id || '')} → ${escapeHtml(flight.arrival?.id || '')}</h3><p>${escapeHtml(flight.travelDate || (index ? booking.itinerary.returnDate : booking.itinerary.departureDate) || '')} · ${escapeHtml(fare.fareType || fare.bookingClass || 'Fare name not recorded')}</p>${tables}<h4>Baggage</h4><p>Carry-on: ${allowance(fare.baggage?.cabinKg)}<br>Checked: ${allowance(fare.baggage?.checkedKg)}${fare.baggage?.cabinSize ? `<br>Cabin size: ${escapeHtml(fare.baggage.cabinSize)} cm` : ''}</p></section>`;
+  }).join('');
+  return `<section class="booking-detail-card"><details class="saved-fare-rules"><summary><strong>Fare rules & baggage</strong></summary><p>Saved fare conditions from reservation, not a fresh airline quote. After a flight change these conditions may be outdated. Final change/refund charges must be confirmed with Spring; fare difference may also apply. Child/infant conditions and no-show terms must be confirmed if not explicitly supplied.</p>${sections || `<p>${missing}</p>`}</details></section>`;
+};
 const openBookingDetail = ref => {
   const booking = bookings.find(item => item.ref === ref);
   if (!booking) return;
@@ -218,6 +242,7 @@ const openBookingDetail = ref => {
   const ticketedActions = `<button type="button" class="secondary cancel-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Cancel ticket</button><button type="button" class="primary change-ticket-flow" ${allFlightsUsed ? 'disabled' : ''}>Change booking</button>`;
   const documentActions = booking.status === 'Ticketed' ? `<div class="booking-document-actions"><button type="button" class="secondary download-ticket">Print ticket (PDF)</button><button type="button" class="secondary download-receipt">Receipt (PDF)</button></div>` : '';
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div>${bookingTicketingDeadline(booking)}<section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}</section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section>${bookingFareBreakdown(booking)}${documentActions}<div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div></section>`;
+  modal.querySelector('.booking-detail-actions').insertAdjacentHTML('beforebegin', bookingSavedFareRules(booking));
   modal.querySelector('.booking-close').addEventListener('click', () => { clearInterval(bookingDeadlineTimer); modal.close(); });
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
   modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { const button = event.currentTarget; if (!confirm(`Issue ticket for ${booking.ref}? This will charge the agency wallet.`)) return; button.disabled = true; button.textContent = 'Issuing ticket…'; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Spring payment succeeded. Ticket ${booking.ref} is issued.`); } catch (error) { button.disabled = false; button.textContent = 'Issue ticket'; toast(error.message); } });
@@ -820,8 +845,7 @@ const pairTotal = pair => { const raw = [pair.outbound.price, pair.returnFlight.
 const passengerTotal = () => activePassengerCounts.adults + activePassengerCounts.children + activePassengerCounts.infants;
 const passengerFareCaption = () => `Total · ${passengerTotal()} passenger${passengerTotal() === 1 ? '' : 's'}`;
 const resultFare = price => {
-  const adultTotal = cnyAmount(price) * activePassengerCounts.adults;
-  return `<strong>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'Price unavailable'}</strong>`;
+  return '<span class="fare-price-pending" role="status">Checking passenger total…</span>';
 };
 const renderRoundPairs = pairs => { resultArea.classList.remove('hidden'); resultArea.innerHTML = `<div class="results-head"><h2>Round trip combinations</h2><span>Departure and arrival flights shown together</span></div>${pairs.length ? pairs.map((pair, index) => `<article class="round-pair">${searchRow(pair.outbound, 'DEPARTURE', `departure-detail-${index}`)}${searchRow(pair.returnFlight, 'ARRIVAL', `arrival-detail-${index}`)}<div class="pair-footer"><span>${pair.sameAirline ? 'Same airline return' : 'Alternative airline return'}</span><strong>${pairTotal(pair)}</strong><button class="primary select-round-pair" data-pair-index="${index}">Select itinerary</button></div></article>`).join('') : '<div class="no-results">No return combinations were found for the first outbound options.</div>'}`; document.querySelectorAll('.segment-toggle').forEach(button => button.addEventListener('click', () => { const detail = document.querySelector(`#${button.dataset.detailId}`); const open = detail.hidden; detail.hidden = !open; button.textContent = open ? '⌃' : '⌄'; button.setAttribute('aria-expanded', String(open)); })); document.querySelectorAll('.select-round-pair').forEach(button => button.addEventListener('click', () => { if (passengerSearchStale) return toast('Search again after changing passenger count before selecting an itinerary.'); const pair = pairs[Number(button.dataset.pairIndex)]; selectedOutbound = pair.outbound; selectedReturn = pair.returnFlight; showItinerary(); })); };
 const loadRoundPairs = async outboundFlights => { resultArea.classList.remove('hidden'); resultArea.innerHTML = '<div class="no-results"><strong>Building round trip combinations...</strong><br>Searching return flights for the best outbound options.</div>'; const shortlisted = outboundFlights.filter(flight => flight.departureToken).slice(0, 3); const resolved = await Promise.all(shortlisted.map(async outbound => { try { const returned = await getReturnFlights(outbound); return returned ? { outbound, returnFlight: returned.flight, sameAirline: returned.sameAirline } : null; } catch { return null; } })); renderRoundPairs(resolved.filter(Boolean)); };
@@ -833,6 +857,17 @@ const renderFlights = (results, phase = 'outbound', sameAirline = true) => {
   const heading = phase === 'return' ? 'Choose return flight' : 'Choose outbound flight'; const note = phase === 'return' ? (sameAirline ? 'Same airline options' : 'Same airline unavailable · alternative airlines shown') : 'Live search · Spring Airlines';
   resultArea.innerHTML = `${phase === 'return' ? selectedOutboundPanel() : ''}<div class="results-head"><h2>${heading}</h2><span>${note}</span></div>${flights || '<div class="no-results">No flights found for this route and date.</div>'}`;
   bindFlightButtons();
+  const targets = [...resultArea.querySelectorAll('.flight .fare')];
+  const generation = fareDisplayGeneration;
+  const choices = results.flatMap((flight, flightIndex) => (flight.fareOptions?.length ? flight.fareOptions : [flight.fare].filter(Boolean)).map(fare => ({ flights: [flight], fares: [fare], flightIndex })));
+  void priceFareChoices(choices, generation).then(priced => {
+    if (generation !== fareDisplayGeneration) return;
+    targets.forEach((target, index) => {
+      if (!target.isConnected) return;
+      const fares = cheapestDistinctChoices(priced.filter(choice => choice.flightIndex === index));
+      target.innerHTML = passengerPriceMarkup(fares[0]?.price, `${phase === 'return' ? 'Return' : 'Outbound'} · all passengers`);
+    });
+  }).catch(() => targets.forEach(target => { if (target.isConnected) target.innerHTML = passengerPriceMarkup(null); }));
 };
 const applyFareOption = (flight, fare) => {
   flight.fare = fare; flight.price = fare.total;
@@ -894,11 +929,98 @@ const inlineFareBreakdown = ({ baseFare = 0, taxes = 0, total = 0 }) => {
   };
   return `<div class="fare-price-breakdown"><span class="fare-breakdown-title">Price breakdown</span>${typeBlock(counts.adults === 1 ? 'Adult' : 'Adults', counts.adults, baseFare, taxes)}${typeBlock('Child', counts.children, 0, 0, true)}${typeBlock('Infant', counts.infants, 0, 0, true)}<div class="fare-breakdown-total"><span>Total</span><b>${counts.children || counts.infants ? 'To be confirmed' : quoteMnt(adultTotal)}</b></div></div>`;
 };
-const farePriceMarkup = (fare, multiplier = 1) => {
-  const total = cnyAmount(fare?.total ?? fare?.price ?? 0) * multiplier;
-  const adultTotal = total * activePassengerCounts.adults;
-  return `<div class="fare-family-price"><b>${Number.isFinite(adultTotal) ? quoteMnt(adultTotal) : 'To be confirmed'}</b></div>`;
+const canonicalFareData = value => {
+  if (Array.isArray(value)) return value.map(canonicalFareData).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonicalFareData(value[key])]));
+  return value;
 };
+const fareConditionKey = (fare, unique) => {
+  const rules = fare?.rules;
+  const bag = fare?.baggage;
+  // Unknown conditions are not evidence that two products are equivalent.
+  if (!bag || ['cabinKg', 'checkedKg'].some(key => bag[key] == null) || !Array.isArray(rules) || ![1, 2].every(type => rules.some(rule => Number(rule.type) === type && rule.entries?.length))) return `unknown:${unique}`;
+  const incomplete = rules.some(rule => !Array.isArray(rule.entries) || rule.entries.some(e => e.value == null || !Number.isFinite(Number(e.value)) || ![1, 2].includes(Number(e.valueType))));
+  if (incomplete) return `unknown:${unique}`;
+  const percentage = rules.some(rule => rule.entries.some(e => Number(e.valueType) === 2));
+  return JSON.stringify(canonicalFareData({ baggage: bag, rules, supplierConditions: fare.conditionData ?? null, productGrade: fare.productGrade ?? null, productType: fare.spring?.combType ?? null, cabinType: fare.spring?.cabinType ?? null, percentageBase: percentage ? fare.baseFare : null, benefits: fare.benefits ?? null, restrictions: fare.restrictions ?? null }));
+};
+const cheapestDistinctChoices = choices => {
+  const groups = new Map();
+  const sorted = [...choices].sort((a, b) => (a.price?.total ?? Infinity) - (b.price?.total ?? Infinity));
+  sorted.forEach((choice, index) => {
+    // Keep unverified choices separate and visibly unavailable, never label them cheapest.
+    const key = choice.price ? JSON.stringify(choice.fares.map((fare, leg) => fareConditionKey(fare, `${index}:${leg}`))) : `unverified:${index}`;
+    if (!groups.has(key)) groups.set(key, choice);
+  });
+  return [...groups.values()];
+};
+let fareDisplayGeneration = 0;
+let fareDisplayQueue = Promise.resolve();
+const fareDisplayCache = new Map();
+const resetFarePricing = () => { fareDisplayGeneration++; fareDisplayCache.clear(); };
+const fareChoiceRequest = choice => choice.flights.map((flight, index) => {
+  const metadata = { ...flight.spring, ...choice.fares[index].spring };
+  return { spring: Object.fromEntries(['segHeadId', 'combId', 'combType', 'combPrice', 'adultCabin', 'cabinType', 'moneyClassId'].map(key => [key, metadata[key]])) };
+});
+const priceFareChoices = (choices, generation = fareDisplayGeneration) => {
+  const passengers = { ...activePassengerCounts };
+  const actor = portalSession().profile?.id;
+  const run = async () => {
+    if (generation !== fareDisplayGeneration) return [];
+    if (choices.length > 256) throw new Error('Too many fare combinations to verify. Please narrow the search.');
+    const keys = choices.map(choice => JSON.stringify({ flights: fareChoiceRequest(choice), passengers, actor }));
+    const pending = [...new Set(keys.filter(key => !(fareDisplayCache.get(key)?.expiresAt > Date.now())))];
+    for (let offset = 0; offset < pending.length; offset += 32) {
+      if (generation !== fareDisplayGeneration) return [];
+      const batch = pending.slice(offset, offset + 32);
+      const response = await secureFetch('/api/flights/prices', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ passengers, selections: batch.map(key => JSON.parse(key).flights) }) });
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data.results) || data.results.length !== batch.length) throw new Error(data.error || 'Fare totals could not be verified.');
+      if (generation !== fareDisplayGeneration || actor !== portalSession().profile?.id) return [];
+      batch.forEach((key, index) => {
+        const price = data.results[index].price;
+        if (price?.currency === 'CNY' && Number.isFinite(price.total) && Array.isArray(price.breakdown)) fareDisplayCache.set(key, { price, expiresAt: Date.now() + 60000 });
+        else fareDisplayCache.delete(key);
+      });
+    }
+    return choices.map((choice, index) => ({ ...choice, price: fareDisplayCache.get(keys[index])?.price || null }));
+  };
+  const result = fareDisplayQueue.then(run, run);
+  fareDisplayQueue = result.catch(() => {});
+  return result;
+};
+const passengerPriceMarkup = (price, caption = 'Total · all passengers') => {
+  if (!price) return '<span class="fare-price-pending">Total unavailable — retry search</span>';
+  const labels = { adults: 'Adult', children: 'Child', infants: 'Infant' };
+  return `<span class="passenger-price" tabindex="0" aria-label="${escapeHtml(caption)}; focus for passenger breakdown"><strong>${quoteMnt(price.total)}</strong><small>${escapeHtml(caption)}</small><span class="passenger-price-tooltip" role="tooltip">${price.breakdown.map(row => `<span class="passenger-price-line"><b>${labels[row.type] || 'Passenger'} × ${row.count}</b><b>${quoteMnt(row.total)}</b></span><span class="passenger-price-line"><span>Fare ${quoteMnt(row.fare)}</span><span>Taxes ${quoteMnt(row.taxes)}</span></span>`).join('')}<span class="passenger-price-line"><b>Total</b><b>${quoteMnt(price.total)}</b></span></span></span>`;
+};
+const farePriceMarkup = fare => `<div class="fare-family-price">${passengerPriceMarkup(fare.displayPrice)}</div>`;
+// Body-level tooltip avoids clipping inside the horizontal fare carousel.
+(() => {
+  let popover, owner;
+  const hide = () => { if (popover) popover.hidden = true; owner = null; };
+  const show = event => {
+    const source = event.target.closest('.passenger-price');
+    if (!source) return;
+    const content = source.querySelector('.passenger-price-tooltip');
+    if (!content) return;
+    if (!popover) { popover = document.createElement('div'); popover.className = 'passenger-price-popover'; popover.id = 'passenger-price-popover'; popover.setAttribute('role', 'tooltip'); document.body.append(popover); }
+    owner = source;
+    popover.innerHTML = content.innerHTML; popover.hidden = false;
+    source.setAttribute('aria-describedby', popover.id);
+    const rect = source.getBoundingClientRect();
+    popover.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - popover.offsetWidth - 8))}px`;
+    popover.style.top = `${Math.max(8, rect.top > popover.offsetHeight + 12 ? rect.top - popover.offsetHeight - 8 : Math.min(rect.bottom + 8, window.innerHeight - popover.offsetHeight - 8))}px`;
+  };
+  document.addEventListener('mouseover', show);
+  document.addEventListener('focusin', show);
+  const leave = event => { if (owner && !owner.contains(event.relatedTarget)) hide(); };
+  document.addEventListener('mouseout', event => { if (!owner?.contains(document.activeElement)) leave(event); });
+  document.addEventListener('focusout', leave);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
+  window.addEventListener('scroll', () => { if (owner?.contains(document.activeElement)) show({ target: owner }); else hide(); }, true);
+  window.addEventListener('resize', hide);
+})();
 const fareBreakdownMarkup = (fare, multiplier = 1) => inlineFareBreakdown({
   baseFare: cnyAmount(fare?.baseFare ?? fare?.price ?? 0) * multiplier,
   taxes: cnyAmount(fare?.taxes ?? 0) * multiplier,
@@ -944,9 +1066,17 @@ const continueWithFare = (flight, fare, phase) => {
   if (roundReturnFlights.length) return renderFlights(roundReturnFlights, 'return', true);
   resultArea.innerHTML = '<div class="no-results"><strong>Return flight is unavailable.</strong><br>Please search again or choose another outbound flight.</div>';
 };
-const showFareOptions = (flight, phase) => {
-  const options = flight.fareOptions?.length ? flight.fareOptions : [flight.fare].filter(Boolean);
-  if (options.length < 2) return continueWithFare(flight, options[0] || { total: flight.price, baseFare: flight.price, taxes: 0, fareType: 'Public fare', cabin: 'Economy' }, phase);
+const showFareOptions = async (flight, phase) => {
+  const rawOptions = flight.fareOptions?.length ? flight.fareOptions : [flight.fare].filter(Boolean);
+  resultArea.innerHTML = '<div class="no-results" role="status">Comparing fare conditions and verifying all passenger totals…</div>';
+  const loading = resultArea.firstElementChild;
+  let options;
+  try {
+    const choices = await priceFareChoices(rawOptions.map(fare => ({ flights: [flight], fares: [fare] })));
+    if (!loading.isConnected) return;
+    options = cheapestDistinctChoices(choices).map(choice => ({ ...choice.fares[0], displayPrice: choice.price }));
+    if (!options.some(fare => fare.displayPrice)) throw new Error('No fares could be verified. Please search again.');
+  } catch (error) { if (loading.isConnected) loading.textContent = error.message; return; }
   const leg = phase === 'return' ? 'Return' : 'Departure';
   resultArea.classList.remove('hidden');
   const selections = { [phase]: 0 };
@@ -955,6 +1085,7 @@ const showFareOptions = (flight, phase) => {
     const selectedFare = options[selections[phase]];
     resultArea.innerHTML = `<section class="fare-choice-screen"><header><p class="eyebrow">${leg.toUpperCase()} FLIGHT · FARE SELECTION</p><h2>Select your fare</h2><div class="fare-selected-flights one-way-fare-selection">${fareSelectionFlight(flight, leg, phase)}</div></header><div class="fare-carousel"><button type="button" class="fare-scroll fare-scroll-back" aria-label="Previous fares">‹</button><div class="fare-choice-grid">${options.map((fare, index) => fareChoiceCard(fare, index, phase, selections[phase] === index, flight, index === 0)).join('')}</div><button type="button" class="fare-scroll fare-scroll-next" aria-label="Next fares">›</button></div><footer class="fare-choice-footer"><div>${fareBreakdownMarkup(selectedFare)}</div><button class="primary confirm-single-fare">Continue to passenger details</button></footer></section>`;
     bindFareCarousel(resultArea, selections, render);
+    resultArea.querySelectorAll('[data-fare-bound]').forEach(card => { card.disabled = !options[Number(card.dataset.fareIndex)].displayPrice; });
     void verifyFarePreview([{ spring: { ...flight.spring, ...selectedFare.spring } }]);
     resultArea.querySelector('.confirm-single-fare').addEventListener('click', () => continueWithFare(flight, options[selections[phase]], phase));
   };
@@ -963,33 +1094,20 @@ const showFareOptions = (flight, phase) => {
 const roundFareKey = fare => String(fare?.fareType || fare?.bookingClass || fare?.cabin || '').trim().toUpperCase();
 const buildSharedRoundFares = (outboundOptions, returnOptions) => {
   if (!outboundOptions.length || !returnOptions.length) return [];
-  const pairs = []; const added = new Set();
-  const addPair = (outboundIndex, returnIndex) => {
-    if (outboundIndex < 0 || returnIndex < 0) return;
-    const id = `${outboundIndex}:${returnIndex}`;
-    if (added.has(id)) return;
-    const outbound = outboundOptions[outboundIndex]; const inbound = returnOptions[returnIndex];
-    const outboundName = roundFareKey(outbound) || 'Economy'; const inboundName = roundFareKey(inbound) || 'Economy';
-    added.add(id);
-    pairs.push({
-      outbound, inbound, outboundIndex, returnIndex,
-      label: outboundName === inboundName ? outboundName : `${outboundName} + ${inboundName}`,
-      subtitle: outboundName === inboundName ? 'Same fare family for departure and return' : `Departure ${outboundName} · Return ${inboundName}`
-    });
+  // Preserve the available pair-selection policy; verify and group these actual
+  // candidates, without multiplying every cabin into hundreds of API requests.
+  const pairs = [], seen = new Set();
+  const add = (outboundIndex, returnIndex) => {
+    const key = `${outboundIndex}:${returnIndex}`;
+    if (seen.has(key) || outboundIndex < 0 || returnIndex < 0) return;
+    seen.add(key);
+    const outbound = outboundOptions[outboundIndex], inbound = returnOptions[returnIndex];
+    pairs.push({ outbound, inbound, label: `${roundFareKey(outbound)} + ${roundFareKey(inbound)}`,
+      subtitle: 'Departure + return fare', fares: [outbound, inbound], flights: [selectedOutbound, selectedReturn] });
   };
-  // Always put the cheapest live fare on each bound together first, even when
-  // Spring returns different booking classes (for example P outbound + R4 return).
-  addPair(0, 0);
-  const outboundFamilies = [...new Set(outboundOptions.map(roundFareKey).filter(Boolean))];
-  outboundFamilies.forEach(key => {
-    const outboundIndex = outboundOptions.findIndex(fare => roundFareKey(fare) === key);
-    const returnIndex = returnOptions.findIndex(fare => roundFareKey(fare) === key);
-    if (returnIndex >= 0) addPair(outboundIndex, returnIndex);
-  });
-  // Retain the remaining price tiers without making a large all-to-all matrix.
-  for (let index = 1; index < Math.max(outboundOptions.length, returnOptions.length); index += 1) {
-    addPair(Math.min(index, outboundOptions.length - 1), Math.min(index, returnOptions.length - 1));
-  }
+  add(0, 0);
+  [...new Set(outboundOptions.map(roundFareKey))].forEach(key => add(outboundOptions.findIndex(fare => roundFareKey(fare) === key), returnOptions.findIndex(fare => roundFareKey(fare) === key)));
+  for (let index = 1; index < Math.max(outboundOptions.length, returnOptions.length); index++) add(Math.min(index, outboundOptions.length - 1), Math.min(index, returnOptions.length - 1));
   return pairs;
 };
 const baggageAllowanceText = (fare, kind) => {
@@ -1070,17 +1188,24 @@ const showSelectedFareDetails = () => {
 };
 const sharedRoundFareCard = (pair, index, selected) => {
   const combinedFare = {
+    displayPrice: pair.price,
     baseFare: cnyAmount(pair.outbound?.baseFare) + cnyAmount(pair.inbound?.baseFare),
     taxes: cnyAmount(pair.outbound?.taxes) + cnyAmount(pair.inbound?.taxes),
     total: cnyAmount(pair.outbound?.total) + cnyAmount(pair.inbound?.total)
   };
   return `<div class="fare-choice-item"><button type="button" class="fare-family-choice ${selected ? 'recommended' : ''}" data-shared-fare-index="${index}"><span class="fare-family-top"><b>${pair.label} class</b><i class="fare-radio" aria-hidden="true"></i></span><small>${pair.subtitle}</small>${index === 0 ? '<em class="fare-recommended">Lowest available pair</em>' : ''}<hr><strong>Baggage</strong><p>${sharedBaggageSummary(pair)}</p><strong>Flexibility</strong><p>Cancellation: ${roundFeeSummary(pair, 1)}<br>Change: ${roundFeeSummary(pair, 2)}</p>${farePriceMarkup(combinedFare)}</button><div class="shared-fare-actions"><button type="button" class="text-btn shared-fare-details" data-shared-fare-index="${index}">Details</button></div></div>`;
 };
-const showRoundFareOptions = () => {
+const showRoundFareOptions = async () => {
   const outboundOptions = selectedOutbound?.fareOptions?.length ? selectedOutbound.fareOptions : [selectedOutbound?.fare].filter(Boolean);
   const returnOptions = selectedReturn?.fareOptions?.length ? selectedReturn.fareOptions : [selectedReturn?.fare].filter(Boolean);
-  const pairs = buildSharedRoundFares(outboundOptions, returnOptions);
-  if (!pairs.length) return toast('No shared fare is available for this round trip. Please select another flight.');
+  resultArea.innerHTML = '<div class="no-results" role="status">Comparing round-trip fare conditions and verifying all passenger totals…</div>';
+  const loading = resultArea.firstElementChild;
+  let pairs;
+  try {
+    pairs = cheapestDistinctChoices(await priceFareChoices(buildSharedRoundFares(outboundOptions, returnOptions)));
+    if (!loading.isConnected) return;
+  } catch (error) { if (loading.isConnected) loading.textContent = error.message; return; }
+  if (!pairs.some(pair => pair.price)) { loading.textContent = 'No round-trip totals could be verified. Please search again.'; return; }
   const selections = { shared: 0 };
   const render = () => {
     const pair = pairs[selections.shared];
@@ -1093,6 +1218,7 @@ const showRoundFareOptions = () => {
       if (button.classList.contains('shared-fare-details')) { event.stopPropagation(); return showSharedRoundFareDetails(pairs[index], 'baggage'); }
       selections.shared = index; render();
     }));
+    resultArea.querySelectorAll('.fare-family-choice[data-shared-fare-index]').forEach(card => { card.disabled = !pairs[Number(card.dataset.sharedFareIndex)].price; });
     resultArea.querySelectorAll('.fare-scroll').forEach(button => button.addEventListener('click', () => {
       const scroller = button.parentElement.querySelector('.fare-choice-grid');
       scroller.scrollBy({ left: (button.classList.contains('fare-scroll-back') ? -1 : 1) * Math.max(300, scroller.clientWidth * .8), behavior: 'smooth' });
@@ -1156,6 +1282,7 @@ document.querySelector('#search-form').addEventListener('submit', async e => {
   const returnDate = returnDateInput.value;
   if (!departure || !arrival || !outboundDate || (tripType === 'round' && !returnDate)) { toast('Choose From, To and travel date before searching.'); return; }
   activePassengerCounts = passengerCounts(); passengerSearchStale = false;
+  resetFarePricing();
   selectedOutbound = null; selectedReturn = null; roundReturnFlights = []; button.disabled = true; button.textContent = 'Searching…';
   visibleFlights = []; searchPhase = 'outbound';
   resultArea.classList.remove('hidden');
