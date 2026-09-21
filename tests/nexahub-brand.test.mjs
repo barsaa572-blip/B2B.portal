@@ -12,6 +12,10 @@ test('NEXAHUB replaces visible legacy branding without changing session keys', (
   assert.match(read('index.html'), /<title>NEXAHUB<\/title>/);
   assert.match(read('auth.js'), /flightb2b-session/);
   assert.equal(isPublicAsset('nexahub-logo.png'), true);
+  assert.equal(isPublicAsset('nexahub-favicon.png'), true);
+  assert.match(read('index.html'), /rel="icon" type="image\/png" href="\/nexahub-favicon\.png\?v=20260921"/);
+  const favicon = readFileSync(new URL('../nexahub-favicon.png', import.meta.url));
+  assert.equal(favicon.subarray(1, 4).toString(), 'PNG');
   assert.equal(isPublicAsset('private.png'), false);
   const png = readFileSync(new URL('../nexahub-logo.png', import.meta.url));
   assert.equal(png.subarray(1, 4).toString(), 'PNG');

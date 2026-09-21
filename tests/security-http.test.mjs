@@ -53,6 +53,10 @@ test('HTTP boundary blocks private files, anonymous finance, forged origins and 
   assert.equal(logo.status, 200);
   assert.equal(logo.headers.get('content-type'), 'image/png');
   assert.equal(Buffer.from(await logo.arrayBuffer()).subarray(1, 4).toString(), 'PNG');
+  const favicon = await call('/nexahub-favicon.png?v=20260921');
+  assert.equal(favicon.status, 200);
+  assert.equal(favicon.headers.get('content-type'), 'image/png');
+  assert.equal(Buffer.from(await favicon.arrayBuffer()).subarray(1, 4).toString(), 'PNG');
   for (const path of ['/.env', '/.git/config', '/server.mjs', '/backend/supabase-client.mjs', '/supabase/schema.sql', '/README.md']) assert.equal((await call(path)).status, 404, path);
   for (const path of ['/api/wallet', '/api/bookings', '/api/topups', '/api/flights', '/api/backend/status']) assert.equal((await call(path)).status, 401, path);
   const initialWrites = writes;
