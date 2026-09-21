@@ -15,4 +15,8 @@ test('NEXAHUB replaces visible legacy branding without changing session keys', (
   assert.equal(isPublicAsset('private.png'), false);
   const png = readFileSync(new URL('../nexahub-logo.png', import.meta.url));
   assert.equal(png.subarray(1, 4).toString(), 'PNG');
+  assert.equal(png.readUInt32BE(16), 2172);
+  assert.equal(png.readUInt32BE(20), 724);
+  assert.match(read('index.html'), /flightmark-20260921/);
+  assert.doesNotMatch(read('auth.js'), /Secure airline ticketing|Your access level is assigned|auth-permissions/);
 });

@@ -1,14 +1,58 @@
-.sidebar .nexahub-brand { padding: 0; justify-content: center; }
-.nexahub-brand img, .nexahub-auth-logo { display: block; height: auto; object-fit: contain; border-radius: 0; background: transparent; }
-/* Blend the supplied logo's light background away without changing its artwork. */
-.sidebar .nexahub-brand img { width: 208px; max-width: 100%; filter: contrast(1.15); mix-blend-mode: multiply; }
-.auth-card .auth-intro { display: flex; align-items: center; justify-content: center; padding: 40px; isolation: isolate; }
-.auth-intro .nexahub-auth-logo { width: 280px; max-width: 100%; filter: grayscale(1) invert(1) brightness(2) contrast(2); mix-blend-mode: screen; }
-html[data-theme="dark"] .sidebar .nexahub-brand img { filter: grayscale(1) invert(1) brightness(2) contrast(2); mix-blend-mode: screen; }
-@media (min-width: 651px) and (max-width: 950px) {
-  .sidebar .nexahub-brand img { width: 50px; height: auto; }
+/* NEXAHUB flightmark: appearance only; booking and access rules are unchanged. */
+:root { --nexa-navy:#0b315d; --nexa-blue:#007ee8; --nexa-sky:#159df3; --bg:#f4f7fb; --ink:#14304d; --muted:#6a7d94; --line:#dee7f1; --blue:#006ac4; --sky:#edf6ff; --ui-font:"Segoe UI",-apple-system,BlinkMacSystemFont,sans-serif; }
+.sidebar { background:#f8faff; border-color:var(--line); }
+.sidebar .nexahub-brand { padding:0; justify-content:center; min-height:78px; }
+.nexahub-brand img,.nexahub-auth-logo { display:block; height:auto; object-fit:contain; border-radius:0; background:transparent; filter:none; mix-blend-mode:multiply; }
+.sidebar .nexahub-brand img { width:228px; max-width:100%; }
+.sidebar .workspace { margin-top:28px; color:#637e9e; letter-spacing:.14em; }
+.nav-link { color:#405b77; }
+.nav-link:hover { background:#edf5fe; color:var(--nexa-navy); }
+.nav-link.active { background:#e4f1ff; color:#075da8; box-shadow:inset 3px 0 var(--nexa-blue); }
+.avatar { background:#dfedff; color:var(--nexa-navy); }
+.wallet-banner,.balance-card { background:linear-gradient(115deg,#0b2c54,#104779 65%,#087ecc); }
+.primary { background:#006ac4; border-color:#006ac4; box-shadow:0 4px 12px #007ee81c; }
+.primary:hover { background:#095797; border-color:#095797; }
+.text-btn { color:#006ac4; }
+.secondary { color:var(--nexa-navy); border-color:#cedeed; }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid var(--nexa-sky); outline-offset:3px; }
+input[type="checkbox"],input[type="radio"] { accent-color:var(--nexa-blue); }
+.search-panel .trip-tabs { background:#eaf1f9; }
+.search-panel .trip-tabs button.selected { color:var(--nexa-navy); }
+.fare-family-choice.selected { border-color:var(--nexa-navy); }
+.fare-family-price .passenger-price > strong { color:#006ac4; }
+th { background:#f5f8fc; color:#617894; }
+/* Preserve the supplied two-tone logo on an open light panel. */
+#auth-root { background:radial-gradient(ellipse at 15% 15%,#e6f3ff,transparent 55%),#f3f7fc; overflow-y:auto; }
+.auth-card { width:min(1040px,100%); min-height:530px; border:1px solid #dce7f3; border-radius:26px; box-shadow:0 24px 80px #0b315d12; }
+.auth-card .auth-intro { position:relative; display:flex; align-items:center; justify-content:center; padding:28px; background:linear-gradient(155deg,#fff 15%,#f0f7ff); border-right:1px solid #e1ebf5; isolation:isolate; }
+.auth-intro::after { content:""; position:absolute; width:100px; height:4px; bottom:70px; left:calc(50% - 50px); border-radius:9px; background:linear-gradient(90deg,var(--nexa-navy),var(--nexa-sky)); }
+.auth-intro .nexahub-auth-logo { width:490px; max-width:100%; }
+.auth-card .auth-form { display:flex; flex-direction:column; justify-content:center; padding:54px; }
+.auth-form h2 { color:var(--nexa-navy); font-size:28px; letter-spacing:-.03em; }
+.auth-form label { color:#425c78; }
+.auth-form input { border-color:#cfdfed; min-height:48px; }
+.auth-form .auth-signin { margin-top:22px; min-height:48px; background:linear-gradient(110deg,#0b315d,#006ac4); border:0; }
+.auth-form .auth-signin:hover { background:linear-gradient(110deg,#092848,#075da8); }
+html[data-theme="dark"] { --bg:#0d1725; --ink:#eaf3ff; --line:#2c4058; --muted:#b0c3d9; }
+html[data-theme="dark"] body,html[data-theme="dark"] #auth-root { background:#0d1725; }
+html[data-theme="dark"] .sidebar,html[data-theme="dark"] .auth-form { background:#142338; }
+html[data-theme="dark"] .sidebar .nexahub-brand img { filter:grayscale(1) invert(1) brightness(2) contrast(2); mix-blend-mode:screen; }
+html[data-theme="dark"] .auth-form h2,html[data-theme="dark"] .auth-form label { color:#eaf3ff; }
+html[data-theme="dark"] .auth-card,html[data-theme="dark"] .auth-card .auth-intro { border-color:#2c4058; }
+html[data-theme="dark"] .fare-family-price .passenger-price > strong { color:#85baff; }
+@media (min-width:651px) and (max-width:950px) {
+  .sidebar .nexahub-brand { min-height:42px; }
+  .sidebar .nexahub-brand img { width:50px; }
 }
-@media (max-width: 720px) {
-  .auth-card .auth-intro { padding: 28px; min-height: 150px; }
-  .auth-intro .nexahub-auth-logo { width: 250px; }
+@media (max-width:720px) {
+  #auth-root { padding:18px; align-items:start; }
+  .auth-card { min-height:auto; margin:30px 0 55px; }
+  .auth-card .auth-intro { padding:24px 18px; min-height:150px; border-right:0; border-bottom:1px solid #e1ebf5; }
+  .auth-intro .nexahub-auth-logo { width:340px; }
+  .auth-intro::after { display:none; }
+  .auth-card .auth-form { padding:28px; }
+}
+@media (max-height:650px) and (min-width:721px) {
+  #auth-root { align-items:start; }
+  .auth-card { margin-bottom:45px; }
 }
