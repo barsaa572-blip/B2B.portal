@@ -1,0 +1,6 @@
+.sidebar .nexahub-brand { padding: 0; justify-content: center; }
+.nexahub-brand img, .nexahub-auth-logo { display: block; width: 138px; height: 56px; object-fit: contain; border-radius: 8px; background: #fff; }
+.auth-intro .nexahub-byline { margin: -4px 0 22px; font-size: 15px; letter-spacing: .06em; }
+@media (min-width: 651px) and (max-width: 950px) {
+  .sidebar .nexahub-brand img { width: 50px; height: auto; }
+}

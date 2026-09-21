@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
   const server = createServer((req, res) => {
     const name = new URL(req.url, 'http://localhost').pathname.slice(1) || 'index.html';
     if (!/^[a-z0-9.-]+$/i.test(name)) { res.writeHead(404); return res.end(); }
-    try { res.setHeader('content-type', name.endsWith('.js') ? 'application/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html'); res.end(readFileSync(path.join(root, name))); }
+    try { res.setHeader('content-type', name.endsWith('.js') ? 'application/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.png') ? 'image/png' : 'text/html'); res.end(readFileSync(path.join(root, name))); }
     catch { res.writeHead(404); res.end(); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -39,6 +39,8 @@ const root = path.resolve(__dirname, '..');
     });
     await page.addInitScript(() => sessionStorage.setItem('flightb2b-session', JSON.stringify({ accessToken: 'local-fake', expiresAt: Date.now() + 3600000, profile: { id: 'local', role: 'agent', agency_id: 'local', active: true } })));
     await page.goto(origin);
+    assert.equal(await page.title(), 'NEXAHUB');
+    await page.waitForFunction(() => document.querySelector('.nexahub-brand img')?.naturalWidth > 0);
     await page.evaluate(() => {
       showView('search');
       activePassengerCounts = { adults: 1, children: 1, infants: 1 };
@@ -100,5 +102,18 @@ const root = path.resolve(__dirname, '..');
       assert.ok(layout.width <= width);
     }
     console.log('PASS: compact totals, simple hover preview, grouping, checkout baggage links, removed controls, single modal scroll on desktop/mobile');
+    await page.evaluate(() => {
+      document.querySelector('#fare-rule-modal')?.close();
+      window.forcePortalSignOut();
+    });
+    await page.locator('.nexahub-auth-logo').waitFor();
+    await page.waitForFunction(() => document.querySelector('.nexahub-auth-logo')?.naturalWidth > 0);
+    assert.equal(await page.locator('.auth-intro h1').innerText(), 'NEXAHUB');
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    }
+    if (process.argv[4]) await page.screenshot({ path: process.argv[4] });
+    console.log('PASS: NEXAHUB login and sidebar logos load; desktop/mobile branding');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
