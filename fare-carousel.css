@@ -1,6 +1,7 @@
 /* The first search row stays compact. Fare families are revealed only after
    Select, and the choices intentionally scroll horizontally rather than wrap. */
 .passenger-price { display: inline-flex; flex-direction: column; gap: 5px; cursor: help; }
+.flight .fare .passenger-price { display: inline-flex; margin: 0; color: inherit; }
 .passenger-price > small { font-size: 11px; font-weight: 400; color: #65758c; }
 .fare-family-price .passenger-price > strong { display: block; font-size: 20px; font-weight: 750; color: #0866ff; }
 .passenger-price:focus-visible { outline: 2px solid #087cff; outline-offset: 4px; border-radius: 4px; }
@@ -153,8 +154,8 @@ html[data-theme="dark"] .fare-family-price .passenger-price > strong { color: #8
 .fare-rule-block h3 { margin: 0; padding: 11px 13px; background: #f3f6fb; color: #1b385f; font-size: 13px; }
 .fare-rule-block div { display: flex; justify-content: space-between; gap: 18px; padding: 9px 13px; border-top: 1px solid #edf1f6; color: #63728a; font-size: 12px; }
 .fare-rule-block strong { color: #173762; white-space: nowrap; }
-.fare-details-dialog { width: min(1180px, calc(100vw - 36px)); max-width: 1180px; max-height: calc(100vh - 36px); }
-.round-fare-modal { width: 100%; max-width: none; max-height: calc(100vh - 36px); overflow: auto; }
+.fare-details-dialog { width: min(1180px, calc(100vw - 36px)); max-width: 1180px; max-height: calc(100dvh - 36px); overflow: auto; overscroll-behavior: contain; }
+.fare-details-dialog .round-fare-modal { width: 100%; max-width: none; max-height: none; overflow: visible; }
 .round-fare-modal::after { content: ''; display: block; height: 2px; }
 .fare-detail-tabs { display: flex; gap: 2px; border-bottom: 1px solid #dce4ef; margin: 20px -26px 20px; padding: 0 26px; }
 .fare-detail-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 13px; color: #536987; cursor: pointer; font-weight: 700; }

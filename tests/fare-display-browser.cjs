@@ -49,9 +49,11 @@ const root = path.resolve(__dirname, '..');
       renderFlights([window.localFlight]);
     });
     await page.locator('.flight .passenger-price').waitFor();
+    assert.equal(await page.locator('.flight .passenger-price').innerText(), await page.evaluate(() => quoteMnt(1360)));
     await page.locator('.flight .passenger-price').hover();
     await page.locator('.passenger-price-popover:not([hidden])').waitFor();
     assert.match(await page.locator('.passenger-price-popover').innerText(), /Child × 1/);
+    assert.doesNotMatch(await page.locator('.passenger-price-popover').innerText(), /Fare|Taxes/);
     await page.mouse.move(0, 0);
     assert.equal(await page.locator('.passenger-price-popover').isVisible(), false);
     await page.evaluate(() => showFareOptions(window.localFlight, 'outbound'));
@@ -78,6 +80,25 @@ const root = path.resolve(__dirname, '..');
     await page.locator('.fare-family-choice').last().locator('.passenger-price').focus();
     await page.locator('.passenger-price-popover:not([hidden])').waitFor();
     assert.match(await page.locator('.passenger-price-popover').innerText(), /Child × 1/);
-    console.log('PASS: flight, one-way and round-trip totals/grouping; hover, hide and keyboard tooltip');
+    await page.evaluate(() => prepareBookingScreen());
+    await page.waitForFunction(() => Boolean(currentBookingQuote()));
+    assert.equal(await page.locator('[data-verify-booking-price]').count(), 0);
+    assert.doesNotMatch(await page.locator('.booking-price-panel').innerText(), /Live CNY price verified/);
+    assert.match(await page.locator('.booking-price-panel').innerText(), /Ticket fare/);
+    await page.locator('.booking-price-panel .selected-fare-details').first().click();
+    await page.locator('#fare-rule-modal[open]').waitFor();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 700 });
+      await page.locator('[data-fare-tab="rules"]').click();
+      const layout = await page.locator('#fare-rule-modal').evaluate(dialog => ({
+        dialogOverflow: getComputedStyle(dialog).overflowY,
+        formOverflow: getComputedStyle(dialog.querySelector('form')).overflowY,
+        width: dialog.getBoundingClientRect().width
+      }));
+      assert.equal(layout.dialogOverflow, 'auto');
+      assert.equal(layout.formOverflow, 'visible');
+      assert.ok(layout.width <= width);
+    }
+    console.log('PASS: compact totals, simple hover preview, grouping, checkout baggage links, removed controls, single modal scroll on desktop/mobile');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

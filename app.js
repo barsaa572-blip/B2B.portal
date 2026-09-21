@@ -735,7 +735,7 @@ const checkoutPricePanel = () => {
   const quote = currentBookingQuote();
   const labels = { adults: 'Adult', children: 'Child', infants: 'Infant' };
   const rows = quote ? quote.breakdown.map(row => `<section class="price-section"><div class="price-section-heading"><span>${labels[row.type]} × ${row.count}</span><strong>${quoteMnt(row.total)}</strong></div><div class="price-line"><span>Ticket fare</span><b>${quoteMnt(row.fare)}</b></div><div class="price-line"><span>Taxes & fees</span><b>${quoteMnt(row.taxes)}</b></div></section>`).join('') : `<p role="status">${escapeHtml(bookingQuoteError || 'Verifying all passenger prices with Spring…')}</p>`;
-  return `<aside class="order-summary booking-price-panel"><h2>Price details</h2>${rows}<div class="price-total"><span>Total</span><strong>${quote ? quoteMnt(quote.total) : 'To be confirmed'}</strong></div><p class="price-panel-note">${quote ? 'Live CNY price verified. MNT is a converted estimate. Price is rechecked before reservation; issuing a ticket requires a separate action.' : 'Booking is unavailable until all passenger prices are verified.'}</p><button type="button" class="secondary" data-verify-booking-price ${bookingQuoteLoading ? 'disabled' : ''}>${bookingQuoteLoading ? 'Verifying…' : 'Verify price again'}</button>${baggageSummary()}</aside>`;
+  return `<aside class="order-summary booking-price-panel"><h2>Price details</h2>${rows}<div class="price-total"><span>Total</span><strong>${quote ? quoteMnt(quote.total) : 'To be confirmed'}</strong></div>${quote ? '' : '<p class="price-panel-note">Booking is unavailable until all passenger prices are verified. Return to search to try again.</p>'}${baggageSummary()}</aside>`;
 };
 let bookingQuote = null;
 let bookingQuoteError = '';
@@ -748,6 +748,9 @@ const refreshBookingPricePanel = () => {
   const panel = document.querySelector('.booking-price-panel');
   if (!panel) return;
   panel.outerHTML = checkoutPricePanel();
+  document.querySelector('.booking-price-panel')?.addEventListener('click', event => {
+    if (event.target.closest('.selected-fare-details')) showSelectedFareDetails();
+  });
   const button = document.querySelector('.issue-ticket');
   if (button) button.disabled = !currentBookingQuote() || bookingQuoteLoading || bookingSubmissionPending;
 };
@@ -770,7 +773,6 @@ const verifyBookingPrice = async () => {
     if (sequence === bookingQuoteSequence) { bookingQuoteLoading = false; refreshBookingPricePanel(); }
   }
 };
-document.addEventListener('click', event => { if (event.target.closest('[data-verify-booking-price]')) void verifyBookingPrice(); });
 const verifyFarePreview = async flights => {
   const footer = resultArea.querySelector('.fare-choice-footer');
   const target = footer?.querySelector('div');
@@ -865,7 +867,7 @@ const renderFlights = (results, phase = 'outbound', sameAirline = true) => {
     targets.forEach((target, index) => {
       if (!target.isConnected) return;
       const fares = cheapestDistinctChoices(priced.filter(choice => choice.flightIndex === index));
-      target.innerHTML = passengerPriceMarkup(fares[0]?.price, `${phase === 'return' ? 'Return' : 'Outbound'} · all passengers`);
+      target.innerHTML = passengerPriceMarkup(fares[0]?.price, '');
     });
   }).catch(() => targets.forEach(target => { if (target.isConnected) target.innerHTML = passengerPriceMarkup(null); }));
 };
@@ -992,7 +994,7 @@ const priceFareChoices = (choices, generation = fareDisplayGeneration) => {
 const passengerPriceMarkup = (price, caption = 'Total · all passengers') => {
   if (!price) return '<span class="fare-price-pending">Total unavailable — retry search</span>';
   const labels = { adults: 'Adult', children: 'Child', infants: 'Infant' };
-  return `<span class="passenger-price" tabindex="0" aria-label="${escapeHtml(caption)}; focus for passenger breakdown"><strong>${quoteMnt(price.total)}</strong><small>${escapeHtml(caption)}</small><span class="passenger-price-tooltip" role="tooltip">${price.breakdown.map(row => `<span class="passenger-price-line"><b>${labels[row.type] || 'Passenger'} × ${row.count}</b><b>${quoteMnt(row.total)}</b></span><span class="passenger-price-line"><span>Fare ${quoteMnt(row.fare)}</span><span>Taxes ${quoteMnt(row.taxes)}</span></span>`).join('')}<span class="passenger-price-line"><b>Total</b><b>${quoteMnt(price.total)}</b></span></span></span>`;
+  return `<span class="passenger-price" tabindex="0" aria-label="${escapeHtml(caption || 'Total · all passengers')}; focus for passenger breakdown"><strong>${quoteMnt(price.total)}</strong>${caption ? `<small>${escapeHtml(caption)}</small>` : ''}<template class="passenger-price-tooltip" role="tooltip">${price.breakdown.map(row => `<span class="passenger-price-line"><b>${labels[row.type] || 'Passenger'} × ${row.count}</b><b>${quoteMnt(row.total)}</b></span>`).join('')}<span class="passenger-price-line"><b>Total</b><b>${quoteMnt(price.total)}</b></span></template></span>`;
 };
 const farePriceMarkup = fare => `<div class="fare-family-price">${passengerPriceMarkup(fare.displayPrice)}</div>`;
 // Body-level tooltip avoids clipping inside the horizontal fare carousel.

@@ -112,7 +112,7 @@ test('checkout verification disables booking; stale responses cannot replace the
   const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
   const code = source.slice(source.indexOf('const checkoutPricePanel ='), source.indexOf('const verifyFarePreview ='));
   const requests = [];
-  const panel = { outerHTML: '' };
+  const panel = { outerHTML: '', addEventListener() {} };
   const button = { disabled: false };
   const form = {};
   const context = {
@@ -130,6 +130,7 @@ test('checkout verification disables booking; stale responses cannot replace the
   const price = { ...verifiedPrice(response(), priceSelection([flight], counts)), quoteId: 'second', expiresAt: Date.now() + 60000 };
   requests[1]({ ok: true, json: async () => price }); await second;
   assert.equal(button.disabled, false);
+  assert.doesNotMatch(panel.outerHTML, /data-verify-booking-price|Live CNY price verified/);
   assert.match(panel.outerHTML, /Child × 1/); assert.match(panel.outerHTML, /Infant × 1/); assert.match(panel.outerHTML, /MNT\(305\)/);
   requests[0]({ ok: true, json: async () => ({ ...price, quoteId: 'stale', total: 1 }) }); await first;
   assert.equal(vm.runInContext('currentBookingQuote().quoteId', context), 'second');
