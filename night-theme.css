@@ -27,3 +27,31 @@ html[data-theme="dark"] .booking-fare-total strong { color:#ffb55b; }
 html[data-theme="dark"] :is(.booking-fare-total,.booking-flight-detail,.booking-flight-detail span,.booking-detail p,.booking-detail small,.booking-passenger-details span) { color:#c3cbd9; }
 html[data-theme="dark"] .booking-detail :is(.segment-status,.tag) { color:#8fe0b5; background:#153f30; }
 @media(max-width:650px) { .theme-toggle { bottom:12px; left:auto; right:14px; } }
+
+/* Fare selection and checkout have their own light surfaces. Pair dark text
+   overrides with dark surfaces, including nested cards and validation states. */
+html[data-theme="dark"] { --night-surface:#18283c; --night-raised:#21334b; --night-text:#edf3fc; --night-muted:#b1c2d8; --night-border:#3d526e; --night-link:#91c6ff; }
+html[data-theme="dark"] :is(.counter,.counter output,.passenger-note) { color:var(--night-text); }
+html[data-theme="dark"] .counter output { font-variant-numeric:tabular-nums; }
+html[data-theme="dark"] :is(.selection-carrier span,.selection-schedule span,.selection-schedule .selection-date,.selection-duration span) { color:var(--night-muted); }
+html[data-theme="dark"] :is(.selection-carrier span b,.selection-schedule .selection-times,.selection-duration b) { color:var(--night-link); }
+html[data-theme="dark"] :is(.fare-choice-screen,.fare-family-choice,.fare-selection-card,.fare-selected-flight,.fare-price-breakdown,.review-itinerary,.passenger-card,.contact-card,.order-summary,.empty-state,.selected-itinerary,.final-itinerary) { background:var(--night-surface); color:var(--night-text); border-color:var(--night-border); }
+html[data-theme="dark"] :is(.fare-carousel,.fare-choice-grid,.selection-label,.fare-breakdown-total,.summary-total,.fare-rule-block h3,.fare-policy-direction>h3,.baggage-detail-direction>h3) { background:var(--night-raised); color:var(--night-text); }
+html[data-theme="dark"] .fare-family-choice.recommended { border-color:var(--night-link); box-shadow:0 0 0 1px #91c6ff30; }
+html[data-theme="dark"] .fare-family-choice:hover,html[data-theme="dark"] .fare-family-choice:focus-visible { border-color:var(--night-link); }
+html[data-theme="dark"] .fare-family-choice.recommended .fare-radio { border-color:var(--night-link); background:var(--night-link); box-shadow:inset 0 0 0 4px var(--night-surface); }
+html[data-theme="dark"] :is(.fare-scroll,.review-change-flight,.back-to-search,.swap) { background:var(--night-raised); color:var(--night-link); border-color:var(--night-border); }
+html[data-theme="dark"] :is(.fare-choice-screen>header,.fare-choice-footer,.bound-fare-picker,.fare-family-price,.fare-family-choice hr,.fare-breakdown-row,.fare-breakdown-total,.fare-breakdown-group,.review-flight,.price-section,.price-total,.fare-rule-block,.fare-rule-block div,.fare-policy-direction,.baggage-detail-direction,.fare-policy-table td,.fare-policy-table th,.baggage-detail-row,.fare-detail-tabs,.passenger-price-line:last-child) { border-color:var(--night-border); }
+html[data-theme="dark"] :is(.fare-choice-screen>header h2,.bound-fare-picker>header h2,.fare-selection-route strong,.fare-selected-carrier b,.fare-selected-route b,.fare-family-top b,.fare-family-choice>strong,.fare-choice-screen>footer strong,.review-heading h1,.review-flight-route,.review-times,.review-airport-line b,.price-section-heading,.price-total,.price-line b,.fare-breakdown-row,.fare-breakdown-total,.fare-rule-block strong,.policy-title,.baggage-allowance-item strong,.empty-state h2,.passenger-card h2,.contact-card h2,.order-summary h2) { color:var(--night-text); }
+html[data-theme="dark"] :is(.fare-family-choice>small,.fare-family-choice>p,.fare-family-price span,.fare-choice-screen>header p:last-child,.bound-fare-picker>header p:last-child,.fare-choice-screen>footer,.fare-selection-card .fare-selection-carrier span,.fare-selection-route span,.fare-selected-carrier small,.fare-selected-route small,.fare-selected-duration small,.fare-breakdown-title,.fare-breakdown-detail,.fare-breakdown-row small,.review-flight-route small,.review-airport-line,.review-meta,.price-line,.price-passenger-note,.price-panel-note,.checkout-heading p,.contact-card p,.passenger-fields label,.empty-state p,.empty-state>span,.fare-rule-block div,.fare-policy-table td,.baggage-detail-row p,.baggage-allowance-item p,.baggage-detail-direction small,.policy-title small) { color:var(--night-muted); }
+html[data-theme="dark"] :is(.fare-selection-route small,.fare-selection-card .fare-selection-carrier span b,.fare-selected-duration,.fare-breakdown-row>b,.fare-breakdown-total b,.price-total strong,.fare-detail-tabs button,.fare-rule-details) { color:var(--night-link); }
+html[data-theme="dark"] .baggage-list .selected-fare-details span:first-child { color:var(--night-link); border-color:var(--night-link); }
+html[data-theme="dark"] .baggage-list .selected-fare-details span:last-child { color:#8fe0b5; }
+html[data-theme="dark"] .fare-detail-tabs button.active { color:var(--night-link); border-bottom-color:var(--night-link); }
+html[data-theme="dark"] .fare-policy-table tr.current-rule td { background:#244465; color:#d2e8ff; }
+html[data-theme="dark"] :is(input,textarea)::placeholder { color:#b1bfd2; opacity:1; }
+html[data-theme="dark"] :is(.passenger-card,.contact-card):has(.field-error) { background:#302633; border-color:#dd8190; }
+html[data-theme="dark"] .passenger-fields :is(input,select).field-error { background:#422b37!important; border-color:#ff97a8!important; }
+html[data-theme="dark"] :is(.field-error-message,.passenger-fields label:has(.field-error)) { color:#ffb0bb; }
+html[data-theme="dark"] :is(.split-date-control,.country-menu,.country-menu button) { background:var(--night-surface); color:var(--night-text); border-color:var(--night-border); }
+html[data-theme="dark"] :is(.country-menu .country-letter,.country-menu button:hover) { background:var(--night-raised); color:var(--night-link); }
