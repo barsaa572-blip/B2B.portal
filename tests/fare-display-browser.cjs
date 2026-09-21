@@ -108,7 +108,9 @@ const root = path.resolve(__dirname, '..');
     });
     await page.locator('.nexahub-auth-logo').waitFor();
     await page.waitForFunction(() => document.querySelector('.nexahub-auth-logo')?.naturalWidth > 0);
-    assert.equal(await page.locator('.auth-intro h1').innerText(), 'NEXAHUB');
+    assert.equal(await page.locator('.auth-intro h1, .auth-permissions, .auth-note').count(), 0);
+    assert.equal(await page.locator('.nexahub-auth-logo').getAttribute('alt'), 'NEXAHUB by Air Sales');
+    assert.doesNotMatch(await page.locator('#auth-root').innerText(), /Secure airline ticketing|Own bookings only|platform administrator/);
     for (const width of [390, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

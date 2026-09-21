@@ -1,6 +1,14 @@
 .sidebar .nexahub-brand { padding: 0; justify-content: center; }
-.nexahub-brand img, .nexahub-auth-logo { display: block; width: 138px; height: 56px; object-fit: contain; border-radius: 8px; background: #fff; }
-.auth-intro .nexahub-byline { margin: -4px 0 22px; font-size: 15px; letter-spacing: .06em; }
+.nexahub-brand img, .nexahub-auth-logo { display: block; height: auto; object-fit: contain; border-radius: 0; background: transparent; }
+/* Blend the supplied logo's light background away without changing its artwork. */
+.sidebar .nexahub-brand img { width: 208px; max-width: 100%; filter: contrast(1.15); mix-blend-mode: multiply; }
+.auth-card .auth-intro { display: flex; align-items: center; justify-content: center; padding: 40px; isolation: isolate; }
+.auth-intro .nexahub-auth-logo { width: 280px; max-width: 100%; filter: grayscale(1) invert(1) brightness(2) contrast(2); mix-blend-mode: screen; }
+html[data-theme="dark"] .sidebar .nexahub-brand img { filter: grayscale(1) invert(1) brightness(2) contrast(2); mix-blend-mode: screen; }
 @media (min-width: 651px) and (max-width: 950px) {
   .sidebar .nexahub-brand img { width: 50px; height: auto; }
+}
+@media (max-width: 720px) {
+  .auth-card .auth-intro { padding: 28px; min-height: 150px; }
+  .auth-intro .nexahub-auth-logo { width: 250px; }
 }
