@@ -1,4 +1,36 @@
 import { getCnyMntRate } from './fx-rate.mjs';
+import { HttpError } from './request-security.mjs';
+
+export function validatePasswordChange({ currentPassword, newPassword, confirmPassword } = {}) {
+  if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 1024) throw new HttpError(400, 'Enter your current password.');
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128 || !/\p{L}/u.test(newPassword) || !/\p{N}/u.test(newPassword) || !/[^\p{L}\p{N}\s]/u.test(newPassword)) throw new HttpError(400, 'Use 8–128 characters including a letter, a number and a special character.');
+  if (newPassword !== confirmPassword) throw new HttpError(400, 'New passwords do not match.');
+  if (newPassword === currentPassword) throw new HttpError(400, 'Choose a password different from your current password.');
+}
+
+// Identity comes only from the server-authenticated profile, never the form.
+export async function changeOwnPassword(profile, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError(400, 'Password fields are required.');
+  validatePasswordChange(input);
+  if (!profile?.id || !profile?.email) throw new HttpError(401, 'Please sign in again.');
+  let fresh;
+  try { fresh = await signInWithPassword(profile.email, input.currentPassword); }
+  catch { throw new HttpError(400, 'Could not verify your current password. Check it and try again.'); }
+  const { publishableKey } = config();
+  try {
+    if (fresh.user?.id !== profile.id) throw new HttpError(403, 'Account verification failed.');
+    const response = await request('/auth/v1/user', {
+      method: 'PUT',
+      headers: { apikey: publishableKey, authorization: `Bearer ${fresh.access_token}` },
+      body: { password: input.newPassword, current_password: input.currentPassword }
+    });
+    if (!response.ok) throw new HttpError(400, 'Password could not be updated. Try a stronger password or contact your administrator.');
+    return { ok: true };
+  } finally {
+    // The temporary reauthentication session must not remain usable.
+    await request('/auth/v1/logout?scope=local', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${fresh.access_token}` } }).catch(() => {});
+  }
+}
 
 const trimSlash = value => String(value || '').replace(/\/+$/, '');
 

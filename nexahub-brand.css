@@ -33,12 +33,12 @@ th { background:#f5f8fc; color:#617894; }
 .auth-form input { border-color:#cfdfed; min-height:48px; }
 .auth-form .auth-signin { margin-top:22px; min-height:48px; background:linear-gradient(110deg,#0b315d,#006ac4); border:0; }
 .auth-form .auth-signin:hover { background:linear-gradient(110deg,#092848,#075da8); }
-html[data-theme="dark"] { --bg:#0d1725; --ink:#eaf3ff; --line:#2c4058; --muted:#b0c3d9; }
+html[data-theme="dark"] { --bg:#0d1725; --ink:#edf0f7; --line:#373a45; --muted:#b1bfd2; }
 html[data-theme="dark"] body,html[data-theme="dark"] #auth-root { background:#0d1725; }
-html[data-theme="dark"] .sidebar,html[data-theme="dark"] .auth-form { background:#142338; }
+html[data-theme="dark"] .sidebar,html[data-theme="dark"] .auth-form { background:#181b22; }
 html[data-theme="dark"] .sidebar .nexahub-brand img { filter:grayscale(1) invert(1) brightness(2) contrast(2); mix-blend-mode:screen; }
 html[data-theme="dark"] .auth-form h2,html[data-theme="dark"] .auth-form label { color:#eaf3ff; }
-html[data-theme="dark"] .auth-card,html[data-theme="dark"] .auth-card .auth-intro { border-color:#2c4058; }
+html[data-theme="dark"] .auth-card,html[data-theme="dark"] .auth-card .auth-intro { border-color:#373a45; }
 html[data-theme="dark"] .fare-family-price .passenger-price > strong { color:#85baff; }
 @media (min-width:651px) and (max-width:950px) {
   .sidebar .nexahub-brand { min-height:42px; }

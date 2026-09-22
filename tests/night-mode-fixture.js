@@ -1,6 +1,6 @@
-// Loaded instead of authentication by the local-only preview harness.
+// Seed fake data before authentication in the local-only preview harness.
 document.querySelector('#auth-root').hidden = true;
-sessionStorage.setItem('flightb2b-session', JSON.stringify({ accessToken: 'qa-only', profile: { id: 'qa', role: 'platform_admin' } }));
+sessionStorage.setItem('flightb2b-session', JSON.stringify({ accessToken: 'qa-only', profile: { id: 'qa', role: 'platform_admin', full_name:'Preview User' } }));
 document.documentElement.dataset.theme = 'dark';
 activePassengerCounts = { adults: 1, children: 1, infants: 1 };
 pricingRate = { effectiveRateMnt: 540.8 };

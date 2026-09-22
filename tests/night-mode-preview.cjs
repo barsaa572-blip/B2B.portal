@@ -30,8 +30,8 @@ createServer((req, res) => {
   }
   if (!/^[a-z][a-z0-9.-]*\.(html|css|js|png)$/.test(name)) { res.writeHead(404); return res.end(); }
   try {
-    let content = name === 'auth.js' ? readFileSync(path.join(__dirname, 'night-mode-fixture.js')) : readFileSync(path.join(root, name));
+    let content = name === 'auth.js' ? readFileSync(path.join(__dirname, 'night-mode-fixture.js'), 'utf8') + '\n' + readFileSync(path.join(root, 'auth.js'), 'utf8') : readFileSync(path.join(root, name));
     res.setHeader('content-type', ({ '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript', '.png': 'image/png' })[path.extname(name)]);
     res.setHeader('cache-control', 'no-store'); res.end(content);
   } catch { res.writeHead(404); res.end(); }
-}).listen(4181, '127.0.0.1', () => console.log('QA only: http://127.0.0.1:4181'));
+}).listen(Number(process.env.QA_PORT || 4181), '127.0.0.1', () => console.log(`QA only: http://127.0.0.1:${process.env.QA_PORT || 4181}`));

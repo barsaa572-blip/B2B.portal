@@ -3,6 +3,7 @@ import { priceSelection, priceRequest, verifiedPrice, createPriceQuotes, flightL
 import { requireChangeQuote, cleanBookingItinerary, guardedPayment } from './backend/payment-security.mjs';
 import { beginFinancialOperation, finishFinancialOperation } from './backend/supabase-client.mjs';
 import { securityHeaders, isPublicAsset, clientAddress, checkRequest, createLimiter, readJsonBody } from './backend/request-security.mjs';
+import { changeOwnPassword } from './backend/supabase-client.mjs';
 import { getDashboardSummary, recordChangePayment, saveBookingFinancialData } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
@@ -1372,6 +1373,7 @@ try {
       catch { return send(res, 401, { error: 'Your login session is invalid or inactive.' }); }
       const actor = req.securityProfile.id;
       limitRequest(`actor:${actor}`, 240, 60000);
+      if (url.pathname === '/api/auth/password') limitRequest(`password:${actor}`, 5, 900000);
       if (url.pathname === '/api/flights') limitRequest(`search:${actor}`, 30, 60000);
       if (['POST', 'PATCH', 'DELETE'].includes(req.method)) limitRequest(`write:${actor}`, 30, 60000);
       if (url.pathname === '/api/topups' && req.method === 'POST') limitRequest(`topup:${actor}`, 5, 600000);
@@ -1515,6 +1517,10 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   return send(res, 404, { error: 'Booking endpoint not found.' });
 } catch (error) { return send(res, 403, { error: error.message || 'Booking request is not allowed.' }); } }
 if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await authenticatedProfile(req))); } catch (error) { return send(res, 403, { error: error.message || 'Wallet access is not allowed.' }); } }
+if (url.pathname === '/api/auth/password' && req.method === 'POST') {
+  try { return send(res, 200, await changeOwnPassword(req.securityProfile, await readJson(req))); }
+  catch (error) { return send(res, error.status || 502, { error: error.status ? error.message : 'Password service is unavailable. Please try again.' }); }
+}
 if (url.pathname === '/api/auth/login' && req.method === 'POST') { try { const { email, password } = await readJson(req);
 if (!email || !password) return send(res, 400, { error: 'Email and password are required.' });
 const session = await signInWithPassword(email, password);

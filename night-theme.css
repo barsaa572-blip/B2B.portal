@@ -1,5 +1,32 @@
 .theme-toggle { position: fixed; bottom: 18px; left: 22px; z-index: 101; font-size: 12px; }
-.sidebar-foot { margin-bottom: 55px; }
+.sidebar-foot { margin-bottom: 0; }
+.sidebar-account-menu { min-width:185px; }
+.sidebar-account-menu[hidden] { display:none!important; }
+@media(max-width:950px) {
+  .sidebar-foot .more { display:block; }
+  .sidebar-foot>.sidebar-account-menu:not([hidden]) { display:block; }
+  .sidebar-account-menu { left:0; right:auto; }
+  .sidebar-foot .avatar { display:none; }
+}
+@media(max-width:650px) {
+  body:is(.role-agent,.role-office,.role-platform) .sidebar { display:flex; width:auto; inset:auto 16px 16px auto; padding:8px; border:1px solid var(--line); border-radius:12px; z-index:30; }
+  .sidebar>:not(.sidebar-foot) { display:none; }
+  .sidebar .sidebar-foot { margin:0; padding:0; border:0; }
+  .sidebar-account-menu { left:auto; right:0; bottom:42px; }
+}
+.sidebar-account-menu .theme-toggle { position:static; width:100%; font:inherit; border:0; border-radius:0; text-align:left; }
+.password-dialog { width:min(440px,calc(100vw - 32px)); padding:28px; max-height:calc(100dvh - 32px); overflow:auto; }
+.password-dialog h2 { margin:0 0 12px; }
+.password-dialog p { font-size:13px; line-height:1.5; }
+.password-dialog label { display:grid; gap:8px; margin:18px 0; }
+.password-dialog input { width:100%; box-sizing:border-box; }
+.password-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:24px; }
+.password-error { color:#b42318; }
+.password-success { color:#166534!important; }
+html[data-theme="dark"] .password-error { color:#ffb4b4; }
+html[data-theme="dark"] .password-success { color:#8fe0b5!important; }
+html[data-theme="dark"] .sidebar-account-menu button { color:#edf0f7; }
+html[data-theme="dark"] .sidebar-account-menu button:hover { background:#303642; color:#d2e6ff; }
 #toast[popover] { inset: auto 22px 22px auto; margin: 0; border: 0; max-width: min(620px, calc(100vw - 32px)); white-space: normal; filter: none; backdrop-filter: none; z-index: 2147483647; }
 #toast::backdrop { background: transparent; backdrop-filter: none; pointer-events: none; }
 .booking-financial-history { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
@@ -30,7 +57,7 @@ html[data-theme="dark"] .booking-detail :is(.segment-status,.tag) { color:#8fe0b
 
 /* Fare selection and checkout have their own light surfaces. Pair dark text
    overrides with dark surfaces, including nested cards and validation states. */
-html[data-theme="dark"] { --night-surface:#18283c; --night-raised:#21334b; --night-text:#edf3fc; --night-muted:#b1c2d8; --night-border:#3d526e; --night-link:#91c6ff; }
+html[data-theme="dark"] { --night-surface:#20232b; --night-raised:#303642; --night-text:#edf0f7; --night-muted:#b1bfd2; --night-border:#373a45; --night-link:#91c6ff; }
 html[data-theme="dark"] :is(.counter,.counter output,.passenger-note) { color:var(--night-text); }
 html[data-theme="dark"] .counter output { font-variant-numeric:tabular-nums; }
 html[data-theme="dark"] :is(.selection-carrier span,.selection-schedule span,.selection-schedule .selection-date,.selection-duration span) { color:var(--night-muted); }

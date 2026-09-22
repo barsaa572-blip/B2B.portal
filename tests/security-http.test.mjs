@@ -46,6 +46,13 @@ test('HTTP boundary blocks private files, anonymous finance, forged origins and 
     child.on('exit', code => { clearTimeout(timer); reject(new Error(`Server exited: ${code}`)); });
   });
   const call = (path, options) => fetch(`http://127.0.0.1:${port}${path}`, options);
+  assert.equal((await call('/api/auth/password', { method:'POST' })).status,401);
+  for (let attempt=0; attempt<5; attempt++) {
+    assert.equal((await call('/api/auth/password', { method:'POST', headers:{ authorization:'Bearer password-test', 'content-type':'application/json' }, body:JSON.stringify({ currentPassword:'old', newPassword:'weak', confirmPassword:'weak' }) })).status,400);
+  }
+  const passwordLimited = await call('/api/auth/password', { method:'POST', headers:{ authorization:'Bearer password-test' } });
+  assert.equal(passwordLimited.status,429);
+  assert.ok(Number(passwordLimited.headers.get('retry-after'))>0);
   const home = await call('/');
   assert.equal(home.status, 200); assert.equal(home.headers.get('x-frame-options'), 'DENY');
   assert.match(home.headers.get('content-security-policy'), /script-src 'self'/);

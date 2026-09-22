@@ -8,9 +8,11 @@ test('night mode covers search counts, fare, checkout, rules and empty report su
     assert.ok(rules.some(([, selectors, declarations]) => selectors.includes('html[data-theme="dark"]') && selectors.includes(selector) && declarations.includes('background:var(--night-surface)')), selector);
   }
   assert.ok(rules.some(([, selectors, declarations]) => selectors.includes('.counter output') && declarations.includes('color:var(--night-text)')));
-  assert.match(readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /night-theme\.css\?v=20260921-contrast/);
+  assert.match(readFileSync(new URL('../index.html', import.meta.url), 'utf8'), /night-theme\.css\?v=20260922-account/);
 });
 test('night text palette remains readable on both card backgrounds', () => {
+  assert.match(css, /--night-surface:#20232b/);
+  assert.match(css, /--night-raised:#303642/);
   const hex = name => css.match(new RegExp(`--night-${name}:(#[0-9a-f]{6})`))[1];
   const lum = value => value.slice(1).match(/../g).map(v => parseInt(v,16)/255).map(v => v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i) => sum+v*[.2126,.7152,.0722][i],0);
   for (const fg of ['text','muted','link']) for (const bg of ['surface','raised']) {

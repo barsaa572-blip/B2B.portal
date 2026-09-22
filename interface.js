@@ -14,10 +14,16 @@
   button.type = 'button'; button.dataset.themeToggle = ''; button.className = 'theme-toggle secondary';
   button.setAttribute('aria-label', 'Toggle day and night mode');
   document.body.append(button);
+  window.placeThemeToggle = signedIn => {
+    const menu = document.querySelector('.sidebar-account-menu');
+    (signedIn && menu ? menu : document.body).prepend(button);
+  };
   setTheme(saved === 'dark' || saved === 'light' ? saved : preference.matches ? 'dark' : 'light');
   button.addEventListener('click', () => {
     saved = root.dataset.theme === 'dark' ? 'light' : 'dark'; setTheme(saved);
     try { localStorage.setItem('flightb2b-theme', saved); } catch {}
+    const menu = button.closest('.sidebar-account-menu');
+    if (menu) { menu.hidden = true; document.querySelector('.sidebar-foot .more')?.setAttribute('aria-expanded', 'false'); }
   });
   preference.addEventListener('change', event => { if (!saved) setTheme(event.matches ? 'dark' : 'light'); });
   const toast = document.querySelector('#toast');
