@@ -4,6 +4,7 @@ import { requireChangeQuote, cleanBookingItinerary, guardedPayment } from './bac
 import { beginFinancialOperation, finishFinancialOperation } from './backend/supabase-client.mjs';
 import { securityHeaders, isPublicAsset, clientAddress, checkRequest, createLimiter, readJsonBody } from './backend/request-security.mjs';
 import { changeOwnPassword } from './backend/supabase-client.mjs';
+import { environmentPage } from './backend/environment-page.mjs';
 import { getDashboardSummary, recordChangePayment, saveBookingFinancialData } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
 import { readFile } from 'node:fs/promises';
@@ -1591,7 +1592,10 @@ if (url.pathname === '/api/locations') return autocompleteLocations(url, res);
 const requested = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
 if (!isPublicAsset(requested)) return send(res, 404, 'Not found', 'text/plain');
 const file = normalize(join(ROOT, requested));
-if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try { send(res, 200, await readFile(file), MIME[extname(file)] || 'application/octet-stream'); } catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => {
+if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try {
+  const content = await readFile(file);
+  send(res, 200, requested === 'index.html' ? environmentPage(content, process.env.APP_ENV) : content, MIME[extname(file)] || 'application/octet-stream');
+} catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => {
   console.log(`NEXAHUB by Air Sales listening on http://127.0.0.1:${PORT}`);
   const reconcileExpiredReservations = async () => {
     try { await expireTicketingDeadlineBookings(); }

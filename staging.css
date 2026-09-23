@@ -1,0 +1,4 @@
+.staging-banner { position:fixed; inset:0 0 auto; height:32px; display:flex; align-items:center; justify-content:center; background:#fff0b3; color:#422900; font:700 12px system-ui,sans-serif; z-index:1000; text-align:center; padding:0 8px; }
+html[data-environment="staging"] body { padding-top:32px; }
+html[data-environment="staging"] :is(.sidebar,#auth-root) { top:32px; }
+@media(max-width:650px) { html[data-environment="staging"] .sidebar { top:auto; } }

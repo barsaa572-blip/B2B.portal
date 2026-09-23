@@ -1,0 +1,27 @@
+[Unit]
+Description=NEXAHUB isolated test portal
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=flightb2b-test
+Group=flightb2b-test
+WorkingDirectory=/opt/flightb2b-test
+EnvironmentFile=/etc/flightb2b-test/flightb2b-test.env
+ExecStart=/usr/bin/node /opt/flightb2b-test/deploy/staging/start.mjs
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+InaccessiblePaths=/etc/flightb2b /opt/flightb2b
+MemoryHigh=512M
+MemoryMax=768M
+CPUQuota=50%
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
