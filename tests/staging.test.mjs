@@ -45,6 +45,8 @@ test('empty test schema has an empty-project guard, one transaction and security
 test('service and HTTPS config target test only and private files stay blocked', () => {
   const service=readFileSync(new URL('../deploy/staging/flightb2b-test.service',import.meta.url),'utf8');
   assert.match(service,/User=flightb2b-test/);
+  assert.match(service,/ExecStart=\/opt\/nexahub-node\/bin\/node /);
+  assert.doesNotMatch(service,/ExecStart=\/usr\/bin\/node /);
   assert.match(service,/InaccessiblePaths=\/etc\/flightb2b \/opt\/flightb2b/);
   assert.match(service,/MemoryMax=768M/);
   const nginx=readFileSync(new URL('../deploy/staging/nginx-https.conf',import.meta.url),'utf8');

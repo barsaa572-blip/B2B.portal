@@ -45,8 +45,12 @@ Do not push these changes to main as a way to update the test site.
 
 ## 3. Create a separate VPS checkout and secret file
 
-Requires Node 20.12+ (`node --version`); do not upgrade the live runtime without
-review if it is older. Execute as root in the existing SSH session:
+The VPS currently uses Node 18.19.1 at `/usr/bin/node` for production. Keep that
+binary unchanged during staging setup. Install the official Node 24.21.0 LTS Linux
+distribution separately at `/opt/nexahub-node`, verifying its official SHA256 first.
+Do not change PATH, package-manager Node, system symlinks or the production service.
+Use `/opt/nexahub-node/bin/node --version` to verify the separate runtime before
+running this phase. Execute as root in the existing SSH session:
 
 ```bash
 (
@@ -60,7 +64,7 @@ review if it is older. Execute as root in the existing SSH session:
   chmod 700 /opt/flightb2b-test/.git
   install -d -m 750 -o root -g flightb2b-test /etc/flightb2b-test
   install -m 600 /opt/flightb2b-test/deploy/staging/staging.env.example /etc/flightb2b-test/flightb2b-test.env
-  /usr/bin/node --env-file=/etc/flightb2b/flightb2b.env /opt/flightb2b-test/deploy/staging/snapshot-production.mjs
+  /opt/nexahub-node/bin/node --env-file=/etc/flightb2b/flightb2b.env /opt/flightb2b-test/deploy/staging/snapshot-production.mjs
   chown root:flightb2b-test /etc/flightb2b-test/production-reference.json
   chmod 640 /etc/flightb2b-test/production-reference.json
 )
@@ -86,7 +90,7 @@ require a reviewed supplier-specific isolation strategy, not removal of the guar
 Validate without starting the app or making API calls:
 
 ```bash
-sudo /usr/bin/node --env-file=/etc/flightb2b-test/flightb2b-test.env /opt/flightb2b-test/deploy/staging/start.mjs --check
+sudo /opt/nexahub-node/bin/node --env-file=/etc/flightb2b-test/flightb2b-test.env /opt/flightb2b-test/deploy/staging/start.mjs --check
 ```
 
 ## 4. Start only the test service, after schema and test admin are ready
@@ -164,7 +168,7 @@ Commit/push local work to develop as often as needed. Deploy test only:
 ```bash
 cd /opt/flightb2b-test &&
 git pull --ff-only origin develop &&
-node --test tests/*.test.* &&
+/opt/nexahub-node/bin/node --test tests/*.test.* &&
 systemctl restart flightb2b-test
 ```
 
@@ -183,3 +187,8 @@ References:
 - https://supabase.com/docs/guides/deployment/managing-environments
 - https://eff-certbot.readthedocs.io/en/stable/using.html#webroot
 - https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html
+- https://nodejs.org/en/blog/release/v24.21.0
+
+Production Node 18 is end-of-life. Schedule its supported-LTS migration separately
+after running the app and supplier integration tests on staging; this rollout does
+not upgrade production automatically.
