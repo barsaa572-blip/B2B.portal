@@ -65,6 +65,20 @@ export function getSupabaseStatus() {
   return { configured };
 }
 
+// Service-only RPCs: leased jobs write only supplier status, not money/history.
+export async function claimSpringStatusChecks() {
+  return secretRequest('/rest/v1/rpc/claim_spring_status_checks', { method: 'POST', body: {} });
+}
+
+export async function finishSpringStatusCheck(booking, result) {
+  return secretRequest('/rest/v1/rpc/finish_spring_status_check', { method: 'POST', body: {
+    p_booking_id: booking.id,
+    p_lease_id: booking.supplier_status_lease_id,
+    p_revision: booking.supplier_status?.claimedRevision,
+    p_result: result
+  } });
+}
+
 export async function signInWithPassword(email, password) {
   const { publishableKey, configured } = config();
   if (!configured) throw new Error('Authentication is not configured on this server.');

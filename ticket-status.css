@@ -1,0 +1,5 @@
+.booking-supplier-status { display: block; margin-top: 6px; max-width: 260px; }
+.supplier-status-panel > strong { display: block; margin-top: 14px; }
+.supplier-status-panel > p { margin: 6px 0; }
+.supplier-status-panel > small { display: block; margin-top: 14px; }
+.segment-status.checked-in { color: var(--text, inherit); }

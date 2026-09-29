@@ -39,6 +39,7 @@ const xmlBlocks = (xml, tag) => {
 
 const serviceEndpoint = wsdlUrl => String(wsdlUrl || '').trim().replace(/[?&]wsdl(?:=[^&]*)?$/i, '');
 const finiteNumber = value => {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
   const result = Number(value);
   return Number.isFinite(result) ? result : null;
 };
@@ -66,10 +67,20 @@ const postSoapXml = (endpoint, xml) => new Promise((resolve, reject) => {
     timeout: 30_000
   }, response => {
     let responseXml = '';
+    let bytes = 0;
     response.setEncoding('utf8');
-    response.on('data', chunk => { responseXml += chunk; });
+    response.on('data', chunk => {
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > 4 * 1024 * 1024) { request.destroy(new Error('SOAP response exceeds size limit.')); return; }
+      responseXml += chunk;
+    });
+    response.once('error', reject);
     response.on('end', () => resolve({ status: response.statusCode || 0, ok: (response.statusCode || 0) >= 200 && (response.statusCode || 0) < 300, text: responseXml }));
   });
+  // Bound total duration too, not just socket inactivity, so worker leases
+  // cannot expire while a trickling response is still being processed.
+  const deadline = setTimeout(() => request.destroy(new Error('SOAP request timed out.')), 30_000);
+  request.once('close', () => clearTimeout(deadline));
   request.once('timeout', () => request.destroy(new Error('SOAP request timed out.')));
   request.once('error', reject);
   request.end(xml, 'utf8');
@@ -163,7 +174,32 @@ export function createSpringSoapClient(env = process.env) {
     }
 
     const responseXml = response.text;
-    const orderHeads = xmlBlocks(responseXml, 'ticketList').map(ticket => {
+    const orderHeads = parseOrderTicketStatuses(responseXml);
+    const result = {
+      ifSuccess: xmlValue(responseXml, 'ifSuccess'),
+      errCode: xmlValue(responseXml, 'errCode'),
+      errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring'),
+      orderHeads,
+      orderHeadIds: [...new Set(orderHeads.map(item => item.orderHeadId).concat(xmlValues(responseXml, 'orderHeadId').map(Number)).filter(value => Number.isSafeInteger(value) && value > 0))],
+      // The supplier amount, never a browser estimate, authorizes payment.
+      orderMoneyCny: finiteNumber(xmlValue(responseXml, 'orderMoney'))
+    };
+    if (!response.ok || result.ifSuccess !== 'Y') {
+      // These responses can contain passport details; never log raw XML.
+      console.warn('Spring order-detail lookup rejected', { httpStatus: response.status });
+      throw new Error(`Spring order-detail lookup failed${result.errCode ? ` (${result.errCode})` : ''}: ${result.errMsg || `HTTP ${response.status}`}`);
+    }
+    if (!result.orderHeadIds.length) {
+      throw new Error('Spring order detail did not return an orderHeadId for this PNR.');
+    }
+    return result;
+  }
+
+  return { payInCredit4OTA, getOrderDetailInfoC2 };
+}
+
+export function parseOrderTicketStatuses(responseXml) {
+  return xmlBlocks(responseXml, 'ticketList').map(ticket => {
       const flight = xmlBlocks(ticket, 'flightBasicInfo')[0] || '';
       const origin = xmlBlocks(flight, 'oriEndPoint')[0] || '';
       const destination = xmlBlocks(flight, 'destEndPoint')[0] || '';
@@ -171,6 +207,9 @@ export function createSpringSoapClient(env = process.env) {
       const destinationAirport = xmlBlocks(destination, 'airportCityInfo')[0] || '';
       return {
         orderHeadId: finiteNumber(xmlValue(ticket, 'orderHeadId')),
+        tktFlag: finiteNumber(xmlValue(ticket, 'tktFlag')),
+        // Missing identity is deliberately left unmatched, never positional.
+        passengerDocument: xmlValue(ticket, 'cardNo') || xmlValue(ticket, 'documentNumber'),
         departureCode: xmlValue(originAirport, 'airportCode') || xmlValue(originAirport, 'cityCode'),
         arrivalCode: xmlValue(destinationAirport, 'airportCode') || xmlValue(destinationAirport, 'cityCode'),
         flightNo: xmlValue(flight, 'flightNo'),
@@ -178,34 +217,4 @@ export function createSpringSoapClient(env = process.env) {
         arrivalTime: xmlValue(xmlBlocks(destination, 'destTimeInfo')[0] || '', 'timeBJ')
       };
     }).filter(item => Number.isSafeInteger(item.orderHeadId) && item.orderHeadId > 0);
-    const result = {
-      ifSuccess: xmlValue(responseXml, 'ifSuccess'),
-      errCode: xmlValue(responseXml, 'errCode'),
-      errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring'),
-      orderHeads,
-      orderHeadIds: [...new Set(orderHeads.map(item => item.orderHeadId).concat(xmlValues(responseXml, 'orderHeadId').map(Number)).filter(value => Number.isSafeInteger(value) && value > 0))],
-      // `orderSumInfo.orderMoney` is Spring's authoritative amount for this
-      // PNR after any promotion/discount has been applied.  It is CNY when
-      // moneyClassId is 0 and must be used for credit payment, rather than a
-      // price previously calculated in the browser.
-      orderMoneyCny: finiteNumber(xmlValue(responseXml, 'orderMoney'))
-    };
-    if (!response.ok || result.ifSuccess !== 'Y') {
-      console.warn('Spring order-detail lookup rejected', {
-        httpStatus: response.status,
-        ifSuccess: result.ifSuccess,
-        errCode: result.errCode,
-        errMsg: result.errMsg,
-        response: String(responseXml).slice(0, 6000)
-      });
-      throw new Error(`Spring order-detail lookup failed${result.errCode ? ` (${result.errCode})` : ''}: ${result.errMsg || `HTTP ${response.status}`}`);
-    }
-    if (!result.orderHeadIds.length) {
-      console.warn('Spring order-detail response contains no orderHeadId', { response: String(responseXml).slice(0, 6000) });
-      throw new Error('Spring order detail did not return an orderHeadId for this PNR.');
-    }
-    return result;
-  }
-
-  return { payInCredit4OTA, getOrderDetailInfoC2 };
 }

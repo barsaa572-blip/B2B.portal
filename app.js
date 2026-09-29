@@ -26,7 +26,13 @@ const bookingRouteMarkup = booking => {
   }
   return `<div class="booking-table-routes">${routes.length ? routes.map(([from, to]) => `<span>${from} &rarr; ${to}</span>`).join('') : '<span>—</span>'}</div>`;
 };
-const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${bookingRouteMarkup(b)}</td><td>${bookingPassengerNames(b)}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span></td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
+const bookingSupplierStatusMarkup = booking => (booking.itinerary?.flights || []).map((flight, index) => {
+  const status = globalThis.SpringTicketStatus?.summary(booking, index);
+  if (!status) return '';
+  const airport = value => /^[A-Z]{3}$/.test(value || '') ? value : '—';
+  return `<small class="booking-supplier-status">${airport(flight.departure?.id)} → ${airport(flight.arrival?.id)} · ${status.label}</small>`;
+}).join('');
+const bookingRows = (rows, withAction = false) => rows.map(b => `<tr><td><strong>${b.ref}</strong></td><td>${bookingRouteMarkup(b)}</td><td>${bookingPassengerNames(b)}</td><td>${b.issued}</td><td><strong>${quoteMnt(b.total)}</strong></td><td><span class="tag ${b.status.toLowerCase()}">${b.status}</span>${bookingSupplierStatusMarkup(b)}</td>${withAction ? `<td><button class="text-btn view-booking" data-booking-ref="${b.ref}">View</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="${withAction ? 7 : 6}" class="no-bookings">No matching bookings found.</td></tr>`;
 const ownBookings = () => bookings;
 let bookingScope = 'agent';
 const renderBookings = (query = '') => {
@@ -106,7 +112,8 @@ const bookingFlightDetailsClean = booking => {
   if (Array.isArray(storedFlights) && storedFlights.length) return storedFlights.map((flight, index) => {
     const legKey = index ? 'return' : 'outbound';
     const noShowCount = (booking.itinerary?.noShow?.[legKey] || []).length;
-    const state = booking.status === 'Cancelled' ? 'cancelled' : noShowCount ? 'no-show' : booking.status === 'Ticketed' ? 'ticketed' : 'reserved';
+    const supplier = globalThis.SpringTicketStatus?.summary(booking, index);
+    const state = booking.status === 'Cancelled' ? 'cancelled' : supplier?.state || (noShowCount ? 'no-show' : booking.status === 'Ticketed' ? 'ticketed' : 'reserved');
     const label = storedFlights.length === 1 ? 'ONE WAY' : index ? 'RETURN' : 'OUTBOUND';
     const departureCode = flight.departure?.id || '';
     const arrivalCode = flight.arrival?.id || '';
@@ -133,7 +140,7 @@ const bookingFlightDetailsClean = booking => {
     const oldTravelDate = displayFlightDate(oldFlight?.travelDate || oldFlight?.departure?.date || oldFlight?.departure?.dateTime || previous?.oldTravelDate);
     const historyDate = oldTravelDate || 'Original travel date unavailable';
     const history = oldFlight ? `<article class="booking-flight-history"><small>REPLACED FLIGHT${changedAt ? ` · Changed ${changedAt}` : ''}</small><strong>${historyDate} · ${oldFlight.departure?.id || ''} ${oldFlight.departure?.time || ''} → ${oldFlight.arrival?.id || ''} ${oldFlight.arrival?.time || ''}</strong><em>Flight ${oldFlight.number || '—'} · inactive after change</em></article>` : '';
-    const stateText = oldFlight ? 'Active after change' : state === 'ticketed' ? 'Ticketed' : state === 'cancelled' ? 'Cancelled' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved';
+    const stateText = booking.status === 'Cancelled' ? 'Cancelled' : supplier?.label || (state === 'ticketed' ? 'Ticketed' : state === 'no-show' ? `${noShowCount} no-show` : 'Reserved');
     return `${history}<article class="booking-flight-detail booking-itinerary-leg"><header><span>${label}</span><strong>${travelDate || 'Travel date pending'}</strong></header><div class="booking-leg-timeline"><div class="booking-leg-airport departure"><small><b>${departureCode}</b> ${departureName}${terminal(flight.departure)}</small></div><b class="booking-leg-time departure">${departureTime}</b><div class="booking-leg-line"><span>${duration}</span><i></i><small>${flight.stops ? `${flight.stops} stop${flight.stops > 1 ? 's' : ''}` : 'Nonstop'}</small></div><b class="booking-leg-time arrival">${arrivalTime}</b><div class="booking-leg-airport arrival"><small><b>${arrivalCode}</b> ${arrivalName}${terminal(flight.arrival)}</small></div></div><footer><i class="booking-itinerary-logo">${airlineLogo(flight.airline, flight.airlineLogo, `${flight.airline || 'Airline'} logo`)}</i><b>${flight.airline || 'Spring Airlines'}</b><span>Flight ${flight.number || '—'}</span><span>${flight.fare?.cabin || 'Economy'}</span><em class="segment-status ${state}">${stateText}</em></footer></article>`;
   }).join('');
   const [from = 'ULN', to = 'PVG'] = booking.route.match(/[A-Z]{3}/g) || [];
@@ -243,6 +250,31 @@ const openBookingDetail = ref => {
   const documentActions = booking.status === 'Ticketed' ? `<div class="booking-document-actions"><button type="button" class="secondary download-ticket">Print ticket (PDF)</button><button type="button" class="secondary download-receipt">Receipt (PDF)</button></div>` : '';
   modal.innerHTML = `<section class="booking-detail"><button class="close booking-close" type="button" aria-label="Close">&times;</button><p class="eyebrow">BOOKING DETAILS</p><h2>${booking.ref}</h2><div class="detail-status"><span class="tag ${booking.status.toLowerCase()}">${booking.status}</span><span>Created ${booking.issued}</span></div>${bookingTicketingDeadline(booking)}<section class="booking-detail-card"><h3>Itinerary</h3>${bookingFlightDetailsClean(booking)}</section><section class="booking-detail-card booking-passenger"><h3>Passengers</h3>${passengerList}</section><section class="booking-detail-card contact-detail"><h3>Contact person</h3><strong>${booking.contact?.name || '—'}</strong><span>${booking.contact?.phone || ''} ${booking.contact?.phone && booking.contact?.email ? '&middot;' : ''} ${booking.contact?.email || ''}</span></section>${bookingFareBreakdown(booking)}${documentActions}<div class="booking-detail-actions">${booking.status === 'Reserved' ? reservedActions : booking.status === 'Ticketed' ? ticketedActions : ''}</div></section>`;
   modal.querySelector('.booking-detail-actions').insertAdjacentHTML('beforebegin', bookingSavedFareRules(booking));
+  // Supplier results are informational; the booking/payment status stays separate.
+  const statusPanel = document.createElement('section');
+  statusPanel.className = 'booking-detail-card supplier-status-panel';
+  const statusHeading = document.createElement('h3');
+  statusHeading.textContent = 'Passenger flight status';
+  statusPanel.append(statusHeading);
+  (booking.itinerary?.flights || []).forEach((flight, flightIndex) => {
+    const heading = document.createElement('strong');
+    heading.textContent = `${flight.departure?.id || ''} → ${flight.arrival?.id || ''}`;
+    statusPanel.append(heading);
+    const rows = globalThis.SpringTicketStatus?.flightStatuses(booking, flightIndex) || [];
+    rows.forEach(row => {
+      const line = document.createElement('p');
+      line.textContent = `${passengers[row.passengerIndex] || 'Passenger'} · ${row.flag === null ? (booking.status === 'Ticketed' ? 'Ticketed · Spring status pending' : booking.status) : row.label}`;
+      statusPanel.append(line);
+    });
+  });
+  const syncNote = document.createElement('small');
+  const lastChecked = booking.supplierStatus?.lastSuccessfulAt;
+  syncNote.textContent = lastChecked && Number.isFinite(Date.parse(lastChecked))
+    ? `Last verified: ${new Date(lastChecked).toLocaleString()}` : 'Awaiting automatic Spring verification.';
+  if (booking.supplierStatus?.result === 'error') syncNote.textContent += ' Latest check failed; previous status retained.';
+  if (booking.supplierStatus?.result === 'unmatched') syncNote.textContent += ' Some passenger/flight statuses could not be matched.';
+  statusPanel.append(syncNote);
+  modal.querySelector('.booking-detail-actions').before(statusPanel);
   modal.querySelector('.booking-close').addEventListener('click', () => { clearInterval(bookingDeadlineTimer); modal.close(); });
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${booking.ref}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${booking.ref} cancelled.`); } catch (error) { toast(error.message); } });
   modal.querySelector('.issue-portal-booking')?.addEventListener('click', async event => { const button = event.currentTarget; if (!confirm(`Issue ticket for ${booking.ref}? This will charge the agency wallet.`)) return; button.disabled = true; button.textContent = 'Issuing ticket…'; try { await updatePortalBookingStatus(booking.ref, 'issue'); openBookingDetail(booking.ref); toast(`Spring payment succeeded. Ticket ${booking.ref} is issued.`); } catch (error) { button.disabled = false; button.textContent = 'Issue ticket'; toast(error.message); } });
@@ -263,7 +295,21 @@ const openBookingDetail = ref => {
       toast(error.message || 'Spring status could not be checked.');
     }
   });
-  modal.querySelector('.change-ticket-flow')?.addEventListener('click', () => showChangeFlow(modal, booking));
+  modal.querySelector('.change-ticket-flow')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Checking Spring status…';
+    try {
+      const response = await secureFetch(`/api/bookings/${encodeURIComponent(booking.ref)}/sync`, { method: 'POST' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Spring status could not be checked.');
+      showChangeFlow(modal, payload.booking ? portalBookingFromRow(payload.booking) : booking);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Change booking';
+      toast(error.message || 'Spring status could not be checked.');
+    }
+  });
   modal.querySelector('.download-ticket')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'ticket'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
   modal.querySelector('.download-receipt')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await downloadBookingDocument(booking.ref, 'receipt'); } catch (error) { toast(error.message); } finally { event.currentTarget.disabled = false; } });
   modal.showModal();
@@ -317,7 +363,8 @@ const bookingLegs = booking => {
      const isOutbound = sameAirportCode(departureCode, outboundDeparture) && sameAirportCode(arrivalCode, outboundArrival);
      const isReturn = sameAirportCode(departureCode, outboundArrival) && sameAirportCode(arrivalCode, outboundDeparture);
     const key = isOutbound ? 'outbound' : isReturn ? 'return' : (index ? 'return' : 'outbound'); const passengers = booking.passengers || [booking.passenger];
-    const springState = String(flight.status || '').toLowerCase();
+    const verified = globalThis.SpringTicketStatus?.summary(booking, storedFlights.indexOf(flight));
+    const springState = verified?.state || String(flight.status || '').toLowerCase();
     const springNoShow = springState === 'no-show' || springState === 'noshow';
     const noShowPassengers = springNoShow ? passengers.map((_, passengerIndex) => passengerIndex) : (noShow[key] || []).map(Number).filter(Number.isInteger);
     // Use the leg route, rather than its array position, for the saved-date
@@ -1328,25 +1375,52 @@ const portalBookingFromRow = row => {
     status: row.status,
     oneWay: itinerary.trip === 'oneway',
     itinerary,
+    supplierStatus: row.supplier_status || {},
     contact: row.passengers?.contact || {},
     documents: travellers
   };
 };
+let loadingBookings = false;
 const loadBookings = async () => {
-  if (!portalSession().accessToken) return;
+  const requestedToken = portalSession().accessToken;
+  if (!requestedToken) return;
+  if (loadingBookings) return;
+  loadingBookings = true;
   try {
     const response = await secureFetch('/api/bookings');
     const rows = await response.json();
     if (!response.ok) throw new Error(rows.error || 'Bookings could not be loaded.');
-    const pendingSpringSync = rows.filter(row => row.status !== 'Cancelled' && row.pnr && !String(row.pnr).startsWith('B2B'));
-    if (pendingSpringSync.length) {
-      await Promise.all(pendingSpringSync.map(row => secureFetch(`/api/bookings/${encodeURIComponent(row.pnr)}/sync`, { method: 'POST' }).catch(() => null)));
-      const refreshed = await secureFetch('/api/bookings');
-      if (refreshed.ok) rows.splice(0, rows.length, ...(await refreshed.json()));
-    }
+    if (portalSession().accessToken !== requestedToken) return;
+    // Server-side SOAP polling owns usage status; opening a page must not
+    // trigger a burst of supplier token/order requests for every booking.
     bookings.splice(0, bookings.length, ...rows.map(portalBookingFromRow));
-    renderBookings();
+    renderBookings(document.querySelector('#bookings .filters input')?.value || '');
+    const modal = document.querySelector('#booking-detail-modal');
+    if (modal?.open && modal.querySelector('.supplier-status-panel')) {
+      const ref = modal.querySelector('h2')?.textContent;
+      const current = bookings.find(booking => booking.ref === ref);
+      if (current) {
+        // Replace only read-only status content, not active change/refund forms.
+        const panel = modal.querySelector('.supplier-status-panel');
+        const lines = [...panel.querySelectorAll('p')];
+        let offset = 0;
+        (current.itinerary?.flights || []).forEach((flight, index) => {
+          const rows = globalThis.SpringTicketStatus?.flightStatuses(current, index) || [];
+          rows.forEach(row => {
+            if (lines[offset]) lines[offset].textContent = `${current.passengers[row.passengerIndex] || 'Passenger'} · ${row.flag === null ? 'Spring status pending' : row.label}`;
+            offset++;
+          });
+        });
+        const checked = current.supplierStatus?.lastSuccessfulAt;
+        panel.querySelector('small').textContent = checked && Number.isFinite(Date.parse(checked)) ? `Last verified: ${new Date(checked).toLocaleString()}` : 'Awaiting automatic Spring verification.';
+        if (current.supplierStatus?.result === 'error') panel.querySelector('small').textContent += ' Latest check failed; previous status retained.';
+        if (current.supplierStatus?.result === 'unmatched') panel.querySelector('small').textContent += ' Some passenger/flight statuses could not be matched.';
+        const itineraryCard = modal.querySelector('.booking-itinerary-leg')?.closest('.booking-detail-card');
+        if (itineraryCard) itineraryCard.innerHTML = `<h3>Itinerary</h3>${bookingFlightDetailsClean(current)}`;
+      }
+    }
   } catch (error) { console.warn(error.message); }
+  finally { loadingBookings = false; }
 };
 const totalCnyForSelection = () => [selectedOutbound, selectedReturn].filter(Boolean).reduce((sum, flight) => sum + cnyAmount(flight.price), 0) * activePassengerCounts.adults;
 const dateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? new Date(`${value}T00:00:00`) : null;
@@ -1630,6 +1704,10 @@ document.addEventListener('click', event => {
   if (event.target.closest('[data-retry-wallet], [data-view="wallet"], [data-view-target="wallet"]')) loadWallet();
 });
 window.loadBookings = loadBookings;
+setInterval(() => {
+  const showingBookings = document.querySelector('#bookings.view.active, #dashboard.view.active, #booking-detail-modal[open]');
+  if (showingBookings && document.visibilityState === 'visible' && portalSession().accessToken) void loadBookings();
+}, 60000);
 loadPricingRate();
 loadTopupInvoices();
 loadWallet();

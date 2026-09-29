@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import { createStatusSyncWorker } from './backend/spring-status-sync.mjs';
+import { claimSpringStatusChecks, finishSpringStatusCheck } from './backend/supabase-client.mjs';
 import { priceSelection, priceRequest, verifiedPrice, createPriceQuotes, flightList } from './backend/spring-pricing.mjs';
 import { requireChangeQuote, cleanBookingItinerary, guardedPayment } from './backend/payment-security.mjs';
 import { beginFinancialOperation, finishFinancialOperation } from './backend/supabase-client.mjs';
@@ -942,9 +944,9 @@ const springOrderSummary = result => {
     const schedule = springItemSchedule(item);
     // Spring's order-retrieve service is the authority for whether a segment
     // has been used. Keep its raw code too: the precise codes vary by product.
-    const segmentStatus = /NO[ _-]?SHOW/.test(statusCode) ? 'no-show'
-      : /FLOWN|USED|BOARDED/.test(statusCode) ? 'flown'
-        : /CANCEL|REFUND|VOID/.test(statusCode) ? 'cancelled'
+    // Usage is confirmed by SOAP tktFlag per passenger/segment, not guessed
+    // from undocumented JSON order status strings (or elapsed flight time).
+    const segmentStatus = /CANCEL|REFUND|VOID/.test(statusCode) ? 'cancelled'
           : statusCode === 'SOLDTICKET' ? 'ticketed' : 'reserved';
     return {
       index,
@@ -1603,4 +1605,13 @@ if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/
   };
   void reconcileExpiredReservations();
   setInterval(reconcileExpiredReservations, 60_000).unref();
+  const syncTicketStatuses = createStatusSyncWorker({
+    claim: claimSpringStatusChecks,
+    readOrder: pnr => createSpringSoapClient().getOrderDetailInfoC2({ orderNo: pnr }),
+    finish: finishSpringStatusCheck,
+    enabled: () => process.env.SPRING_STATUS_SYNC_ENABLED !== 'false' && getSupabaseStatus().configured && getSpringSoapStatus().orderDetailReady
+  });
+  // Short startup delay; the database schedules each booking every 15 minutes.
+  setTimeout(() => void syncTicketStatuses(), 30_000).unref();
+  setInterval(() => void syncTicketStatuses(), 60_000).unref();
 });
