@@ -1,0 +1,2 @@
+# Keep the generated installer stable across Windows and Linux checkouts.
+/deploy/staging/empty-test-schema.sql text eol=lf

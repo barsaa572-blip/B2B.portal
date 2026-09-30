@@ -587,7 +587,6 @@ alter table public.agencies
 
 -- SOURCE: supabase/agent-contact-details.sql
 -- Run before deploying the agent contact and ticket PDF update.
-
 alter table public.profiles
   add column if not exists email text,
   add column if not exists phone text;
@@ -600,7 +599,6 @@ where u.id = p.id and (p.email is null or p.email = '');
 -- SOURCE: supabase/spring-status-sync.sql
 -- Run once on the target Supabase project before deploying the worker.
 -- No booking/payment/itinerary values are rewritten.
-
 alter table public.bookings add column if not exists supplier_status jsonb not null default '{}'::jsonb;
 alter table public.bookings add column if not exists supplier_status_next_check_at timestamptz default now();
 alter table public.bookings add column if not exists supplier_status_lease_until timestamptz;
@@ -659,7 +657,6 @@ revoke all on function public.claim_spring_status_checks() from public, anon, au
 revoke all on function public.finish_spring_status_check(uuid, uuid, text, jsonb) from public, anon, authenticated;
 grant execute on function public.claim_spring_status_checks() to service_role;
 grant execute on function public.finish_spring_status_check(uuid, uuid, text, jsonb) to service_role;
-
 notify pgrst, 'reload schema';
 
 

@@ -40,7 +40,17 @@ test('empty test schema has an empty-project guard, one transaction and security
   assert.equal((sql.match(/^commit;$/gm)||[]).length,1);
   assert.equal(migrations.at(-1),'security-hardening.sql');
   assert.ok(sql.indexOf('raise exception') < sql.indexOf('create type'));
-  assert.equal(sql,readFileSync(new URL('../deploy/staging/empty-test-schema.sql',import.meta.url),'utf8'));
+  assert.equal(sql,readFileSync(new URL('../deploy/staging/empty-test-schema.sql',import.meta.url),'utf8').replace(/\r\n?/g, '\n'));
+});
+
+test('schema generation is identical for LF, CRLF and mixed migration files', () => {
+  const read = name => readFileSync(new URL(`../supabase/${name}`, import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+  const lf = buildSchema(read);
+  const crlf = buildSchema(name => read(name).replace(/\n/g, '\r\n'));
+  const mixed = buildSchema(name => migrations.indexOf(name) % 2 ? read(name) : read(name).replace(/\n/g, '\r\n'));
+  assert.equal(lf, crlf);
+  assert.equal(lf, mixed);
+  assert.ok(!lf.includes('\r'));
 });
 test('service and HTTPS config target test only and private files stay blocked', () => {
   const service=readFileSync(new URL('../deploy/staging/flightb2b-test.service',import.meta.url),'utf8');
