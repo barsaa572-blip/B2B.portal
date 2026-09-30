@@ -32,13 +32,14 @@ test('test label and noindex are staging only; production HTML remains byte-for-
   assert.match(page, /noindex,nofollow/);
   assert.match(page, /TEST ENVIRONMENT/);
 });
-test('empty test schema has an empty-project guard, one transaction and security hardening last', () => {
+test('empty test schema has an empty-project guard and guarded retail migration after security hardening', () => {
   const sql = buildSchema();
   assert.match(sql, /pg_tables where schemaname = 'public'/);
   assert.match(sql, /exists \(select 1 from auth.users\)/);
   assert.equal((sql.match(/^begin;$/gm)||[]).length,1);
   assert.equal((sql.match(/^commit;$/gm)||[]).length,1);
-  assert.equal(migrations.at(-1),'security-hardening.sql');
+  assert.equal(migrations.at(-2),'security-hardening.sql');
+  assert.equal(migrations.at(-1),'retail-rounding.sql');
   assert.ok(sql.indexOf('raise exception') < sql.indexOf('create type'));
   assert.equal(sql,readFileSync(new URL('../deploy/staging/empty-test-schema.sql',import.meta.url),'utf8').replace(/\r\n?/g, '\n'));
 });

@@ -128,6 +128,36 @@
     } finally { loading = false; }
   };
   const setup = () => {
+    const accounting = document.createElement('button');
+    accounting.type = 'button'; accounting.className = 'secondary';
+    accounting.textContent = 'Retail settlement audit';
+    byId('#administration')?.append(accounting);
+    accounting.addEventListener('click', async () => {
+      if (!isPlatformAdmin()) return;
+      accounting.disabled = true;
+      try {
+        const data = await api('/api/admin/retail-pricing');
+        if (!isPlatformAdmin()) return;
+        const element = modal();
+        element.innerHTML = `<section class="admin-form"><button class="close" type="button">×</button><h2>Retail settlement audit</h2><p>Administrator only. Latest 500 quotes; prepared quotes are not earned income. Confirm a refund only after checking the supplier settlement record.</p><div class="table-wrap"><table><thead><tr><th>PNR / Action</th><th>MNT</th><th>Wallet CNY</th><th>Supplier CNY</th><th>Margin CNY</th><th>State</th><th></th></tr></thead><tbody>${data.entries.map((entry, index) => `<tr><td>${escape(entry.bookings?.pnr || entry.booking_id)} / ${escape(entry.action)}</td><td>${mnt(entry.snapshot.amountMnt)}</td><td>${cny(entry.snapshot.walletCny)}</td><td>${cny(entry.snapshot.supplierCny)}</td><td>${cny(entry.snapshot.marginCny)}</td><td>${escape(entry.state)}</td><td>${entry.action === 'refund' && entry.state === 'awaiting_settlement' ? `<button type="button" class="secondary" data-settle-refund="${index}">Confirm settlement</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7">No retail settlements recorded.</td></tr>'}</tbody></table></div></section>`;
+        element.querySelector('.close').onclick = () => closeModal(element);
+        element.querySelectorAll('[data-settle-refund]').forEach(button => button.addEventListener('click', async () => {
+          const entry = data.entries[Number(button.dataset.settleRefund)];
+          const amount = window.prompt('Enter the actual refund received from Spring (CNY). Check the supplier settlement record first.');
+          if (amount === null || !amount.trim()) return;
+          const reference = window.prompt('Enter the supplier settlement reference (at least 5 characters).');
+          if (!reference) return;
+          if (!window.confirm(`Confirm the supplier has settled this refund and credit the agency wallet ${cny(entry.snapshot.walletCny)} CNY (${mnt(entry.snapshot.amountMnt)})?`)) return;
+          button.disabled = true;
+          try {
+            await api('/api/admin/refund-settlement', { method: 'POST', body: JSON.stringify({ bookingId: entry.booking_id, reference: entry.reference, supplierReceived: Number(amount), settlementReference: reference, confirmed: true }) });
+            button.textContent = 'Settled'; notify('Refund credited.'); await load();
+          } catch (error) { button.disabled = false; notify(error.message); }
+        }));
+        element.showModal();
+      } catch (error) { notify(error.message); }
+      finally { accounting.disabled = false; }
+    });
     byId('#agency-list')?.addEventListener('click', async event => {
       const button = event.target.closest('.agency-status');
       if (!button) return;

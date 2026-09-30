@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { requireChangeQuote } from '../backend/payment-security.mjs';
+import { retailAmount, publicRetail } from '../backend/retail-pricing.mjs';
 const source = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 const extract = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
 
 test('change quote uses supplier flight metadata and rejects foreign order heads', async () => {
   let supplierCalls = 0;
   const context = {
+    roundingEnabled: () => false,
     ticketedSpringBooking: async () => ({}), resolveSpringOrderHeadIds: async () => [10],
     getLiveChangeOptions: async () => ({ orderHeadIds: ['10'], flights: [{ segmentHeadId: 20, flightNo: 'REAL9C', departure: { code: 'ULN' }, arrival: { code: 'PVG' } }] }),
     createSpringClient: () => ({ getAccessToken: async () => ({ accessToken: 'fake' }), getChangeAvailability: async () => { supplierCalls++; return { ifSuccess: 'Y', flightBgAppInfo: { flightBgAppDO: { id: 12, bgFy: 600 } } }; } }),
@@ -29,6 +31,7 @@ test('change quote uses supplier flight metadata and rejects foreign order heads
 test('change payment rejects amount tampering and ignores browser flight metadata', async () => {
   const quote = { appId: 12, quotedAt: new Date().toISOString(), securityVersion: 1, amountsCny: { additionalPayment: 600 }, pairs: [{ segHeadId: 20 }], changes: [{ key: 'outbound', newFlight: { segmentHeadId: 20, flightNo: 'REAL9C' } }] };
   const calls = []; const context = {
+    roundingEnabled: () => false,
     springChangePaymentInFlight: new Set(), requireChangeQuote,
     ticketedSpringBooking: async () => ({ agency_id: 'agency', itinerary: { changeQuotes: { 12: quote } } }),
     getSpringSoapStatus: () => ({ creditPaymentReady: true }), assertWalletFunds: async () => {},
@@ -55,4 +58,29 @@ test('refund and ticket issue enter persistent guard before supplier mutation', 
   assert.ok(issue.indexOf('protectPayment(') < issue.indexOf('.payInCredit4OTA('));
   const refund = extract('async function submitLiveSpringRefund', 'createServer({');
   assert.ok(refund.indexOf('protectPayment(') < refund.indexOf('.refundTicket('));
+});
+
+test('retail issue charges the reviewed wallet amount but pays only supplier cost', async () => {
+  const snapshot = retailAmount(2041,540.8);
+  const booking = { id:'booking',pnr:'PNR',agency_id:'agency',status:'Reserved',retail_price:publicRetail(snapshot) };
+  const calls=[];
+  const context={
+    springIssueInFlight:new Set(),roundingEnabled:()=>true,expireTicketingDeadlineBookings:async()=>{},
+    listPortalBookings:async()=>[booking],getSpringSoapStatus:()=>({creditPaymentReady:true}),
+    createSpringSoapClient:()=>({getOrderDetailInfoC2:async()=>({orderMoneyCny:2041}),payInCredit4OTA:async args=>{calls.push(['supplier',args.orderMoney]);return {ifSuccess:'Y'};}}),
+    getPrivateRetailPrice:async()=>({state:'prepared',snapshot}),
+    setPortalBookingSpringAmount:async()=>booking,assertWalletFunds:async args=>calls.push(['wallet',args.amountCny]),
+    protectPayment:async(_p,_pnr,_action,_ref,amount,execute,retail)=>{calls.push(['guard',amount,retail.walletCny]);return execute();},
+    updatePortalBooking:async()=>({...booking,status:'Ticketed'}),process:{env:{}},console:{info(){},error(){}}
+  };
+  vm.createContext(context);vm.runInContext(extract('async function issueSpringCreditTicket','const findRefundCalculation'),context);
+  await assert.rejects(context.issueSpringCreditTicket({id:'actor'},'PNR'),/Review/);
+  await assert.rejects(context.issueSpringCreditTicket({id:'actor'},'PNR',{...publicRetail(snapshot),amountMnt:1}),/Review/);
+  assert.equal(calls.length,0);
+  await context.issueSpringCreditTicket({id:'actor'},'PNR',publicRetail(snapshot));
+  assert.deepEqual(calls,[['wallet',2041.05],['guard',2041,2041.05],['supplier',2041]]);
+  calls.length=0;
+  context.protectPayment=async()=>{throw new Error('database guard unavailable');};
+  await assert.rejects(context.issueSpringCreditTicket({id:'actor'},'PNR',publicRetail(snapshot)),/guard unavailable/);
+  assert.equal(calls.some(c=>c[0]==='supplier'),false);
 });

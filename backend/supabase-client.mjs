@@ -1,5 +1,37 @@
 import { getCnyMntRate } from './fx-rate.mjs';
 import { HttpError } from './request-security.mjs';
+import { publicRetail } from './retail-pricing.mjs';
+
+export async function storeRetailPrice(profile, pnr, action, reference, snapshot) {
+  await secretRequest('/rest/v1/rpc/store_retail_price', { method: 'POST', body: {
+    p_pnr: pnr, p_action: action, p_reference: String(reference), p_actor: profile.id,
+    p_snapshot: snapshot, p_public: publicRetail(snapshot)
+  } });
+}
+
+export async function assertRetailSchemaReady() {
+  const ready = await secretRequest('/rest/v1/rpc/retail_pricing_ready', { method: 'POST', body: {} });
+  if (ready !== true) throw new Error('Retail pricing migration is not ready. No booking was sent.');
+}
+
+export async function getPrivateRetailPrice(bookingId, action, reference) {
+  const rows = await secretRequest(`/rest/v1/retail_pricing?select=snapshot,state&booking_id=eq.${encodeURIComponent(bookingId)}&action=eq.${encodeURIComponent(action)}&reference=eq.${encodeURIComponent(reference)}&limit=1`);
+  return rows[0] || null;
+}
+
+export async function retailPricingAudit(profile) {
+  if (profile.role !== 'platform_admin') throw new HttpError(403, 'Administrator access required.');
+  return secretRequest('/rest/v1/retail_pricing?select=booking_id,action,reference,snapshot,state,updated_at,bookings(pnr)&order=updated_at.desc&limit=500');
+}
+
+export async function settleRetailRefund(profile, body) {
+  if (profile.role !== 'platform_admin' || body.confirmed !== true) throw new HttpError(403, 'Administrator confirmation of supplier settlement required.');
+  if (!Number.isFinite(body.supplierReceived) || body.supplierReceived < 0) throw new Error('Enter the verified supplier refund amount.');
+  return secretRequest('/rest/v1/rpc/settle_retail_refund', { method: 'POST', body: {
+    p_booking_id: body.bookingId, p_reference: body.reference, p_actor: profile.id,
+    p_supplier_received: body.supplierReceived, p_settlement_reference: body.settlementReference
+  } });
+}
 
 export function validatePasswordChange({ currentPassword, newPassword, confirmPassword } = {}) {
   if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 1024) throw new HttpError(400, 'Enter your current password.');
@@ -236,9 +268,10 @@ export async function recordChangePayment({ pnr, appId, amount, actorId, checkOn
   } });
 }
 
-export async function beginFinancialOperation({ actor, pnr, action, reference, amount }) {
+export async function beginFinancialOperation({ actor, pnr, action, reference, amount, retail = null }) {
   return secretRequest('/rest/v1/rpc/begin_financial_operation', { method: 'POST', body: {
-    p_actor: actor, p_pnr: pnr, p_action: action, p_reference: reference, p_amount: amount
+    p_actor: actor, p_pnr: pnr, p_action: action, p_reference: reference, p_amount: amount,
+    ...(retail ? { p_expected_retail: publicRetail(retail) } : {})
   } });
 }
 
@@ -409,7 +442,7 @@ export async function expireTicketingDeadlineBookings() {
   });
 }
 
-export async function createPortalBooking(profile, { totalCny, itinerary, passengers, pnr = newPortalPnr(), status = 'Reserved' }) {
+export async function createPortalBooking(profile, { totalCny, itinerary, passengers, pnr = newPortalPnr(), status = 'Reserved', retailPrice = null }) {
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
   if (!Array.isArray(passengers?.travellers) || !passengers.travellers.length) throw new Error('At least one passenger is required.');
   const created = await secretRequest('/rest/v1/bookings', {
@@ -422,7 +455,8 @@ export async function createPortalBooking(profile, { totalCny, itinerary, passen
       status,
       total_cny: Number(totalCny) || 0,
       itinerary,
-      passengers
+      passengers,
+      ...(retailPrice ? { retail_price: publicRetail(retailPrice) } : {})
     }
   });
   return created[0];

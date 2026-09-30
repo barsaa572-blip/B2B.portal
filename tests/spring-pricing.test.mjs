@@ -82,6 +82,7 @@ test('actual booking handler rejects unverified/changed fares and uses server to
     getSpringStatus: () => ({ httpJsonReady: true }),
     createSpringBookingPayload: () => ({ adultNum: 2, childNum: 1, infantNum: 1 }),
     priceSelection, priceRequest, verifiedPrice, priceQuotes: store,
+    roundingEnabled: () => false,
     createSpringClient: () => ({ getAccessToken: async () => ({ accessToken: 'fake' }), getSpecificPrice: async () => data,
       bookOrder: async () => { calls++; return { pnr: 'LOCAL-TEST' }; } }),
     springOrderReference: value => value.pnr,

@@ -10,7 +10,8 @@ export function requireChangeQuote(booking, appId, amount, now = Date.now()) {
     throw new Error('A recent server-verified change quote is required. Please calculate again.');
   }
   if (typeof savedAmount !== 'number' || !Number.isFinite(savedAmount) || savedAmount < 0) throw new Error('Invalid server change quote.');
-  if (amount !== undefined && (!Number.isFinite(Number(amount)) || Math.round(Number(amount) * 100) !== Math.round(savedAmount * 100))) {
+  const payableAmount = quote.retail?.walletCny ?? savedAmount;
+  if (amount !== undefined && (!Number.isFinite(Number(amount)) || Math.round(Number(amount) * 100) !== Math.round(payableAmount * 100))) {
     throw new Error('Change amount differs from the Spring quote. Please calculate again.');
   }
   return quote;
@@ -23,9 +24,9 @@ export function cleanBookingItinerary(itinerary) {
   return { route, trip, departureDate, returnDate, flights };
 }
 
-export async function guardedPayment({ begin, finish, actor, pnr, action, reference, amount }, execute) {
+export async function guardedPayment({ begin, finish, actor, pnr, action, reference, amount, retail = null }, execute) {
   // A failed/missing migration must fail BEFORE any supplier mutation.
-  const id = await begin({ actor, pnr, action, reference, amount });
+  const id = await begin({ actor, pnr, action, reference, amount, retail });
   if (typeof id !== 'string' || !id) throw new Error('Financial operation could not be verified. No supplier request was sent.');
   try {
     const result = await execute();

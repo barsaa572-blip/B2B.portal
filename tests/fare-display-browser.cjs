@@ -87,6 +87,17 @@ const root = path.resolve(__dirname, '..');
     assert.equal(await page.locator('[data-verify-booking-price]').count(), 0);
     assert.doesNotMatch(await page.locator('.booking-price-panel').innerText(), /Live CNY price verified/);
     assert.match(await page.locator('.booking-price-panel').innerText(), /Ticket fare/);
+    // Frozen MNT sale prices must not be reconstructed from rounded CNY cents
+    // or change when the live FX endpoint is refreshed later.
+    await page.evaluate(() => {
+      bookingQuote.breakdown = [{type:'adults',count:1,total:2041.05,fare:2041.05,taxes:0}];
+      bookingQuote.retail = {version:1,direction:'charge',rateMnt:540.8,walletCny:2041.05,amountMnt:1103800,
+        lines:[{type:'adults',count:1,fareMnt:1103800,taxesMnt:0,totalMnt:1103800}]};
+      pricingRate = {effectiveRateMnt:600};
+      refreshBookingPricePanel();
+    });
+    assert.match(await page.locator('.booking-price-panel .price-total').innerText(), /1,103,800/);
+    assert.equal(await page.evaluate(() => bookingTotalMnt({total:2041.05,retailPrice:bookingQuote.retail})), await page.evaluate(() => mnt(1103800)));
     await page.locator('.booking-price-panel .selected-fare-details').first().click();
     await page.locator('#fare-rule-modal[open]').waitFor();
     for (const width of [1440, 390]) {
@@ -101,7 +112,7 @@ const root = path.resolve(__dirname, '..');
       assert.equal(layout.formOverflow, 'visible');
       assert.ok(layout.width <= width);
     }
-    console.log('PASS: compact totals, simple hover preview, grouping, checkout baggage links, removed controls, single modal scroll on desktop/mobile');
+    console.log('PASS: frozen rounded MNT, compact totals, hover preview, grouping, baggage links and desktop/mobile modal scroll');
     await page.evaluate(() => {
       document.querySelector('#fare-rule-modal')?.close();
       window.forcePortalSignOut();

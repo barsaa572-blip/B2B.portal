@@ -58,18 +58,22 @@ export function verifiedPrice(data, selection) {
 export function createPriceQuotes({ now = Date.now, ttl = 600000, limit = 1000 } = {}) {
   const quotes = new Map();
   return {
-    save(actor, selection, price) {
+    save(actor, selection, price, retail = null) {
       for (const [id, quote] of quotes) if (quote.expiresAt <= now()) quotes.delete(id);
       if (quotes.size >= limit) quotes.delete(quotes.keys().next().value);
       const id = randomUUID();
       const expiresAt = now() + ttl;
-      quotes.set(id, { actor, fingerprint: JSON.stringify(selection), price: structuredClone(price), expiresAt });
+      quotes.set(id, { actor, fingerprint: JSON.stringify(selection), price: structuredClone(price), retail: structuredClone(retail), expiresAt });
       return { ...price, quoteId: id, expiresAt };
     },
     require(id, actor, selection) {
       const quote = quotes.get(id);
       if (!quote || quote.expiresAt <= now() || quote.actor !== actor || quote.fingerprint !== JSON.stringify(selection)) fail('Price quote expired or does not match this selection. Verify the price again.');
       return structuredClone(quote.price);
+    },
+    requireRetail(id, actor, selection) {
+      this.require(id, actor, selection);
+      return structuredClone(quotes.get(id).retail);
     },
     consume(id) { quotes.delete(id); }
   };

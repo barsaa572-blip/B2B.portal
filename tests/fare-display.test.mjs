@@ -6,7 +6,7 @@ const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const helpers = source.slice(source.indexOf('const canonicalFareData ='), source.indexOf('// Body-level tooltip'));
 const makeContext = extras => {
   const context = vm.createContext({ activePassengerCounts: { adults: 1, children: 1, infants: 1 }, portalSession: () => ({ profile: { id: 'agent' } }), escapeHtml: String, quoteMnt: value => `MNT:${value}`, ...extras });
-  vm.runInContext(helpers + '\nglobalThis.api = { cheapestDistinctChoices, fareConditionKey, priceFareChoices, resetFarePricing, passengerPriceMarkup };', context);
+  vm.runInContext(source.slice(source.indexOf('const retailTotalMnt ='), source.indexOf('let bookingQuote =')) + helpers + '\nglobalThis.api = { cheapestDistinctChoices, fareConditionKey, priceFareChoices, resetFarePricing, passengerPriceMarkup };', context);
   return context;
 };
 const fare = (id, patch = {}) => ({ id, baseFare: 100, baggage: { cabinKg: 7, checkedKg: 20 }, rules: [1, 2].map(type => ({ type, entries: [{ value: 100, valueType: 1, start: '-24H', end: '0H' }, { value: 200, valueType: 1, start: '0H', end: null }] })), spring: { segHeadId: 10, combId: 1, combType: 1, combPrice: 100, adultCabin: id, cabinType: 3, moneyClassId: 0 }, ...patch });

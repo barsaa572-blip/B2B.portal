@@ -7,7 +7,7 @@ export const migrations = [
   'topup-expiry.sql', 'topup-wallet-credit-fix.sql', 'topup-bank-transfer-fees.sql',
   'remove-topup-expiry.sql', 'wallet-funding-controls.sql', 'change-wallet-payment.sql',
   'agency-contact-details.sql', 'agent-contact-details.sql', 'spring-status-sync.sql',
-  'security-hardening.sql'
+  'security-hardening.sql', 'retail-rounding.sql'
 ];
 const readMigration = name => readFileSync(new URL(`../../supabase/${name}`, import.meta.url), 'utf8');
 export function buildSchema(readSource = readMigration) {
