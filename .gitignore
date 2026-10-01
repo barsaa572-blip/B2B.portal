@@ -5,3 +5,6 @@ logs/
 *.log
 node_modules/
 .tmp-retail-db/
+/tmp/pdfs/
+/output/pdf/
+/private/invoice/

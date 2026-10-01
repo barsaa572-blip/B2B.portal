@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { invoiceHtml, invoicePdf } from './backend/topup-invoice.mjs';
 import { createRefundQuotes } from './backend/refund-quotes.mjs';
 import { roundingEnabled, retailTicket, retailAmount, retailComponents, publicRetail, agencyPrice, agencyResponse } from './backend/retail-pricing.mjs';
 import { storeRetailPrice, getPrivateRetailPrice, retailPricingAudit, settleRetailRefund, assertRetailSchemaReady } from './backend/supabase-client.mjs';
@@ -328,39 +329,7 @@ const ticketPdf = async (booking, agency = {}, issuedAt = null, issuingAgent = n
   output += `trailer\n<< /Size ${boldFont + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(output, 'ascii');
 };
-let invoiceDocument = invoice => {
-  const amount = Number(invoice.amount_mnt || 0);
-  const fee = Number(invoice.service_fee_mnt || 0);
-  const correspondentFee = Number(invoice.correspondent_fee_mnt || 0);
-  const bankFee = Number(invoice.bank_transfer_fee_mnt ?? invoice.khaan_transfer_fee_mnt ?? 0);
-  const bankName = invoice.bank_name || 'Khaan Bank';
-  const total = Number(invoice.total_mnt ?? amount + fee + correspondentFee + bankFee);
-  const currency = value => `₮ ${Number(value || 0).toLocaleString('en-US')}`;
-  const created = new Date(invoice.created_at).toLocaleDateString('en-GB');
-  return `<!doctype html><html lang="mn"><head><meta charset="utf-8"><title>${escapeHtml(invoice.invoice_number)}</title><style>body{font-family:Arial,"Segoe UI",sans-serif;color:#10284b;max-width:780px;margin:28px auto;padding:0 18px;background:#fff}.invoice{border:1px solid #e0e8f2;border-radius:12px;padding:26px;box-shadow:0 8px 24px #17325a0d}h1{font-size:24px;margin:0 0 22px}.head{display:flex;justify-content:space-between;gap:24px}.party{font-size:13px;line-height:1.65}.label{font-weight:800;color:#314869}.invoice-no{text-align:right}.invoice-no strong{display:block;color:#1e5ee9;font-size:15px;margin-top:5px}.table{width:100%;border-collapse:separate;border-spacing:0;margin-top:24px;border:1px solid #d7e1ee;border-radius:10px;overflow:hidden;font-size:13px}.table th{background:#f1f5fa;text-align:left;padding:11px 12px;font-size:12px;color:#395370}.table td{padding:12px;border-top:1px solid #d7e1ee}.table td:not(:first-child),.table th:not(:first-child){text-align:right}.summary{margin:18px 0 0 auto;width:min(100%,360px);background:#f8fafc;border-radius:10px;padding:12px 16px;font-size:13px}.row{display:flex;justify-content:space-between;padding:8px 0}.total{border-top:1px dashed #b9c9df;margin-top:5px;padding-top:11px;font-size:15px;font-weight:800}.muted{color:#697b96;font-size:12px;line-height:1.55}.wallet{margin-top:14px;padding:12px 14px;background:#eef5ff;border-left:3px solid #2863e8;border-radius:5px;font-size:13px}.status{display:inline-block;padding:3px 9px;border-radius:999px;background:#e6f7ee;color:#087c4c;font-size:12px;font-weight:700}footer{margin-top:22px;color:#71819a;font-size:11px}</style></head><body><main class="invoice"><div class="head"><div><h1>Нэхэмжлэх</h1><div class="party"><span class="label">Илгээгч</span><br>NEXAHUB by Air Sales<br>РД: —</div></div><div class="invoice-no"><span class="label">Хүлээн авагч</span><br>${escapeHtml(invoice.agencyName)}<br><span class="muted">РД: ${escapeHtml(invoice.agencyRegistrationNumber)}<br>Имэйл: ${escapeHtml(invoice.agencyEmail)}<br>Утас: ${escapeHtml(invoice.agencyPhone)}</span><br><span class="label">Нэхэмжлэх №</span><strong>${escapeHtml(invoice.invoice_number)}</strong><span class="muted">Огноо: ${created}</span></div></div><table class="table"><thead><tr><th>Бараа / үйлчилгээ</th><th>Тоо ширхэг</th><th>Нэгж үнэ</th><th>Дүн</th></tr></thead><tbody><tr><td>Wallet цэнэглэлт</td><td>1</td><td>${currency(amount)}</td><td>${currency(amount)}</td></tr><tr><td>Үйлчилгээний хөлс (3%)</td><td>1</td><td>${currency(fee)}</td><td>${currency(fee)}</td></tr><tr><td>Корреспондент банкны шимтгэл (OUR)</td><td>1</td><td>${currency(correspondentFee)}</td><td>${currency(correspondentFee)}</td></tr><tr><td>${escapeHtml(bankName)}-ны гадаад гүйлгээний шимтгэл</td><td>1</td><td>${currency(bankFee)}</td><td>${currency(bankFee)}</td></tr></tbody></table><section class="summary"><div class="row"><span>Wallet цэнэглэх дүн</span><span>${currency(amount)}</span></div><div class="row"><span>Нэмэлт шимтгэлүүд</span><span>${currency(fee + correspondentFee + bankFee)}</span></div><div class="row total"><span>Төлөх нийт дүн</span><span>${currency(total)}</span></div></section>${invoice.note ? `<p class="muted"><strong>Тайлбар:</strong> ${escapeHtml(invoice.note)}</p>` : ''}</main></body></html>`;
-};
-
-// Keep this separate from the original template so deployed portals can show
-// all agency contact details once the corresponding database migration runs.
-invoiceDocument = invoice => {
-  const amount = Number(invoice.amount_mnt || 0);
-  const fee = Number(invoice.service_fee_mnt || 0);
-  const correspondentFee = Number(invoice.correspondent_fee_mnt || 0);
-  const bankFee = Number(invoice.bank_transfer_fee_mnt ?? invoice.khaan_transfer_fee_mnt ?? 0);
-  const total = Number(invoice.total_mnt ?? amount + fee + correspondentFee + bankFee);
-  const currency = value => `₮ ${Number(value || 0).toLocaleString('en-US')}`;
-  const created = new Date(invoice.created_at).toLocaleDateString('en-GB');
-  return `<!doctype html>
-<html lang="mn"><head><meta charset="utf-8"><title>${escapeHtml(invoice.invoice_number)}</title>
-<style>
-body{font-family:Arial,"Segoe UI",sans-serif;color:#10284b;max-width:780px;margin:28px auto;padding:0 18px;background:#fff}.invoice{border:1px solid #dbe6f4;border-radius:12px;padding:28px}.head{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #1e5ee9;padding-bottom:20px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:1.2px;color:#60728f}.title{font-size:27px;font-weight:800;margin:5px 0}.meta{text-align:right;font-size:13px;line-height:1.6}.party{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:24px 0;font-size:13px;line-height:1.65}.label{font-weight:800;color:#314869}.card{border:1px solid #dbe6f4;border-radius:9px;overflow:hidden}.row{display:flex;justify-content:space-between;padding:12px 15px;border-bottom:1px solid #e9eef6}.row:last-child{border-bottom:0}.total{font-size:17px;font-weight:800;background:#eef5ff}.note{margin-top:22px;padding:14px 16px;background:#f3f8ff;border-left:3px solid #1e5ee9;font-size:12px;line-height:1.6}@media print{body{margin:0;padding:0}.invoice{border:0;box-shadow:none}}
-</style></head><body><main class="invoice">
-<header class="head"><div><div class="eyebrow">NEXAHUB by Air Sales</div><div class="title">Нэхэмжлэх</div><div class="eyebrow">TOP-UP PAYMENT INVOICE</div></div><div class="meta"><span class="label">Нэхэмжлэх №</span><br><strong>${escapeHtml(invoice.invoice_number)}</strong><br>${created}</div></header>
-<section class="party"><div><span class="label">Илгээгч</span><br>NEXAHUB by Air Sales</div><div><span class="label">Хүлээн авагч</span><br><strong>${escapeHtml(invoice.agencyName || '-')}</strong><br>РД: ${escapeHtml(invoice.agencyRegistrationNumber || '-')}<br>Имэйл: ${escapeHtml(invoice.agencyEmail || '-')}<br>Утас: ${escapeHtml(invoice.agencyPhone || '-')}<br>Хаяг: ${escapeHtml(invoice.agencyAddress || '-')}</div></section>
-<section class="card"><div class="row"><span>Wallet funding amount</span><strong>${currency(amount)}</strong></div><div class="row"><span>Үйлчилгээний шимтгэл (3%)</span><strong>${currency(fee)}</strong></div><div class="row"><span>Корреспондент банк (OUR)</span><strong>${currency(correspondentFee)}</strong></div><div class="row"><span>Банкны гүйлгээний шимтгэл</span><strong>${currency(bankFee)}</strong></div><div class="row total"><span>Төлөх нийт дүн</span><span>${currency(total)}</span></div></section>
-<p class="note">Төлбөр баталгаажсаны дараа wallet автоматаар цэнэглэгдэнэ.</p>
-</main></body></html>`;
-};
+let invoiceDocument = invoice => invoiceHtml(invoice);
 const normalise = item => { const flights = item.flights ?? [];
 const first = flights[0] ?? {};
 const last = flights.at(-1) ?? first;
@@ -1605,7 +1574,7 @@ const amountMnt = Number(body.amountMnt);
 if (!Number.isFinite(amountMnt) || amountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
 const invoice = await createTopupRequest({ profile, amountMnt, paymentReference: body.paymentReference, note: body.note }); return send(res, 201, { invoice, downloadUrl: `/api/invoices/${invoice.id}` }); } const topupMatch = url.pathname.match(/^\/api\/topups\/([\w-]+)$/);
 if (topupMatch && req.method === 'DELETE') { await deleteTopupRequest(profile, topupMatch[1]); return send(res, 200, { ok: true }); } const invoiceMatch = url.pathname.match(/^\/api\/invoices\/([\w-]+)$/);
-if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); return send(res, 200, invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
+if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); if (url.searchParams.get('format') === 'pdf') return sendPdf(res, `${String(invoice.invoice_number).replace(/[^A-Za-z0-9_-]/g, '')}.pdf`, await invoicePdf(invoice)); return send(res, 200, await invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
 if (url.pathname === '/api/admin/overview' && req.method === 'GET') return send(res, 200, await getAdminOverview());
 if (url.pathname === '/api/admin/retail-pricing' && req.method === 'GET') return send(res, 200, { entries: roundingEnabled() ? await retailPricingAudit(req.securityProfile) : [] });
 if (url.pathname === '/api/admin/refund-settlement' && req.method === 'POST') return send(res, 200, await settleRetailRefund(req.securityProfile, await readJson(req)));
