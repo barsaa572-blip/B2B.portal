@@ -52,7 +52,7 @@
     let modal = document.querySelector('#passenger-price-modal');
     if (!modal) { modal = document.createElement('dialog'); modal.id = 'passenger-price-modal'; document.body.append(modal); }
     const hasPending = counts.children || counts.infants;
-    modal.innerHTML = `<section class="passenger-price-modal-content"><button type="button" class="close" aria-label="Close">×</button><h2>Price details</h2><p class="price-detail-total">${hasPending ? 'Confirmed amount:' : 'Total for all passengers:'} <strong>${price(adultTotal)}</strong> <span>(including taxes and fees)</span></p><div class="price-detail-table-wrap"><table><thead><tr><th>Passenger</th><th>Bounds</th><th>Fare basis</th><th>Fare amount</th><th>Taxes</th><th>Total</th></tr></thead><tbody>${adultRows}${pendingRows(counts.children, 'CHD')}${pendingRows(counts.infants, 'INF')}</tbody><tfoot><tr><th colspan="3">${hasPending ? 'Confirmed amount' : 'Total amounts'}</th><th>${price(base * counts.adults)}</th><th>${price(taxes * counts.adults)}</th><th>${price(adultTotal)}</th></tr></tfoot></table></div>${hasPending ? '<p class="price-detail-note">Child and infant fares are confirmed by Spring before booking.</p>' : ''}</section>`;
+    modal.innerHTML = safeHtml(`<section class="passenger-price-modal-content"><button type="button" class="close" aria-label="Close">×</button><h2>Price details</h2><p class="price-detail-total">${hasPending ? 'Confirmed amount:' : 'Total for all passengers:'} <strong>${price(adultTotal)}</strong> <span>(including taxes and fees)</span></p><div class="price-detail-table-wrap"><table><thead><tr><th>Passenger</th><th>Bounds</th><th>Fare basis</th><th>Fare amount</th><th>Taxes</th><th>Total</th></tr></thead><tbody>${adultRows}${pendingRows(counts.children, 'CHD')}${pendingRows(counts.infants, 'INF')}</tbody><tfoot><tr><th colspan="3">${hasPending ? 'Confirmed amount' : 'Total amounts'}</th><th>${price(base * counts.adults)}</th><th>${price(taxes * counts.adults)}</th><th>${price(adultTotal)}</th></tr></tfoot></table></div>${hasPending ? '<p class="price-detail-note">Child and infant fares are confirmed by Spring before booking.</p>' : ''}</section>`);
     modal.querySelector('.close').addEventListener('click', () => modal.close());
     modal.showModal();
   };
@@ -90,7 +90,7 @@
     const rules = flight?.fare?.rules || flight?.spring?.fare?.rules || [];
     let modal = document.querySelector('#fare-rules-modal');
     if (!modal) { modal = document.createElement('dialog'); modal.id = 'fare-rules-modal'; document.body.append(modal); }
-    modal.innerHTML = `<section class="fare-rules-modal-content"><button type="button" class="close" aria-label="Close">×</button><h2>Fare rules</h2><p>${flight?.departure?.id || '—'} → ${flight?.arrival?.id || '—'} · ${flight?.airline || 'Airline'} ${flight?.number || ''}</p>${fareRulesMarkup(rules)}<small>Final refund and change amounts are confirmed by Spring Airlines before ticket issuance.</small></section>`;
+    modal.innerHTML = safeHtml(`<section class="fare-rules-modal-content"><button type="button" class="close" aria-label="Close">×</button><h2>Fare rules</h2><p>${flight?.departure?.id || '—'} → ${flight?.arrival?.id || '—'} · ${flight?.airline || 'Airline'} ${flight?.number || ''}</p>${fareRulesMarkup(rules)}<small>Final refund and change amounts are confirmed by Spring Airlines before ticket issuance.</small></section>`);
     modal.querySelector('.close').addEventListener('click', () => modal.close());
     modal.showModal();
   };
@@ -112,7 +112,7 @@
     const route = detail.querySelector('.detail-route')?.outerHTML || '';
     detail.dataset.richDetails = 'true';
     detail.classList.add('rich-details-ui');
-    detail.innerHTML = fareFor(detail) + route + legs.map((leg, index) => buildLeg(leg) + (index < legs.length - 1 ? '<div class="rich-connection">Connection</div>' : '')).join('');
+    detail.innerHTML = safeHtml(fareFor(detail) + route + legs.map((leg, index) => buildLeg(leg) + (index < legs.length - 1 ? '<div class="rich-connection">Connection</div>' : '')).join(''));
   };
   document.addEventListener('click', event => {
     const priceButton = event.target.closest('.passenger-price-details');

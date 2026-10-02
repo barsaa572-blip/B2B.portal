@@ -1,3 +1,4 @@
+require('./support/html-vm.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -28,6 +29,7 @@ const extract = (source, start, end) => source.slice(source.indexOf(start), sour
 
   const writes = [];
   const userCtx = {
+    emailField: (await import('../backend/input-validation.mjs')).emailField,
     config: () => ({ configured: true, secretKey: 'test-only' }),
     request: async () => ({ ok: true, json: async () => ({ id: 'new-agent', email: 'test@example.com' }) }),
     secretRequest: async (url, options) => { writes.push({ url, options }); return []; }

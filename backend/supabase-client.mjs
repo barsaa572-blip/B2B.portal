@@ -1,6 +1,7 @@
 import { getCnyMntRate } from './fx-rate.mjs';
 import { HttpError } from './request-security.mjs';
 import { publicRetail } from './retail-pricing.mjs';
+import { emailField } from './input-validation.mjs';
 
 export async function storeRetailPrice(profile, pnr, action, reference, snapshot) {
   await secretRequest('/rest/v1/rpc/store_retail_price', { method: 'POST', body: {
@@ -88,7 +89,7 @@ async function secretRequest(path, options = {}) {
   if (!configured) throw new Error('Database is not configured on this server.');
   const response = await request(path, { ...options, headers: { apikey: secretKey, authorization: `Bearer ${secretKey}`, prefer: 'return=representation', ...(options.headers || {}) } });
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.message || data?.msg || 'Database request failed.');
+  if (!response.ok) throw new Error('Database request failed. Contact support if the problem persists.');
   return data;
 }
 
@@ -243,12 +244,13 @@ export async function createAgency({ name, registrationNumber, email, phone, add
 }
 
 export async function createUser({ email, password, fullName, phone, agencyId, branchId, role }) {
-  if (!String(fullName || '').trim() || !String(phone || '').trim()) throw new Error('Full name and phone number are required.');
+if (!String(fullName || '').trim() || !String(phone || '').trim()) throw new Error('Full name and phone number are required.');
+email = emailField(email);
   const { secretKey, configured } = config();
   if (!configured) throw new Error('Database is not configured on this server.');
   const response = await request('/auth/v1/admin/users', { method: 'POST', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` }, body: { email, password, email_confirm: true } });
   const authUser = await response.json().catch(() => ({}));
-  if (!response.ok || !authUser.id) throw new Error(authUser.msg || authUser.message || 'Unable to create the login account.');
+  if (!response.ok || !authUser.id) throw new Error('Unable to create the login account. Check the email and password requirements.');
   try {
     await secretRequest('/rest/v1/profiles', { method: 'POST', body: { id: authUser.id, agency_id: agencyId || null, branch_id: branchId || null, role, full_name: fullName.trim(), email: authUser.email || email, phone: phone.trim(), active: true } });
   } catch (error) {
@@ -377,7 +379,10 @@ export async function createTopupRequest({ profile, amountMnt, paymentReference,
 }
 
 export async function getTopupRequests(profile) {
-  let filter = profile.role === 'platform_admin' ? '' : profile.role === 'office_manager' ? `&agency_id=eq.${profile.agency_id}` : `&requested_by=eq.${profile.id}`;
+  if (!profile?.id || !['agent', 'office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Top-up access denied.');
+  if (profile.role !== 'platform_admin' && !profile.agency_id) throw new Error('Agency is required.');
+  const filter = profile.role === 'platform_admin' ? '' :
+    `&agency_id=eq.${encodeURIComponent(profile.agency_id)}${profile.role === 'agent' ? `&requested_by=eq.${encodeURIComponent(profile.id)}` : ''}`;
   return secretRequest(`/rest/v1/topup_requests?select=*&order=created_at.desc${filter}`);
 }
 
@@ -392,9 +397,11 @@ export async function getWalletDetails(profile) {
 }
 
 const bookingAccessFilter = profile => {
+  if (!profile?.id || !['agent', 'office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Booking access denied.');
   if (profile.role === 'platform_admin') return '';
-  if (profile.role === 'office_manager') return `&agency_id=eq.${encodeURIComponent(profile.agency_id)}`;
-  return `&created_by=eq.${encodeURIComponent(profile.id)}`;
+  if (!profile.agency_id) throw new Error('Agency is required.');
+  const agencyScope = `&agency_id=eq.${encodeURIComponent(profile.agency_id)}`;
+  return profile.role === 'office_manager' ? agencyScope : `${agencyScope}&created_by=eq.${encodeURIComponent(profile.id)}`;
 };
 
 const newPortalPnr = () => `B2B${crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase()}`;
@@ -466,7 +473,9 @@ export async function updatePortalBooking(profile, pnr, status) {
   const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status,created_at,total_cny&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
-  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  const allowed = Boolean(profile?.id) && (profile.role === 'platform_admin' ||
+    (Boolean(profile.agency_id) && booking.agency_id === profile.agency_id &&
+      (profile.role === 'office_manager' || (profile.role === 'agent' && booking.created_by === profile.id))));
   if (!allowed) throw new Error('You do not have access to this booking.');
   if (booking.status === 'Cancelled') throw new Error('This booking has already been cancelled.');
   if (status === 'Ticketed' && booking.status === 'Ticketed') throw new Error('This booking is already ticketed.');
@@ -490,7 +499,9 @@ export async function setPortalBookingSpringAmount(profile, pnr, amountCny) {
   const rows = await secretRequest(`/rest/v1/bookings?select=id,agency_id,created_by,status&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
-  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  const allowed = Boolean(profile?.id) && (profile.role === 'platform_admin' ||
+    (Boolean(profile.agency_id) && booking.agency_id === profile.agency_id &&
+      (profile.role === 'office_manager' || (profile.role === 'agent' && booking.created_by === profile.id))));
   if (!allowed) throw new Error('You do not have access to this booking.');
   if (booking.status !== 'Reserved') throw new Error(`Spring amount can only be updated for a reserved booking (current status: ${booking.status}).`);
   const updated = await secretRequest(`/rest/v1/bookings?id=eq.${encodeURIComponent(booking.id)}&status=eq.Reserved`, {
@@ -508,7 +519,9 @@ export async function syncPortalBookingFromSpring(profile, pnr, springOrder) {
   const rows = await secretRequest(`/rest/v1/bookings?select=*&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
-  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  const allowed = Boolean(profile?.id) && (profile.role === 'platform_admin' ||
+    (Boolean(profile.agency_id) && booking.agency_id === profile.agency_id &&
+      (profile.role === 'office_manager' || (profile.role === 'agent' && booking.created_by === profile.id))));
   if (!allowed) throw new Error('You do not have access to this booking.');
   const existingFlights = Array.isArray(booking.itinerary?.flights) ? booking.itinerary.flights : [];
   const schedules = Array.isArray(springOrder.schedules) ? springOrder.schedules : [];
@@ -568,7 +581,9 @@ export async function recordPortalBookingChange(profile, pnr, { appId, changes =
   const rows = await secretRequest(`/rest/v1/bookings?select=*&pnr=eq.${encodeURIComponent(pnr)}&limit=1`);
   const booking = rows[0];
   if (!booking) throw new Error('Booking not found.');
-  const allowed = profile.role === 'platform_admin' || booking.created_by === profile.id || (profile.role === 'office_manager' && booking.agency_id === profile.agency_id);
+  const allowed = Boolean(profile?.id) && (profile.role === 'platform_admin' ||
+    (Boolean(profile.agency_id) && booking.agency_id === profile.agency_id &&
+      (profile.role === 'office_manager' || (profile.role === 'agent' && booking.created_by === profile.id))));
   if (!allowed) throw new Error('You do not have access to this booking.');
   if (booking.status !== 'Ticketed') throw new Error('Only ticketed bookings can be changed.');
   if ((booking.itinerary?.changeHistory || []).some(entry => Number(entry.appId) === Number(appId))) return booking;
@@ -656,7 +671,9 @@ export async function getTopupInvoice(profile, id) {
   const rows = await secretRequest(`/rest/v1/topup_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
   const request = rows[0];
   if (!request) throw new Error('Invoice not found.');
-  const allowed = profile.role === 'platform_admin' || request.requested_by === profile.id || (profile.role === 'office_manager' && request.agency_id === profile.agency_id);
+  const allowed = Boolean(profile?.id) && (profile.role === 'platform_admin' ||
+    (Boolean(profile.agency_id) && request.agency_id === profile.agency_id &&
+      (profile.role === 'office_manager' || (profile.role === 'agent' && request.requested_by === profile.id))));
   if (!allowed) throw new Error('You do not have access to this invoice.');
   const agencies = await secretRequest(`/rest/v1/agencies?select=name,registration_number,email,phone,address&id=eq.${encodeURIComponent(request.agency_id)}&limit=1`);
   const agency = agencies[0] || {};
@@ -690,7 +707,9 @@ export async function deleteTopupRequest(profile, id) {
   const request = rows[0];
   if (!request) throw new Error('Invoice not found.');
   if (request.status !== 'pending') throw new Error('Approved or rejected invoices cannot be deleted.');
-  const allowed = profile.role === 'platform_admin' || request.requested_by === profile.id || (profile.role === 'office_manager' && request.agency_id === profile.agency_id);
+  const allowed = Boolean(profile?.id) && (profile.role === 'platform_admin' ||
+    (Boolean(profile.agency_id) && request.agency_id === profile.agency_id &&
+      (profile.role === 'office_manager' || (profile.role === 'agent' && request.requested_by === profile.id))));
   if (!allowed) throw new Error('You do not have permission to delete this invoice.');
   await secretRequest(`/rest/v1/topup_requests?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

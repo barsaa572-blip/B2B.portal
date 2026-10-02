@@ -19,6 +19,7 @@
     profile: result.profile || previous.profile
   });
   const signOut = () => {
+    void fetch('/api/auth/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).catch(() => {});
     window.placeThemeToggle?.(false);
     const menu = document.querySelector('.sidebar-account-menu');
     if (menu) menu.hidden = true;
@@ -53,13 +54,13 @@
     const dialog = document.createElement('dialog');
     dialog.id = 'password-dialog'; dialog.className = 'password-dialog';
     dialog.setAttribute('aria-labelledby', 'password-title');
-    dialog.innerHTML = `<form><h2 id="password-title">Change password</h2>
+    dialog.innerHTML = safeHtml(`<form><h2 id="password-title">Change password</h2>
       <p id="password-help">Use 8–128 characters including a letter, a number and a special character. Sign in again after changing your password.</p>
       <label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required maxlength="1024"></label>
       <label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128" aria-describedby="password-help"></label>
       <label>Confirm new password<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
       <p class="password-error" role="alert" hidden></p>
-      <div class="password-actions"><button type="button" class="secondary password-cancel">Cancel</button><button type="submit" class="primary">Change password</button></div></form>`;
+      <div class="password-actions"><button type="button" class="secondary password-cancel">Cancel</button><button type="submit" class="primary">Change password</button></div></form>`);
     document.body.append(dialog);
     const form = dialog.querySelector('form'), submit = dialog.querySelector('[type="submit"]'), error = dialog.querySelector('.password-error');
     let busy = false;
@@ -113,7 +114,7 @@
     window.loadTopupInvoices?.(); window.loadWallet?.(); window.loadBookings?.(); window.loadDashboard?.(); bindSidebarAccount(value); scheduleRefresh(value);
   };
   const render = () => {
-    root.innerHTML = `<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png?v=flightmark-20260921" alt="NEXAHUB by Air Sales" width="2172" height="724"></div><form class="auth-form"><h2>Sign in</h2><p>Use your company email and password to continue.</p><label>Email address<input type="email" id="login-email" placeholder="name@company.mn" required autocomplete="email" /></label><label>Password<input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" /></label><p class="auth-error" role="alert" hidden></p><button class="primary auth-signin" type="submit">Sign in</button></form></section>`;
+    root.innerHTML = safeHtml(`<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png?v=flightmark-20260921" alt="NEXAHUB by Air Sales" width="2172" height="724"></div><form class="auth-form"><h2>Sign in</h2><p>Use your company email and password to continue.</p><label>Email address<input type="email" id="login-email" placeholder="name@company.mn" required autocomplete="email" /></label><label>Password<input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" /></label><p class="auth-error" role="alert" hidden></p><button class="primary auth-signin" type="submit">Sign in</button></form></section>`);
     root.querySelector('form').addEventListener('submit', async event => {
       event.preventDefault(); const email = root.querySelector('#login-email').value.trim(), password = root.querySelector('#login-password').value;
       const error = root.querySelector('.auth-error'), submit = root.querySelector('.auth-signin'); error.hidden = true; submit.disabled = true; submit.textContent = 'Signing in…';
@@ -124,7 +125,9 @@
       } catch (err) { error.textContent = err.message; error.hidden = false; submit.disabled = false; submit.textContent = 'Sign in'; }
     });
   };
-  const existing = session();
+  let existing = session();
+  // Retire legacy browser-stored bearer tokens on upgrade.
+  if (existing?.accessToken && existing.accessToken !== 'cookie') { sessionStorage.removeItem(storageKey); existing = null; }
   if (!valid(existing)) { if (existing) sessionStorage.removeItem(storageKey); render(); return; }
   if (existing.refreshToken && Number(existing.expiresAt || 0) - Date.now() < 120000) refreshPortalSession().then(value => value ? applyRole(value) : signOut());
   else applyRole(existing);

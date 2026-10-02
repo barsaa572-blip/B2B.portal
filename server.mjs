@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import { createBrowserSessions } from './backend/browser-session.mjs';
+import { textField, cleanPassengers } from './backend/input-validation.mjs';
 import { invoiceHtml, invoicePdf } from './backend/topup-invoice.mjs';
 import { createRefundQuotes } from './backend/refund-quotes.mjs';
 import { roundingEnabled, retailTicket, retailAmount, retailComponents, publicRetail, agencyPrice, agencyResponse } from './backend/retail-pricing.mjs';
@@ -43,14 +45,17 @@ const sendPdf = (res, filename, content) => {
 };
 const readJson = readJsonBody;
 const limitRequest = createLimiter();
+const browserSessions = createBrowserSessions();
 const protectPayment = (profile, pnr, action, reference, amount, execute, retail = null) => guardedPayment({
   begin: beginFinancialOperation, finish: finishFinancialOperation, actor: profile.id, pnr, action, reference, amount, retail
 }, execute);
 const authenticatedProfile = req => req.securityProfile || profileForAccessToken(bearer(req));
-const bearer = req => req.headers.authorization?.replace(/^Bearer\s+/i, '');
-const requiredText = (value, label) => { const text = String(value || '').trim();
-if (!text && label === 'Payment reference') return 'Not provided';
-if (!text) throw new Error(`${label} is required.`); return text; };
+const bearer = req => browserSessions.token(req) || req.headers.authorization?.replace(/^Bearer\s+/i, '');
+const requiredText = (value, label) => {
+  if (!value && label === 'Payment reference') return 'Not provided';
+  if (label === 'Password') { if (typeof value !== 'string' || value.length < 8 || value.length > 128 || !/\p{L}/u.test(value) || !/\p{N}/u.test(value) || !/[^\p{L}\p{N}\s]/u.test(value)) throw new Error('Use 8–128 password characters including a letter, number and special character.'); return value; }
+  return textField(value, label, { max:label === 'Office address' ? 500 : 200 });
+};
 const parseDateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? new Date(`${value}T00:00:00Z`) : null;
 const ageAtDeparture = (birth, departure) => {
   let age = departure.getUTCFullYear() - birth.getUTCFullYear();
@@ -477,7 +482,7 @@ const departureToken = url.searchParams.get('departureToken');
 const airline = url.searchParams.get('airline')?.toUpperCase();
   if (getSpringStatus().httpJsonReady && !departureToken) {
     try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); return send(res, 200, await searchSpringFlights({ departure, arrival, date, trip, returnDate, passengers })); }
-    catch (error) { return send(res, 502, { error: error.message || 'Spring Airlines flight search is unavailable.' }); }
+    catch (error) { return send(res, 502, { error: "Spring Airlines flight search is unavailable." }); }
   }
   const key = process.env.SERPAPI_KEY;
   if (!key) return send(res, 503, { error: 'Flight search is not configured.' });
@@ -489,7 +494,7 @@ const data = await upstream.json(); return { upstream, data, results: [...(data.
     try { let response = await loadReturn(airline); let fallback = false;
 if (airline && (!response.upstream.ok || response.data.error || response.results.length === 0)) { response = await loadReturn(null); fallback = true; } if (!response.upstream.ok || response.data.error) return send(res, 502, { error: response.data.error || 'Flight provider returned an error.' }); return send(res, 200, { source: 'SerpApi / Google Flights', phase: 'return', sameAirline: !fallback, results: response.results }); } catch { return send(res, 502, { error: 'Flight provider could not be reached.' }); }
   }
-  try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); } catch (error) { return send(res, 400, { error: error.message }); }
+  try { validateFlightSearch({ departure, arrival, date, trip, returnDate }); } catch (error) { return send(res, 400, { error: "Request could not be completed. Check your input or try again later." }); }
   const params = new URLSearchParams({ engine: 'google_flights', departure_id: departure, arrival_id: arrival, outbound_date: date, adults, children, infants_on_lap: infants, travel_class: '1', currency: 'CNY', hl: 'en', gl: 'cn', type: trip === 'round' ? '1' : '2', api_key: key });
   if (trip === 'round') params.set('return_date', returnDate);
   try { const upstream = await fetch(`https://serpapi.com/search.json?${params}`);
@@ -507,7 +512,7 @@ async function autocompleteLocations(url, res) {
     options.sort((left, right) => rankSpringAirport(left.code) - rankSpringAirport(right.code) || left.city.localeCompare(right.city));
     return send(res, 200, { options: options.map(option => ({ ...option, springSupported: rankSpringAirport(option.code) === 0 })) });
   }
-  catch (error) { return send(res, 503, { error: error.message || 'Airport directory is unavailable.' }); }
+  catch (error) { return send(res, 503, { error: "Airport directory is unavailable." }); }
 }
 
 async function handleOfficeUsers(req, res, url) {
@@ -536,7 +541,7 @@ async function handleOfficeUsers(req, res, url) {
     }
     return send(res, 404, { error: 'Office user endpoint not found.' });
   } catch (error) {
-    return send(res, 403, { error: error.message || 'Request not allowed.' });
+    return send(res, 403, { error: 'Request could not be completed. Check your input and access permissions.' });
   }
 }
 
@@ -683,7 +688,7 @@ const springResponseShape = (value, depth = 0) => {
 
 async function createLiveSpringBooking(profile, body) {
   if (roundingEnabled()) await assertRetailSchemaReady();
-  body = { ...body, itinerary: cleanBookingItinerary(body.itinerary) };
+  body = { ...body, itinerary: cleanBookingItinerary(body.itinerary), passengers: cleanPassengers(body.passengers) };
   if (process.env.SPRING_BOOKING_ENABLED !== 'true') throw new Error('Spring test booking is disabled on this server. Set SPRING_BOOKING_ENABLED=true only after confirming the test environment.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
   const payload = createSpringBookingPayload(body);
@@ -1383,14 +1388,15 @@ let url;
 try {
   url = new URL(req.url, 'http://localhost');
   checkRequest(req);
+  browserSessions.checkMutation(req);
   if (url.pathname.startsWith('/api/')) {
     const ip = clientAddress(req, process.env.TRUST_PROXY_LOOPBACK === 'true');
     limitRequest(`ip:${ip}`, 1200, 60000);
     if (url.pathname === '/api/auth/login') limitRequest(`login:${ip}`, 30, 900000);
     if (url.pathname === '/api/auth/refresh') limitRequest(`refresh:${ip}`, 120, 60000);
-    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/locations', '/api/fx/cny-mnt'];
+    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/locations', '/api/fx/cny-mnt'];
     if (!publicPaths.includes(url.pathname)) {
-      if (!/^Bearer\s+\S+$/i.test(req.headers.authorization || '')) return send(res, 401, { error: 'Please sign in to continue.' });
+      if (!bearer(req)) return send(res, 401, { error: 'Please sign in to continue.' });
       try { req.securityProfile = await profileForAccessToken(bearer(req)); }
       catch { return send(res, 401, { error: 'Your login session is invalid or inactive.' }); }
       const actor = req.securityProfile.id;
@@ -1405,9 +1411,10 @@ try {
   }
 } catch (error) {
   if (error.retryAfter) res.setHeader('retry-after', String(error.retryAfter));
-  return send(res, error.status || 400, { error: error.message || 'Invalid request.' });
+  return send(res, error.status || 400, { error: "Invalid request." });
 }
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
+if (url.pathname === '/api/auth/logout' && req.method === 'POST') { browserSessions.clear(req, res); return send(res, 200, { ok: true }); }
 if (url.pathname === '/api/flights/prices' && req.method === 'POST') {
   let selections;
   try {
@@ -1415,7 +1422,7 @@ if (url.pathname === '/api/flights/prices' && req.method === 'POST') {
     const body = await readJson(req);
     if (!Array.isArray(body.selections) || !body.selections.length || body.selections.length > 32) throw new Error('Supply 1–32 fare selections.');
     selections = body.selections.map(flights => priceSelection(flights, body.passengers));
-  } catch (error) { return send(res, error.status || 400, { error: error.message }); }
+  } catch (error) { return send(res, error.status || 400, { error: "Request could not be completed. Check your input or try again later." }); }
   try {
     const client = createSpringClient();
     const token = await client.getAccessToken();
@@ -1439,17 +1446,17 @@ if (url.pathname === '/api/flights/price' && req.method === 'POST') {
   try {
     const body = await readJson(req);
     selection = priceSelection(body.flights, body.passengers);
-  } catch (error) { return send(res, 400, { error: error.message }); }
+  } catch (error) { return send(res, 400, { error: "Request could not be completed. Check your input or try again later." }); }
   try {
     const client = createSpringClient();
     const token = await client.getAccessToken();
     const price = verifiedPrice(await client.getSpecificPrice(priceRequest(selection), token.accessToken), selection);
     const retail = roundingEnabled() ? retailTicket(price, (await getCnyMntRate()).effectiveRateMnt) : null;
     return send(res, 200, agencyPrice(priceQuotes.save(req.securityProfile.id, selection, price, retail), retail));
-  } catch (error) { return send(res, 502, { error: error.message || 'Spring price verification failed.' }); }
+  } catch (error) { return send(res, 502, { error: "Spring price verification failed." }); }
 }
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), springSoap: getSpringSoapStatus(), supabase: getSupabaseStatus() });
-if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: error.message }); } }
+if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: "Request could not be completed. Check your input or try again later." }); } }
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
 if (url.pathname.startsWith('/api/bookings')) { try {
   const profile = await authenticatedProfile(req);
@@ -1552,29 +1559,32 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
   }
   return send(res, 404, { error: 'Booking endpoint not found.' });
-} catch (error) { return send(res, 403, { error: error.message || 'Booking request is not allowed.' }); } }
-if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await authenticatedProfile(req))); } catch (error) { return send(res, 403, { error: error.message || 'Wallet access is not allowed.' }); } }
+} catch (error) { return send(res, 403, { error: "Booking request is not allowed." }); } }
+if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await authenticatedProfile(req))); } catch (error) { return send(res, 403, { error: "Wallet access is not allowed." }); } }
 if (url.pathname === '/api/auth/password' && req.method === 'POST') {
   try { return send(res, 200, await changeOwnPassword(req.securityProfile, await readJson(req))); }
-  catch (error) { return send(res, error.status || 502, { error: error.status ? error.message : 'Password service is unavailable. Please try again.' }); }
+  catch (error) { return send(res, error.status || 502, { error: "Request could not be completed. Check your input or try again later." }); }
 }
 if (url.pathname === '/api/auth/login' && req.method === 'POST') { try { const { email, password } = await readJson(req);
 if (!email || !password) return send(res, 400, { error: 'Email and password are required.' });
 const session = await signInWithPassword(email, password);
-const profile = await profileForAccessToken(session.access_token); return send(res, 200, { accessToken: session.access_token, refreshToken: session.refresh_token, expiresIn: session.expires_in, profile }); } catch (error) { return send(res, 401, { error: error.message || 'Sign in failed.' }); } }
+const profile = await profileForAccessToken(session.access_token); browserSessions.establish(req, res, session); return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile }); } catch (error) { return send(res, 401, { error: 'Sign in failed. Check your credentials and account status.' }); } }
 if (url.pathname === '/api/auth/refresh' && req.method === 'POST') { try {
-const { refreshToken } = await readJson(req);
-const session = await refreshAuthSession(refreshToken);
+await readJson(req);
+const previous = browserSessions.find(req);
+if (!previous?.refresh_token) return send(res, 401, { error: 'Please sign in again.' });
+const session = await refreshAuthSession(previous.refresh_token);
 const profile = await profileForAccessToken(session.access_token);
-return send(res, 200, { accessToken: session.access_token, refreshToken: session.refresh_token, expiresIn: session.expires_in, profile });
-} catch (error) { return send(res, 401, { error: error.message || 'Your login session has expired.' }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await authenticatedProfile(req);
+browserSessions.renew(req, session);
+return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile });
+} catch (error) { return send(res, 401, { error: "Your login session has expired." }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await authenticatedProfile(req);
 if (url.pathname === '/api/topups' && req.method === 'GET') return send(res, 200, await getTopupRequests(profile));
 if (url.pathname === '/api/topups' && req.method === 'POST') { const body = await readJson(req);
 const amountMnt = Number(body.amountMnt);
 if (!Number.isFinite(amountMnt) || amountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
 const invoice = await createTopupRequest({ profile, amountMnt, paymentReference: body.paymentReference, note: body.note }); return send(res, 201, { invoice, downloadUrl: `/api/invoices/${invoice.id}` }); } const topupMatch = url.pathname.match(/^\/api\/topups\/([\w-]+)$/);
 if (topupMatch && req.method === 'DELETE') { await deleteTopupRequest(profile, topupMatch[1]); return send(res, 200, { ok: true }); } const invoiceMatch = url.pathname.match(/^\/api\/invoices\/([\w-]+)$/);
-if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); if (url.searchParams.get('format') === 'pdf') return sendPdf(res, `${String(invoice.invoice_number).replace(/[^A-Za-z0-9_-]/g, '')}.pdf`, await invoicePdf(invoice)); return send(res, 200, await invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
+if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); if (url.searchParams.get('format') === 'pdf') return sendPdf(res, `${String(invoice.invoice_number).replace(/[^A-Za-z0-9_-]/g, '')}.pdf`, await invoicePdf(invoice)); return send(res, 200, await invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: 'Request could not be completed. Check your input and access permissions.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
 if (url.pathname === '/api/admin/overview' && req.method === 'GET') return send(res, 200, await getAdminOverview());
 if (url.pathname === '/api/admin/retail-pricing' && req.method === 'GET') return send(res, 200, { entries: roundingEnabled() ? await retailPricingAudit(req.securityProfile) : [] });
 if (url.pathname === '/api/admin/refund-settlement' && req.method === 'POST') return send(res, 200, await settleRetailRefund(req.securityProfile, await readJson(req)));
@@ -1625,7 +1635,7 @@ const role = ['agent', 'office_manager'].includes(body.role) ? body.role : null;
 if (!role || !body.agencyId) throw new Error('Agency and valid role are required.'); return send(res, 201, await createUser({ email, password, fullName, phone: requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role })); } if (url.pathname === '/api/admin/wallet-adjustments' && req.method === 'POST') { const agencyId = requiredText(body.agencyId, 'Agency');
 const reason = requiredText(body.reason, 'Reason');
 const amount = Number(body.amount);
-if (!Number.isFinite(amount) || amount === 0) throw new Error('Adjustment amount must not be zero.'); await adjustWallet({ agencyId, amount, reason, createdBy: admin.id }); return send(res, 201, { ok: true }); } return send(res, 404, { error: 'Admin endpoint not found.' }); } catch (error) { return send(res, 403, { error: error.message || 'Request not allowed.' }); } } if (url.pathname === '/api/flights') return searchFlights(url, res);
+if (!Number.isFinite(amount) || amount === 0) throw new Error('Adjustment amount must not be zero.'); await adjustWallet({ agencyId, amount, reason, createdBy: admin.id }); return send(res, 201, { ok: true }); } return send(res, 404, { error: 'Admin endpoint not found.' }); } catch (error) { return send(res, 403, { error: 'Request could not be completed. Check your input and access permissions.' }); } } if (url.pathname === '/api/flights') return searchFlights(url, res);
 if (url.pathname === '/api/locations') return autocompleteLocations(url, res);
 const requested = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
 if (!isPublicAsset(requested)) return send(res, 404, 'Not found', 'text/plain');

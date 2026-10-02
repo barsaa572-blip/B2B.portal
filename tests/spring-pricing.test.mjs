@@ -1,3 +1,4 @@
+import './support/html-vm.cjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -79,6 +80,7 @@ test('actual booking handler rejects unverified/changed fares and uses server to
   const context = {
     process: { env: { SPRING_BOOKING_ENABLED: 'true' } }, console,
     cleanBookingItinerary: value => value,
+    cleanPassengers: value => value,
     getSpringStatus: () => ({ httpJsonReady: true }),
     createSpringBookingPayload: () => ({ adultNum: 2, childNum: 1, infantNum: 1 }),
     priceSelection, priceRequest, verifiedPrice, priceQuotes: store,

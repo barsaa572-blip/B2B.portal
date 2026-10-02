@@ -6,5 +6,6 @@ logs/
 node_modules/
 .tmp-retail-db/
 /tmp/pdfs/
+/tmp/security/
 /output/pdf/
 /private/invoice/

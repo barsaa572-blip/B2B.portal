@@ -1,3 +1,4 @@
+require('./support/html-vm.cjs');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -27,10 +28,10 @@ test('change keeps supplier quote, preserves previous history, and deduplicates 
   vm.createContext(ctx);
   vm.runInContext(extract('export async function recordPortalBookingChange', 'export async function saveBookingFinancialData'), ctx);
   const args = {appId:12,changes:[{key:'outbound',newFlight:{flightNo:'9C2',travelDate:'2026-09-10'}}]};
-  await ctx.recordPortalBookingChange({id:'u',role:'agent'},'TEST',args);
+  await ctx.recordPortalBookingChange({id:'u',role:'agent',agency_id:'a'},'TEST',args);
   assert.equal(row.itinerary.changeHistory[0].payment.amountsCny.changeFee,300);
   assert.equal(row.itinerary.changeHistory[0].payment.amountsMnt.additionalPayment,180200);
-  await ctx.recordPortalBookingChange({id:'u',role:'agent'},'TEST',args);
+  await ctx.recordPortalBookingChange({id:'u',role:'agent',agency_id:'a'},'TEST',args);
   assert.equal(writes,1);
 });
 test('refund stores quote as pending settlement and preserves itinerary', async () => {
