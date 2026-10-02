@@ -30,7 +30,13 @@ export function clientAddress(req, trustProxy = false) {
 export function checkRequest(req) {
   if (!['GET', 'HEAD', 'POST', 'PATCH', 'DELETE'].includes(req.method)) throw new HttpError(405, 'Method not allowed.');
   if (req.url.length > 8192) throw new HttpError(414, 'Request URL is too long.');
-  if (req.headers['sec-fetch-site'] === 'cross-site') throw new HttpError(403, 'Cross-site requests are not allowed.');
+  // Email/provider redirects may navigate to the public sign-in page. This
+  // exception serves only HTML: API reads, writes, fetches and frames stay blocked.
+  const publicNavigation = req.method === 'GET'
+    && req.headers['sec-fetch-mode'] === 'navigate'
+    && req.headers['sec-fetch-dest'] === 'document'
+    && new URL(req.url, 'http://localhost').pathname === '/';
+  if (req.headers['sec-fetch-site'] === 'cross-site' && !publicNavigation) throw new HttpError(403, 'Cross-site requests are not allowed.');
   if (req.headers.origin) {
     let origin;
     try { origin = new URL(req.headers.origin); } catch { throw new HttpError(403, 'Invalid request origin.'); }

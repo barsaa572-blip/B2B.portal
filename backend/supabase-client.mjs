@@ -139,6 +139,39 @@ export async function refreshAuthSession(refreshToken) {
   return data;
 }
 
+// Only a human form submission consumes the invitation; page GETs do not.
+// Provider bearer tokens never leave this function or become browser storage.
+export async function acceptPortalInvitation(input, { session = null, onVerified = () => {} } = {}) {
+  if (!input || typeof input.tokenHash !== 'string' || !/^[a-f0-9]{32,128}$/i.test(input.tokenHash)) throw new HttpError(400, 'Invitation link is invalid. Ask your administrator for a new invitation.');
+  const password = input.newPassword;
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128 || !/\p{L}/u.test(password) || !/\p{N}/u.test(password) || !/[^\p{L}\p{N}\s]/u.test(password)) throw new HttpError(400, 'Use 8–128 characters including a letter, a number and a special character.');
+  if (password !== input.confirmPassword) throw new HttpError(400, 'New passwords do not match.');
+  const { publishableKey, configured } = config();
+  if (!configured) throw new HttpError(503, 'Invitation service is unavailable.');
+  let verified = session;
+  if (verified && verified.tokenHash !== input.tokenHash) throw new HttpError(400, 'Finish your current invitation or use a private browser window.');
+  if (!verified) {
+    const response = await request('/auth/v1/verify', { method: 'POST', headers: { apikey: publishableKey }, body: { type: 'invite', token_hash: input.tokenHash } });
+    verified = await response.json().catch(() => ({}));
+    if (!response.ok || !verified.access_token || !verified.user?.id) throw new HttpError(400, 'Invitation link is invalid, already used or expired. Ask your administrator for a new invitation.');
+  }
+  let retained = false, complete = false;
+  try {
+    const profile = await profileForAccessToken(verified.access_token);
+    if (profile.id !== verified.user.id || (profile.role !== 'platform_admin' && !profile.agency_id)) throw new HttpError(403, 'Your account has not been assigned to an active agency. Contact your administrator.');
+    const updated = await request('/auth/v1/user', { method: 'PUT', headers: { apikey: publishableKey, authorization: `Bearer ${verified.access_token}` }, body: { password } });
+    if (!updated.ok) {
+      if (!session) onVerified({ ...verified, tokenHash: input.tokenHash });
+      retained = true;
+      throw new HttpError(400, 'Password setup failed. Try a stronger password within five minutes, or contact your administrator.');
+    }
+    complete = true;
+    return { ok: true };
+  } finally {
+    if (complete || !retained) await request('/auth/v1/logout?scope=global', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${verified.access_token}` } }).catch(() => {});
+  }
+}
+
 export async function profileForAccessToken(accessToken) {
   if (typeof accessToken !== 'string' || !accessToken || accessToken.length > 8192) throw new Error('Your login session is invalid.');
   const { publishableKey, secretKey, configured } = config();
@@ -185,12 +218,12 @@ export async function getOfficeUserAccess(manager) {
   return { agency: agency[0] || null, branches, profiles };
 }
 
-export async function createOfficeAgent(manager, { email, password, fullName, phone, branchId }) {
+export async function createOfficeAgent(manager, { email, fullName, phone, branchId }) {
   if (branchId) {
     const branches = await secretRequest(`/rest/v1/branches?select=id&agency_id=eq.${encodeURIComponent(manager.agency_id)}&id=eq.${encodeURIComponent(branchId)}&limit=1`);
     if (!branches.length) throw new Error('The selected office does not belong to your agency.');
   }
-  return createUser({ email, password, fullName, phone, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent' });
+  return createUser({ email, fullName, phone, agencyId: manager.agency_id, branchId: branchId || null, role: 'agent' });
 }
 
 export async function updateOfficeAgent(manager, id, { fullName, phone, branchId, active }) {
@@ -243,25 +276,45 @@ export async function createAgency({ name, registrationNumber, email, phone, add
   return agency;
 }
 
-export async function createUser({ email, password, fullName, phone, agencyId, branchId, role }) {
+export async function createUser({ email, fullName, phone, agencyId, branchId, role }) {
 if (!String(fullName || '').trim() || !String(phone || '').trim()) throw new Error('Full name and phone number are required.');
 email = emailField(email);
   const { secretKey, configured } = config();
   if (!configured) throw new Error('Database is not configured on this server.');
-  const response = await request('/auth/v1/admin/users', { method: 'POST', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` }, body: { email, password, email_confirm: true } });
+  // No admin-selected password and no auto-confirmation for new accounts.
+  const response = await request('/auth/v1/admin/users', { method: 'POST', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` }, body: { email, email_confirm: false } });
   const authUser = await response.json().catch(() => ({}));
   if (!response.ok || !authUser.id) throw new Error('Unable to create the login account. Check the email and password requirements.');
   try {
     await secretRequest('/rest/v1/profiles', { method: 'POST', body: { id: authUser.id, agency_id: agencyId || null, branch_id: branchId || null, role, full_name: fullName.trim(), email: authUser.email || email, phone: phone.trim(), active: true } });
+    const invite = await request('/auth/v1/invite', { method: 'POST', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` }, body: { email } });
+    const invited = await invite.json().catch(() => ({}));
+    if (!invite.ok || invited.id !== authUser.id) throw new Error('Unable to send the invitation. Check SMTP and contact support before retrying.');
   } catch (error) {
     await request(`/auth/v1/admin/users/${authUser.id}`, { method: 'DELETE', headers: { apikey: secretKey, authorization: `Bearer ${secretKey}` } });
     throw error;
   }
-  return { id: authUser.id, email: authUser.email };
+  return { id: authUser.id, email: authUser.email, invitationSent: true };
 }
 
 export async function adjustWallet({ agencyId, amount, reason, createdBy }) {
   return secretRequest('/rest/v1/rpc/platform_adjust_wallet', { method: 'POST', body: { p_agency_id: agencyId, p_amount: Number(amount), p_reason: reason, p_created_by: createdBy } });
+}
+
+export async function resendPortalInvitation(actor, userId) {
+  if (!actor?.id || !['platform_admin', 'office_manager'].includes(actor.role)) throw new HttpError(403, 'Administrator access required.');
+  const rows = await secretRequest(`/rest/v1/profiles?select=id,role,agency_id,active&id=eq.${encodeURIComponent(userId)}&limit=1`);
+  const target = rows[0];
+  if (!target?.active || !['agent', 'office_manager'].includes(target.role) || (actor.role !== 'platform_admin' && (!actor.agency_id || target.agency_id !== actor.agency_id || target.role !== 'agent'))) throw new HttpError(403, 'Invitation is not permitted for this account.');
+  const { secretKey } = config();
+  const headers = { apikey: secretKey, authorization: `Bearer ${secretKey}` };
+  const response = await request(`/auth/v1/admin/users/${encodeURIComponent(target.id)}`, { headers });
+  const user = await response.json().catch(() => ({}));
+  if (!response.ok || user.id !== target.id) throw new HttpError(400, 'Account could not be verified.');
+  if (user.email_confirmed_at || user.confirmed_at) throw new HttpError(409, 'This email is already confirmed. Use password recovery, not another invitation.');
+  const invite = await request('/auth/v1/invite', { method: 'POST', headers, body: { email: emailField(user.email) } });
+  if (!invite.ok) throw new HttpError(400, 'Invitation could not be sent. Check SMTP and email rate limits.');
+  return { ok: true, invitationSent: true };
 }
 
 export async function recordChangePayment({ pnr, appId, amount, actorId, checkOnly = false }) {

@@ -3,9 +3,9 @@ import { HttpError } from './request-security.mjs';
 
 // Server-side tokens; the browser only receives an opaque HttpOnly cookie.
 // Restart intentionally signs everyone out. No tokens are persisted to disk.
-export function createBrowserSessions({ now = Date.now, ttl = 12 * 3600000, limit = 10000 } = {}) {
+export function createBrowserSessions({ now = Date.now, ttl = 12 * 3600000, limit = 10000, cookieName = 'nexahub_session' } = {}) {
   const sessions = new Map();
-  const name = 'nexahub_session';
+  const name = cookieName;
   const idFor = req => String(req.headers.cookie || '').split(';').map(v => v.trim()).find(v => v.startsWith(name + '='))?.slice(name.length + 1);
   const find = req => {
     const id = idFor(req), value = sessions.get(id);

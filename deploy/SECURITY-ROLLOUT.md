@@ -55,6 +55,12 @@ Real two-agency account/API tests remain a separate production acceptance step.
 
 ## Deployment behavior and remaining checks
 
+Top-level cross-site browser GET navigation is allowed only to `/`, so email
+and provider redirects can show the public sign-in page. Cross-site API access,
+writes, iframe loads and fetches remain blocked. This navigation exception does
+not verify an invite or establish a session. Invitation consumption requires an
+explicit same-origin POST and valid password confirmation.
+
 Server-held sessions use opaque HttpOnly/Secure/SameSite cookies. Restart signs
 users out; old browser token sessions are discarded and require a fresh login.
 Refresh does not extend the absolute session deadline. Verify login, refresh,
@@ -65,11 +71,38 @@ not the final long-term policy. Preserve existing CSP/security headers and
 validate TLS renewal before raising the duration. Do not add includeSubDomains
 or preload without checking affected hosts. Inline styles remain allowed in CSP.
 
-Email ownership verification is NOT complete: admin-created users still use
-`email_confirm: true`. Configure production SMTP and implement/test invitation
-or confirmation/password-setup routing before changing that flag. Do not lock
-out existing users. Email verification is distinct from the deferred email 2FA
-and six-month password renewal features. Never paste SMTP passwords/API keys
-into chat or put them in frontend/Git.
+## Invitation rollout (live acceptance still required)
+
+SMTP delivery was reported working by the operator. Before inviting any new
+portal users, set production Supabase Site URL to `https://nexahub.airsales.ub.mn/`
+and replace Emails > Templates > Invite user with `supabase/templates/invite.html`.
+Keep `.TokenHash`; do not use `.ConfirmationURL` for this new flow. The fragment
+is removed from browser history and never stored in sessionStorage/localStorage.
+Only submitting the password form consumes the single-use invite, reducing
+scanner/prefetch consumption. Do not add broad redirect wildcards.
+
+Deploy backend and frontend together. New manager/agent creation no longer takes
+a temporary password or sets `email_confirm: true`; it creates an unconfirmed
+Auth account, assigns its profile and sends the invitation via Supabase SMTP.
+If sending fails, only the just-created Auth account is cleaned up. Existing
+users are not changed. Pending invitation resends are tenant/role checked and
+rate-limited; confirmed users must use password recovery, not another invitation.
+Password recovery, email 2FA and six-month renewal are NOT implemented here.
+
+Setup returns no bearer tokens and does not log the user into the portal. They
+sign in normally after success. A provider password-policy rejection retains a
+separate opaque HttpOnly setup cookie for five minutes; it cannot authorize any
+portal API, and retry does not consume the invitation a second time. Restart,
+expiry, or an uncertain provider network failure may require administrator help.
+
+Test via an admin/manager-created portal user with an owned test mailbox, not an
+unassigned Dashboard-only Auth user. Verify email, one click, password setup,
+fresh login and correct agency access. Local mocked tests do not prove live SMTP
+or PostgreSQL behavior. Old bearer-fragment links are discarded safely; old
+expired/consumed invitations cannot be repaired by changing their URL.
+Never paste invitation links, SMTP passwords/API keys or bearer tokens into chat.
+
+Optional actual-browser setup check: `node scripts/check-invite-browser.cjs
+<path-to-playwright-module>` (all network mocked).
 
 No Git push, database migration or VPS deployment is implied by local tests.

@@ -17,6 +17,28 @@ test('cross-site writes, unsupported methods and non-JSON bodies are rejected', 
   assert.doesNotThrow(() => checkRequest(req({ method: 'POST' })));
   assert.doesNotThrow(() => checkRequest(req({ method: 'POST', headers: { host: 'portal.example', origin: 'https://portal.example', 'content-type': 'application/json', 'content-length': '2' } })));
 });
+test('email redirects can navigate only to the public homepage', () => {
+  const headers = { host: 'portal.example', 'sec-fetch-site': 'cross-site',
+    'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+  for (const url of ['/', '/?email=invite']) {
+    assert.doesNotThrow(() => checkRequest(req({ url, headers })));
+  }
+  for (const url of ['/api/wallet', '/api/bookings', '/api/auth/refresh', '/api/admin/overview', '/.env']) {
+    assert.throws(() => checkRequest(req({ url, headers })), /Cross-site/);
+  }
+  for (const method of ['POST', 'PATCH', 'DELETE']) {
+    assert.throws(() => checkRequest(req({ method, url: '/', headers })), /Cross-site/);
+  }
+});
+
+test('homepage navigation exception never permits cross-site fetches, frames or foreign Origin', () => {
+  const headers = { host: 'portal.example', 'sec-fetch-site': 'cross-site',
+    'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+  assert.throws(() => checkRequest(req({ url: '/', headers: { ...headers, 'sec-fetch-mode': 'cors' } })), /Cross-site/);
+  assert.throws(() => checkRequest(req({ url: '/', headers: { ...headers, 'sec-fetch-dest': 'iframe' } })), /Cross-site/);
+  assert.throws(() => checkRequest(req({ url: '/', headers: { ...headers, origin: 'https://evil.example' } })), /Cross-origin/);
+});
+
 test('proxy forwarding headers cannot bypass default IP identification', () => {
   const request = req({ headers: { 'x-forwarded-for': '1.2.3.4', 'x-real-ip': '1.2.3.4' } });
   assert.equal(clientAddress(request), '127.0.0.1');

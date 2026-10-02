@@ -19,6 +19,7 @@ test('real HTTP cookie login, refresh, CSRF, tenant scope and logout with isolat
   const invoices = bookings.map(row => ({ id: row.id, agency_id: row.agency_id, requested_by: row.created_by, status: 'pending' }));
   const refreshes = [];
   const actionWrites = [];
+  const inviteVerifications = [], passwordUpdates = [];
   const provider = createServer(async (req, res) => {
     try {
       res.setHeader('content-type', 'application/json');
@@ -27,6 +28,17 @@ test('real HTTP cookie login, refresh, CSRF, tenant scope and logout with isolat
       for await (const chunk of req) body += chunk;
       const data = body ? JSON.parse(body) : {};
       const send = value => res.end(JSON.stringify(value));
+      if (url.pathname === '/auth/v1/verify') {
+        inviteVerifications.push(data);
+        if (inviteVerifications.length > 1) { res.statusCode = 403; return send({ error: 'PRIVATE_EXPIRED_INVITE' }); }
+        return send({ access_token: 'server-only-access-a', refresh_token: 'server-only-refresh-a', user: { id: profiles.a.id } });
+      }
+      if (url.pathname === '/auth/v1/user' && req.method === 'PUT') {
+        passwordUpdates.push(data);
+        if (passwordUpdates.length === 1) { res.statusCode = 422; return send({ error: 'PRIVATE_PASSWORD_POLICY' }); }
+        return send({ id: profiles.a.id });
+      }
+      if (url.pathname === '/auth/v1/logout') return send({});
       if (url.pathname === '/auth/v1/token') {
         const refresh = url.searchParams.get('grant_type') === 'refresh_token';
         const identity = refresh ? (data.refresh_token === 'server-only-refresh-a' ? 'a' : null) :
@@ -127,6 +139,43 @@ test('real HTTP cookie login, refresh, CSRF, tenant scope and logout with isolat
     body: JSON.stringify({ email, password: 'TestPassword1!', role: 'platform_admin', agencyId: 'agency-b' })
   });
   let cookie;
+  await t.test('invite setup requires Origin, retains only a restricted retry cookie and never returns bearer tokens', async () => {
+    const body = JSON.stringify({ tokenHash: 'a'.repeat(64), newPassword: 'TestPassword1!', confirmPassword: 'TestPassword1!', role: 'platform_admin' });
+    const headers = { 'content-type': 'application/json', origin: 'https://portal.test' };
+    assert.equal((await call('/api/auth/accept-invite', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status, 403);
+    assert.equal((await call('/api/auth/accept-invite', { method: 'POST', headers: { ...headers, origin: 'https://evil.test' }, body })).status, 403);
+    assert.equal(inviteVerifications.length, 0);
+    const rejected = await call('/api/auth/accept-invite', { method: 'POST', headers, body });
+    assert.equal(rejected.status, 400);
+    const retryCookie = rejected.headers.get('set-cookie');
+    assert.match(retryCookie, /^nexahub_invite=[a-f0-9]{64};/);
+    assert.match(retryCookie, /HttpOnly; SameSite=Strict; Path=\/; Max-Age=300; Secure/);
+    assert.doesNotMatch(await rejected.text(), /server-only|PRIVATE/);
+    const cookie = retryCookie.split(';')[0];
+    assert.equal((await call('/api/wallet', { headers: { cookie } })).status, 401);
+    const accepted = await call('/api/auth/accept-invite', { method: 'POST', headers: { ...headers, cookie }, body });
+    assert.equal(accepted.status, 200);
+    assert.deepEqual(await accepted.json(), { ok: true });
+    assert.match(accepted.headers.get('set-cookie'), /nexahub_invite=;.*Max-Age=0/);
+    assert.equal(inviteVerifications.length, 1);
+    assert.deepEqual(inviteVerifications[0], { type: 'invite', token_hash: 'a'.repeat(64) });
+    assert.deepEqual(passwordUpdates[1], { password: 'TestPassword1!' });
+    const replay = await call('/api/auth/accept-invite', { method: 'POST', headers: { ...headers, cookie }, body });
+    assert.equal(replay.status, 400);
+    assert.doesNotMatch(await replay.text(), /PRIVATE/);
+  });
+  await t.test('cross-site email navigation gets public HTML, never API access or a session', async () => {
+    const headers = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+    const response = await call('/', { headers });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/html/);
+    assert.match(await response.text(), /auth-root/);
+    assert.equal(response.headers.get('set-cookie'), null);
+    for (const path of ['/api/wallet', '/api/admin/overview', '/api/invoices/own']) {
+      assert.equal((await call(path, { headers })).status, 403);
+    }
+    assert.equal((await call('/', { method: 'POST', headers })).status, 403);
+  });
   await t.test('login returns only sentinels; cookie has security flags, not provider tokens', async () => {
     const response = await login('a@example.invalid');
     assert.equal(response.status, 200);

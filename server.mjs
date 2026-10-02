@@ -10,8 +10,8 @@ import { claimSpringStatusChecks, finishSpringStatusCheck } from './backend/supa
 import { priceSelection, priceRequest, verifiedPrice, createPriceQuotes, flightList } from './backend/spring-pricing.mjs';
 import { requireChangeQuote, cleanBookingItinerary, guardedPayment } from './backend/payment-security.mjs';
 import { beginFinancialOperation, finishFinancialOperation } from './backend/supabase-client.mjs';
-import { securityHeaders, isPublicAsset, clientAddress, checkRequest, createLimiter, readJsonBody } from './backend/request-security.mjs';
-import { changeOwnPassword } from './backend/supabase-client.mjs';
+import { HttpError, securityHeaders, isPublicAsset, clientAddress, checkRequest, createLimiter, readJsonBody } from './backend/request-security.mjs';
+import { changeOwnPassword, acceptPortalInvitation, resendPortalInvitation } from './backend/supabase-client.mjs';
 import { environmentPage } from './backend/environment-page.mjs';
 import { getDashboardSummary, recordChangePayment, saveBookingFinancialData } from './backend/supabase-client.mjs';
 import { getTicketIssueDetails } from './backend/supabase-client.mjs';
@@ -46,6 +46,8 @@ const sendPdf = (res, filename, content) => {
 const readJson = readJsonBody;
 const limitRequest = createLimiter();
 const browserSessions = createBrowserSessions();
+// This cookie has no portal authority: usable only for a five-minute setup retry.
+const inviteSessions = createBrowserSessions({ cookieName: 'nexahub_invite', ttl: 300000, limit: 1000 });
 const protectPayment = (profile, pnr, action, reference, amount, execute, retail = null) => guardedPayment({
   begin: beginFinancialOperation, finish: finishFinancialOperation, actor: profile.id, pnr, action, reference, amount, retail
 }, execute);
@@ -518,12 +520,13 @@ async function autocompleteLocations(url, res) {
 async function handleOfficeUsers(req, res, url) {
   try {
     const manager = await requireOfficeManager(bearer(req));
+    const inviteMatch = url.pathname.match(/^\/api\/office\/users\/([\w-]+)\/invite$/);
+    if (inviteMatch && req.method === 'POST') return send(res, 200, await resendPortalInvitation(manager, inviteMatch[1]));
     if (url.pathname === '/api/office/users' && req.method === 'GET') return send(res, 200, await getOfficeUserAccess(manager));
     if (url.pathname === '/api/office/users' && req.method === 'POST') {
       const body = await readJson(req);
       return send(res, 201, await createOfficeAgent(manager, {
         email: requiredText(body.email, 'Email'),
-        password: requiredText(body.password, 'Password'),
         phone: requiredText(body.phone, 'Phone number'),
         fullName: requiredText(body.fullName, 'Full name'),
         branchId: body.branchId
@@ -1394,7 +1397,13 @@ try {
     limitRequest(`ip:${ip}`, 1200, 60000);
     if (url.pathname === '/api/auth/login') limitRequest(`login:${ip}`, 30, 900000);
     if (url.pathname === '/api/auth/refresh') limitRequest(`refresh:${ip}`, 120, 60000);
-    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/locations', '/api/fx/cny-mnt'];
+    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/accept-invite', '/api/locations', '/api/fx/cny-mnt'];
+    if (url.pathname === '/api/auth/accept-invite') {
+      limitRequest(`invite:${ip}`, 10, 900000);
+      let origin;
+      try { origin = new URL(req.headers.origin); } catch { throw new HttpError(403, 'Same-origin request required.'); }
+      if (origin.host !== req.headers.host || !['http:', 'https:'].includes(origin.protocol)) throw new HttpError(403, 'Same-origin request required.');
+    }
     if (!publicPaths.includes(url.pathname)) {
       if (!bearer(req)) return send(res, 401, { error: 'Please sign in to continue.' });
       try { req.securityProfile = await profileForAccessToken(bearer(req)); }
@@ -1404,6 +1413,7 @@ try {
       if (url.pathname === '/api/auth/password') limitRequest(`password:${actor}`, 5, 900000);
       if (url.pathname === '/api/flights') limitRequest(`search:${actor}`, 30, 60000);
       if (['POST', 'PATCH', 'DELETE'].includes(req.method)) limitRequest(`write:${actor}`, 30, 60000);
+      if (req.method === 'POST' && /\/users\/[\w-]+\/invite$/.test(url.pathname)) limitRequest(`resend-invite:${actor}`, 5, 600000);
       if (url.pathname === '/api/topups' && req.method === 'POST') limitRequest(`topup:${actor}`, 5, 600000);
       if (url.pathname === '/api/backend/status' && req.securityProfile.role !== 'platform_admin') return send(res, 403, { error: 'Administrator access required.' });
       if (url.pathname === '/api/admin/wallet-reset') return send(res, 403, { error: 'Public wallet reset is disabled.' });
@@ -1414,6 +1424,17 @@ try {
   return send(res, error.status || 400, { error: "Invalid request." });
 }
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
+if (url.pathname === '/api/auth/accept-invite') {
+  if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
+  try {
+    const result = await acceptPortalInvitation(await readJson(req), {
+      session: inviteSessions.find(req), onVerified: session => inviteSessions.establish(req, res, session)
+    });
+    inviteSessions.clear(req, res);
+    return send(res, 200, result);
+  }
+  catch (error) { return send(res, error.status || 400, { error: error instanceof HttpError ? error.message : 'Invitation could not be completed. Contact your administrator.' }); }
+}
 if (url.pathname === '/api/auth/logout' && req.method === 'POST') { browserSessions.clear(req, res); return send(res, 200, { ok: true }); }
 if (url.pathname === '/api/flights/prices' && req.method === 'POST') {
   let selections;
@@ -1586,6 +1607,8 @@ const invoice = await createTopupRequest({ profile, amountMnt, paymentReference:
 if (topupMatch && req.method === 'DELETE') { await deleteTopupRequest(profile, topupMatch[1]); return send(res, 200, { ok: true }); } const invoiceMatch = url.pathname.match(/^\/api\/invoices\/([\w-]+)$/);
 if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); if (url.searchParams.get('format') === 'pdf') return sendPdf(res, `${String(invoice.invoice_number).replace(/[^A-Za-z0-9_-]/g, '')}.pdf`, await invoicePdf(invoice)); return send(res, 200, await invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: 'Request could not be completed. Check your input and access permissions.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
 if (url.pathname === '/api/admin/overview' && req.method === 'GET') return send(res, 200, await getAdminOverview());
+const resendInviteMatch = url.pathname.match(/^\/api\/admin\/users\/([\w-]+)\/invite$/);
+if (resendInviteMatch && req.method === 'POST') return send(res, 200, await resendPortalInvitation(admin, resendInviteMatch[1]));
 if (url.pathname === '/api/admin/retail-pricing' && req.method === 'GET') return send(res, 200, { entries: roundingEnabled() ? await retailPricingAudit(req.securityProfile) : [] });
 if (url.pathname === '/api/admin/refund-settlement' && req.method === 'POST') return send(res, 200, await settleRetailRefund(req.securityProfile, await readJson(req)));
 const agencyStatusMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)\/status$/);
@@ -1629,10 +1652,9 @@ if (userMatch[1] === admin.id && body.active === false) throw new Error('You can
 const role = ['agent', 'office_manager', 'platform_admin'].includes(body.role) ? body.role : null;
 if (!role) throw new Error('Valid role is required.'); return send(res, 200, await updateUser(userMatch[1], { fullName: requiredText(body.fullName, 'Full name'), phone: body.phone === undefined ? undefined : requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role, active: Boolean(body.active) })); } if (userMatch && req.method === 'DELETE') { if (userMatch[1] === admin.id) throw new Error('You cannot delete your own administrator account.'); await deleteUser(userMatch[1]); return send(res, 200, { ok: true }); } const body = await readJson(req);
 if (url.pathname === '/api/admin/agencies' && req.method === 'POST') { const name = requiredText(body.name, 'Agency name'); const registrationNumber = requiredText(body.registrationNumber, 'Registration number'); const email = requiredText(body.email, 'Email address'); const phone = requiredText(body.phone, 'Contact phone'); const initialBalanceMnt = Number(body.initialBalanceMnt || 0); if (!Number.isFinite(initialBalanceMnt) || initialBalanceMnt < 0) throw new Error('Opening balance must be a valid MNT amount.'); const rate = await getCnyMntRate(); const initialBalance = initialBalanceMnt / Number(rate.effectiveRateMnt); return send(res, 201, await createAgency({ name, registrationNumber, email, phone, initialBalance, createdBy: admin.id })); } if (url.pathname === '/api/admin/users' && req.method === 'POST') { const email = requiredText(body.email, 'Email');
-const password = requiredText(body.password, 'Password');
 const fullName = requiredText(body.fullName, 'Full name');
 const role = ['agent', 'office_manager'].includes(body.role) ? body.role : null;
-if (!role || !body.agencyId) throw new Error('Agency and valid role are required.'); return send(res, 201, await createUser({ email, password, fullName, phone: requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role })); } if (url.pathname === '/api/admin/wallet-adjustments' && req.method === 'POST') { const agencyId = requiredText(body.agencyId, 'Agency');
+if (!role || !body.agencyId) throw new Error('Agency and valid role are required.'); return send(res, 201, await createUser({ email, fullName, phone: requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role })); } if (url.pathname === '/api/admin/wallet-adjustments' && req.method === 'POST') { const agencyId = requiredText(body.agencyId, 'Agency');
 const reason = requiredText(body.reason, 'Reason');
 const amount = Number(body.amount);
 if (!Number.isFinite(amount) || amount === 0) throw new Error('Adjustment amount must not be zero.'); await adjustWallet({ agencyId, amount, reason, createdBy: admin.id }); return send(res, 201, { ok: true }); } return send(res, 404, { error: 'Admin endpoint not found.' }); } catch (error) { return send(res, 403, { error: 'Request could not be completed. Check your input and access permissions.' }); } } if (url.pathname === '/api/flights') return searchFlights(url, res);

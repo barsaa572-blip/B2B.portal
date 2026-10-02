@@ -125,6 +125,39 @@
       } catch (err) { error.textContent = err.message; error.hidden = false; submit.disabled = false; submit.textContent = 'Sign in'; }
     });
   };
+  const showNotice = notice => { render(); const target = root.querySelector('.auth-error'); target.textContent = notice; target.hidden = false; };
+  const renderInvite = tokenHash => {
+    root.hidden = false;
+    root.innerHTML = safeHtml(`<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png" alt="NEXAHUB by Air Sales"></div><form class="auth-form"><h2>Accept your invitation</h2><p>Create your password using 8–128 characters, including a letter, number and special character.</p><label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label><label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label><p class="auth-error" role="alert" hidden></p><button class="primary auth-signin" type="submit">Confirm email and create password</button><button class="text-btn" type="button" data-invite-cancel>Back to sign in</button></form></section>`);
+    root.querySelector('[data-invite-cancel]').onclick = () => { tokenHash = ''; render(); };
+    root.querySelector('form').onsubmit = async event => {
+      event.preventDefault(); const form = event.currentTarget, submit = form.querySelector('[type="submit"]'), error = form.querySelector('.auth-error');
+      if (submit.disabled) return;
+      const values = new FormData(form);
+      if (values.get('newPassword') !== values.get('confirmPassword')) { error.textContent = 'New passwords do not match.'; error.hidden = false; return; }
+      submit.disabled = true; error.hidden = true;
+      try {
+        const response = await fetch('/api/auth/accept-invite', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tokenHash, newPassword: values.get('newPassword'), confirmPassword: values.get('confirmPassword') }) });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Invitation could not be completed. Contact your administrator.');
+        tokenHash = ''; form.reset(); showNotice('Your email is confirmed and password is ready. Sign in with your company email and new password.');
+      } catch (issue) { error.textContent = issue.message; error.hidden = false; submit.disabled = false; }
+    };
+  };
+  // Keep invitation secrets only in this page's memory; remove them from history.
+  // Legacy bearer fragments are discarded, never imported as a login session.
+  const invitation = (() => {
+    const params = new URLSearchParams(location.hash.slice(1));
+    if (!['invite_token', 'access_token', 'refresh_token', 'error'].some(key => params.has(key))) return null;
+    const tokenHash = params.get('invite_token');
+    history.replaceState(null, '', location.pathname + location.search);
+    return { tokenHash, invalid: !tokenHash || !/^[a-f0-9]{32,128}$/i.test(tokenHash) };
+  })();
+  if (invitation) {
+    if (invitation.invalid) showNotice('This email link is invalid, already used or outdated. Ask your administrator for a new invitation.');
+    else renderInvite(invitation.tokenHash);
+    return;
+  }
   let existing = session();
   // Retire legacy browser-stored bearer tokens on upgrade.
   if (existing?.accessToken && existing.accessToken !== 'cookie') { sessionStorage.removeItem(storageKey); existing = null; }

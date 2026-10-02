@@ -115,7 +115,7 @@ const root = path.resolve(__dirname, '..');
     console.log('PASS: actual edit-agency form');
     await page.locator('#add-user').click();
     for (const [name, value] of Object.entries({ fullName: 'Test Manager', phone: '99112233',
-      email: 'manager@example.invalid', password: 'TestPassword1!' })) {
+      email: 'manager@example.invalid' })) {
       await page.locator(`#admin-modal [name="${name}"]`).fill(value);
     }
     await page.locator('#admin-modal [name="agencyId"]').selectOption('agency-a');
