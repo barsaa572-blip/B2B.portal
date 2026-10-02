@@ -30,13 +30,13 @@
     byId('#agency-list').innerHTML = safeHtml(visible.map(item => {
       const offices = overview.branches.filter(entry => entry.agency_id === item.id).length;
       const users = overview.profiles.filter(entry => entry.agency_id === item.id).length;
-      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td>${moneyWithCny(wallet(item.id)?.balance_cny)}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-status" data-agency-id="${item.id}" role="switch" aria-checked="${Boolean(item.active)}">${item.active ? 'Deactivate' : 'Activate'}</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.name)}</strong></td><td>${offices}</td><td>${users}</td><td>${moneyWithCny(wallet(item.id)?.balance_cny)}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><div class="admin-action-group"><button class="text-btn agency-open" data-agency-id="${item.id}">Open</button><button class="text-btn agency-edit" data-agency-id="${item.id}">Edit</button><button class="text-btn agency-status" data-agency-id="${item.id}" role="switch" aria-checked="${Boolean(item.active)}">${item.active ? 'Deactivate' : 'Activate'}</button><button class="text-btn agency-delete" data-agency-id="${item.id}">Delete</button></div></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No agencies found.</td></tr>');
     byId('#user-list').innerHTML = safeHtml(overview.profiles.map(item => {
       const company = agency(item.agency_id)?.name || 'Platform';
       const office = branch(item.branch_id)?.name;
       const role = { agent: 'Ticketing agent', office_manager: 'Office manager', platform_admin: 'Platform administrator' }[item.role] || item.role;
-      return `<tr><td><strong>${escape(item.full_name)}</strong></td><td>${escape(item.email || 'Login account')}</td><td>${escape(company)}${office ? ` · ${escape(office)}` : ''}</td><td>${role}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><button class="text-btn user-edit" data-user-id="${item.id}">Edit</button><button class="text-btn user-invite" data-user-id="${item.id}" title="Unconfirmed accounts only">Resend pending invite</button><button class="text-btn user-delete" data-user-id="${item.id}">Delete</button></td></tr>`;
+      return `<tr><td><strong>${escape(item.full_name)}</strong></td><td>${escape(item.email || 'Login account')}</td><td>${escape(company)}${office ? ` · ${escape(office)}` : ''}</td><td>${escape(role)}</td><td><span class="tag ${item.active ? 'ticketed' : 'pending'}">${item.active ? 'Active' : 'Inactive'}</span></td><td class="admin-actions"><div class="admin-action-group"><button class="text-btn user-edit" data-user-id="${item.id}">Edit</button>${item.role === 'platform_admin' ? '' : `<button class="text-btn user-invite" data-user-id="${item.id}" title="Resend a pending invitation; unconfirmed accounts only">Resend invite</button>`}<button class="text-btn user-delete" data-user-id="${item.id}">Delete</button></div></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No users found.</td></tr>');
     const activeAgencies = overview.agencies.filter(item => item.active).length;
     const activeUsers = overview.profiles.filter(item => item.active).length;
@@ -52,9 +52,8 @@
     if (topupTarget) topupTarget.innerHTML = safeHtml((overview.topups || []).map(item => {
       const company = agency(item.agency_id)?.name || 'Agency';
       const status = String(item.status || 'pending');
-      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><strong>${mnt(item.amount_mnt)}</strong><small class="currency-secondary">${cny(item.amount_cny)} CNY wallet credit</small></td><td><strong>${mnt(item.total_mnt)}</strong></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td>${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button>` : ''}</td></tr>`;
-    }).join('') || '<tr><td colspan="7" class="no-bookings">No top-up invoices yet.</td></tr>');
-    topupTarget.querySelectorAll('.topup-approve').forEach(button => button.insertAdjacentHTML('afterend', safeHtml(`<button class="secondary topup-delete" data-topup-id="${button.dataset.topupId}">Delete</button>`)));
+      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><strong>${mnt(item.amount_mnt)}</strong><small class="currency-secondary">${cny(item.amount_cny)} CNY wallet credit</small></td><td><strong>${mnt(item.total_mnt)}</strong></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td class="admin-actions"><div class="admin-action-group">${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button><button class="secondary topup-delete" data-topup-id="${item.id}">Delete</button>` : ''}</div></td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="no-bookings">No top-up invoices yet.</td></tr>');
   };
   const modal = () => {
     let element = byId('#admin-modal');
@@ -135,7 +134,7 @@
   };
   const setup = () => {
     const accounting = document.createElement('button');
-    accounting.type = 'button'; accounting.className = 'secondary';
+    accounting.type = 'button'; accounting.className = 'secondary admin-audit-button';
     accounting.textContent = 'Retail settlement audit';
     byId('#administration')?.append(accounting);
     accounting.addEventListener('click', async () => {

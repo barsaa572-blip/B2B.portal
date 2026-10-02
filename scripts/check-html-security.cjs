@@ -51,9 +51,16 @@ const root = path.resolve(__dirname, '..');
       URL.revokeObjectURL(href);
       const remoteBlob = parse('<iframe src="blob:https://attacker.invalid/11111111-1111-1111-1111-111111111111"></iframe>').querySelector('iframe');
       const remotePreviewBlocked = !!remoteBlob && !remoteBlob.hasAttribute('src');
+      const tbody = document.createElement('tbody');
+      tbody.innerHTML = safeHtml('<tr><td>Agency</td><td><button data-agency-id="agency-a">Open</button></td></tr><tr><td colspan="2">Empty</td></tr>');
+      const tableRows = tbody.rows.length === 2 && tbody.rows[0].cells.length === 2 &&
+        tbody.rows[1].cells[0].colSpan === 2 && !!tbody.querySelector('button[data-agency-id="agency-a"]');
+      const hostileRows = document.createElement('tbody');
+      hostileRows.innerHTML = safeHtml('<tr><td><img src=x onerror="alert(1)"><a href="javascript:alert(1)">Link</a><script>alert(1)</script></td></tr>');
+      const tableXss = hostileRows.rows.length === 1 && !hostileRows.querySelector('script,[onerror],[href^="javascript:"]');
       const formElement = document.createElement('form');
       const collisions = names.filter(entry => entry.value in document || entry.value in formElement);
-      return { checks: { xss, form: formOk, clobberProtection, preview, remotePreviewBlocked }, collisions };
+      return { checks: { xss, form: formOk, clobberProtection, preview, remotePreviewBlocked, tableRows, tableXss }, collisions };
     }, names);
     for (const [name, ok] of Object.entries(result.checks)) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
     if (result.collisions.length) console.log('FAIL: potential dynamic form name collisions', JSON.stringify(result.collisions));
@@ -94,6 +101,10 @@ const root = path.resolve(__dirname, '..');
     })));
     await page.addScriptTag({ path: path.join(root, 'admin.js') });
     await page.waitForSelector('.agency-edit');
+    assert.equal(await page.locator('#agency-list > tr > td').count(), 6);
+    assert.equal(await page.locator('#user-list > tr > td').count(), 6);
+    assert.equal(await page.locator('#admin-topups > tr > td[colspan="6"]').count(), 1);
+    console.log('PASS: actual admin table structure');
     const submit = async (pathname, method) => {
       const response = page.waitForResponse(res => new URL(res.url()).pathname === pathname && res.request().method() === method);
       await page.locator('#admin-modal .primary').click();

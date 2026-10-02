@@ -16,12 +16,20 @@ node scripts/check-html-security.cjs <path-to-playwright-module>
 This loads the actual vendored DOMPurify and safe-html files in a headless
 browser. All network requests are mocked or blocked. It verifies XSS filtering,
 form attributes, DOM-clobbering protection and sandboxed local blob URLs;
-it also exercises actual admin create/edit agency and user form submissions
+bare table row fragments retain their sanitized tr/td structure instead of
+being flattened by the HTML document parser.
+It also exercises actual admin create/edit agency and user form submissions
 against mocked APIs. It does not prove that a complete invoice PDF renders correctly.
 
 Admin form controls use `agencyName` and `accountRole` to avoid built-in DOM
 name collisions; submit handlers map these back to the existing `name` and
 `role` API fields. DOMPurify's clobbering protection remains enabled.
+
+Optional admin layout regression: `node scripts/check-admin-tables.cjs
+<path-to-playwright-module>`. It uses the actual panel markup, theme styles and
+renderer with fake accounts/invoices. It checks desktop/dark/mobile column
+alignment, contained horizontal scrolling, empty states and pending invoice
+actions, generates screenshots in a temporary directory and makes no API writes.
 
 Keep `dompurify.js`, `DOMPURIFY_LICENSE`, `safe-html.js`, the lockfile and all
 new backend modules/tests with the deployment. Do not commit `.env`, private

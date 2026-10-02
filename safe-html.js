@@ -35,11 +35,24 @@
     node.setAttribute('sandbox', 'allow-same-origin');
   });
 
-  globalThis.safeHtml = value => purifier.sanitize(String(value ?? ''), {
+  const options = {
     USE_PROFILES: { html: true },
     ADD_TAGS: ['iframe'],
     FORBID_TAGS: ['script', 'object', 'embed', 'style', 'link', 'base', 'meta'],
     FORBID_ATTR: ['srcdoc'],
     ALLOW_UNKNOWN_PROTOCOLS: false
-  });
+  };
+
+  globalThis.safeHtml = value => {
+    const markup = String(value ?? '');
+    // HTML's document parser drops bare tr/td tags. Sanitize row fragments in
+    // their table context, then return only the sanitized rows to tbody sinks.
+    if (/^\s*<tr(?:\s|>)/i.test(markup)) {
+      const fragment = purifier.sanitize(`<table><tbody>${markup}</tbody></table>`, {
+        ...options, RETURN_DOM_FRAGMENT: true
+      });
+      return fragment.querySelector('table > tbody')?.innerHTML || '';
+    }
+    return purifier.sanitize(markup, options);
+  };
 })();
