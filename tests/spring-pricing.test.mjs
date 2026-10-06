@@ -1,5 +1,6 @@
 import './support/html-vm.cjs';
 import { test } from 'node:test';
+import { BookingReviewRequired } from '../backend/booking-review.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -48,6 +49,15 @@ test('invalid counts, non-CNY fares and missing cabin metadata are rejected', ()
   for (const patch of [{ moneyClassId: 1 }, { cabinType: null }, { segHeadId: '9007199254740993' }, { combPrice: null }]) assert.throws(() => priceSelection([{ spring: { ...flight.spring, ...patch } }], counts));
 });
 
+test('price quotes count infants separately from the 9-seat limit', () => {
+  for (const party of [{ adults: 9, children: 0, infants: 9 }, { adults: 6, children: 3, infants: 6 }, { adults: 1, children: 8, infants: 1 }]) {
+    const selection = priceSelection([flight], party);
+    assert.deepEqual(selection.counts, party);
+    assert.equal(verifiedPrice(response(), selection).breakdown.reduce((sum, row) => sum + row.count, 0), party.adults + party.children + party.infants);
+  }
+  for (const party of [{ adults: 9, children: 1, infants: 0 }, { adults: 6, children: 4, infants: 0 }, { adults: 6, children: 3, infants: 7 }]) assert.throws(() => priceSelection([flight], party));
+});
+
 test('quotes bind actor, combination and passenger counts, expire and are one-use', () => {
   let now = 100;
   const store = createPriceQuotes({ now: () => now, ttl: 100, limit: 2 });
@@ -84,6 +94,7 @@ test('actual booking handler rejects unverified/changed fares and uses server to
     getSpringStatus: () => ({ httpJsonReady: true }),
     createSpringBookingPayload: () => ({ adultNum: 2, childNum: 1, infantNum: 1 }),
     priceSelection, priceRequest, verifiedPrice, priceQuotes: store,
+    BookingReviewRequired,
     roundingEnabled: () => false,
     createSpringClient: () => ({ getAccessToken: async () => ({ accessToken: 'fake' }), getSpecificPrice: async () => data,
       bookOrder: async () => { calls++; return { pnr: 'LOCAL-TEST' }; } }),

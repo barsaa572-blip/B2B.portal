@@ -9,8 +9,25 @@ export function emailField(value) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Email address is invalid.');
   return email;
 }
+// Lap infants do not occupy a seat: 9 seated passengers plus at most 1 infant/adult.
+export function cleanPassengerCounts(value) {
+  const counts = Object.fromEntries(['adults', 'children', 'infants'].map(key => {
+    const raw = value?.[key];
+    if (!['number', 'string'].includes(typeof raw) || !/^\d+$/.test(String(raw)) || !Number.isSafeInteger(Number(raw))) throw new HttpError(400, 'Passenger counts must be whole numbers.');
+    return [key, Number(raw)];
+  }));
+  if (counts.adults < 1 || counts.adults + counts.children > 9 || counts.infants > counts.adults) throw new HttpError(400, 'Maximum 9 adults and children combined; each lap infant requires an adult.');
+  return counts;
+}
 export function cleanPassengers(value) {
-  if (!value || !Array.isArray(value.travellers) || !value.travellers.length || value.travellers.length > 9) throw new HttpError(400, 'Supply between 1 and 9 passengers.');
+  if (!value || !Array.isArray(value.travellers) || !value.travellers.length || value.travellers.length > 18) throw new HttpError(400, 'Supply at most 9 seated passengers and one lap infant per adult.');
+  const counts = { adults: 0, children: 0, infants: 0 };
+  for (const passenger of value.travellers) {
+    const key = { ADT: 'adults', CHD: 'children', INF: 'infants' }[passenger?.type];
+    if (!key || !Object.hasOwn(counts, key)) throw new HttpError(400, 'Passenger type is invalid.');
+    counts[key]++;
+  }
+  cleanPassengerCounts(counts);
   const date = (v, label) => {
     if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new HttpError(400, `${label} is invalid.`);
     const d = new Date(v + 'T00:00:00Z');

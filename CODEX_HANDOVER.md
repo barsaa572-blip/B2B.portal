@@ -1,6 +1,12 @@
 # Flight B2B Portal — Codex handover
 
-**Last updated: 21 August 2026.**
+**Current work ledger: 6 October 2026.**
+
+Read [docs/work-roadmap.md](docs/work-roadmap.md) first for current status,
+deferred Spring questions, login rollout and the YeeFlightLink assessment. The
+August notes below are historical and do not certify current deployment.
+Current rates use the configured bank policy, not the historical markup description.
+New login-security flags remain false until explicit production acceptance.
 
 Read this file before making changes. It is a short, safe replacement for the
 local Windows Codex conversation history. Do not commit credentials or tokens.

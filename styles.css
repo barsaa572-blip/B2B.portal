@@ -16,3 +16,4 @@
 .balance-card>div{position:relative;z-index:1;align-items:center;color:#d6e2f8;font-size:13px}
 .balance-card>div b{font-size:16px;font-variant-numeric:tabular-nums}
 .booking-flight-history{display:grid;gap:4px;margin:10px 0;padding:11px 13px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;color:#778299}.booking-flight-history small{font-size:10px;font-weight:800;letter-spacing:.08em}.booking-flight-history strong{color:#64748b;font-size:12px;text-decoration:line-through}.booking-flight-history em{font-size:11px;font-style:normal}
+.counter button:disabled{opacity:.4;cursor:not-allowed}.counter button:disabled:hover{background:inherit}

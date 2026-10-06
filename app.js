@@ -804,7 +804,8 @@ const checkoutPricePanel = () => {
   const quote = currentBookingQuote();
   const labels = { adults: 'Adult', children: 'Child', infants: 'Infant' };
   const rows = quote ? quote.breakdown.map(row => `<section class="price-section"><div class="price-section-heading"><span>${labels[row.type]} × ${row.count}</span><strong>${retailLineMnt(quote, row, 'total')}</strong></div><div class="price-line"><span>Ticket fare</span><b>${retailLineMnt(quote, row, 'fare')}</b></div><div class="price-line"><span>Taxes & fees</span><b>${retailLineMnt(quote, row, 'taxes')}</b></div></section>`).join('') : `<p role="status">${escapeHtml(bookingQuoteError || 'Verifying all passenger prices with Spring…')}</p>`;
-  return `<aside class="order-summary booking-price-panel"><h2>Price details</h2>${rows}<div class="price-total"><span>Total</span><strong>${quote ? retailTotalMnt(quote) : 'To be confirmed'}</strong></div>${quote ? '' : '<p class="price-panel-note">Booking is unavailable until all passenger prices are verified. Return to search to try again.</p>'}${baggageSummary()}</aside>`;
+  const reviewActions = !quote && bookingReviewAllowed ? `<div class="booking-price-actions"><button type="button" class="primary" data-refresh-booking-price ${bookingQuoteLoading ? 'disabled' : ''}>${bookingQuoteLoading ? 'Checking prices…' : 'Refresh prices'}</button><button type="button" class="secondary back-to-search">Back to search</button><p class="price-panel-note">Refreshing updates prices only. Passenger details stay here. Review the price and press Book separately.</p></div>` : '';
+  return `<aside class="order-summary booking-price-panel"><h2>Price details</h2>${rows}<div class="price-total"><span>Total</span><strong>${quote ? retailTotalMnt(quote) : 'To be confirmed'}</strong></div>${quote ? '' : '<p class="price-panel-note">Booking is unavailable until all passenger prices are verified.</p>'}${reviewActions}${baggageSummary()}</aside>`;
 };
 const retailTotalMnt = price => price?.retail ? mnt(price.retail.amountMnt) : quoteMnt(price?.total);
 const retailLineMnt = (price, row, component) => {
@@ -817,6 +818,8 @@ let bookingQuoteError = '';
 let bookingQuoteLoading = false;
 let bookingQuoteSequence = 0;
 let bookingSubmissionPending = false;
+let bookingReviewAllowed = true;
+let bookingReviewForm = null;
 const bookingPriceKey = () => JSON.stringify({ flights: [selectedOutbound, selectedReturn].filter(Boolean).map(f => f.spring), passengers: activePassengerCounts, actor: portalSession().profile?.id });
 const currentBookingQuote = () => bookingQuote?.selectionKey === bookingPriceKey() && bookingQuote.expiresAt > Date.now() ? bookingQuote : null;
 const refreshBookingPricePanel = () => {
@@ -824,6 +827,7 @@ const refreshBookingPricePanel = () => {
   if (!panel) return;
   panel.outerHTML = checkoutPricePanel();
   document.querySelector('.booking-price-panel')?.addEventListener('click', event => {
+    if (event.target.closest('[data-refresh-booking-price]') && bookingReviewAllowed) { void verifyBookingPrice(); return; }
     if (event.target.closest('.selected-fare-details')) showSelectedFareDetails();
   });
   const button = document.querySelector('.issue-ticket');
@@ -831,9 +835,11 @@ const refreshBookingPricePanel = () => {
 };
 const verifyBookingPrice = async () => {
   if (bookingSubmissionPending) return;
+  const form = document.querySelector('#passenger-form');
+  if (form !== bookingReviewForm) { bookingReviewAllowed = true; bookingReviewForm = form; }
+  if (!bookingReviewAllowed) return;
   const sequence = ++bookingQuoteSequence;
   const selectionKey = bookingPriceKey();
-  const form = document.querySelector('#passenger-form');
   bookingQuote = null; bookingQuoteError = ''; bookingQuoteLoading = true;
   refreshBookingPricePanel();
   try {
@@ -1316,17 +1322,39 @@ async function selectFlight(flight) {
   showFareOptions(flight, searchPhase);
 }
 document.querySelectorAll('[data-trip]').forEach(button => button.addEventListener('click', () => { tripType = button.dataset.trip; document.querySelectorAll('[data-trip]').forEach(b => b.classList.toggle('selected', b === button)); document.querySelector('.return-date').hidden = tripType !== 'round'; resultArea.classList.add('hidden'); }));
-const passengerLimits = { adults: { min: 1, max: 9 }, children: { min: 0, max: 8 }, infants: { min: 0, max: 8 } };
+const validPassengerCounts = counts => ['adults', 'children', 'infants'].every(key => Number.isSafeInteger(counts[key]) && counts[key] >= 0)
+  && counts.adults >= 1 && counts.adults + counts.children <= 9 && counts.infants <= counts.adults;
+const passengerCounterValues = () => Object.fromEntries(['adults', 'children', 'infants'].map(key => [key, Number(document.querySelector(`#${key}`).value)]));
+const passengerCounterLimits = counts => ({
+  adults: { min: Math.max(1, counts.infants), max: 9 - counts.children },
+  children: { min: 0, max: 9 - counts.adults },
+  infants: { min: 0, max: counts.adults }
+});
+const updatePassengerCounters = () => {
+  const counts = passengerCounterValues(), limits = passengerCounterLimits(counts);
+  document.querySelectorAll('[data-change]').forEach(button => {
+    const field = button.dataset.change, step = Number(button.dataset.step), limit = limits[field];
+    button.disabled = !validPassengerCounts(counts) || !limit || ![-1, 1].includes(step) || counts[field] + step < limit.min || counts[field] + step > limit.max;
+    button.setAttribute('aria-disabled', String(button.disabled));
+  });
+};
 document.querySelectorAll('[data-change]').forEach(button => button.addEventListener('click', () => {
-  const field = button.dataset.change; const input = document.querySelector(`#${field}`); const limit = passengerLimits[field];
-  const previous = Number(input.value); const next = Math.min(limit.max, Math.max(limit.min, previous + Number(button.dataset.step)));
+  const counts = passengerCounterValues(), field = button.dataset.change, step = Number(button.dataset.step);
+  const limit = passengerCounterLimits(counts)[field];
+  if (button.disabled || !validPassengerCounts(counts) || !limit || ![-1, 1].includes(step)) return;
+  const input = document.querySelector(`#${field}`);
+  const previous = counts[field], next = previous + step;
+  if (next < limit.min || next > limit.max) return;
   input.value = next; document.querySelector(`#${field}-output`).value = next;
+  updatePassengerCounters();
   if (next !== previous) {
     passengerSearchStale = true;
     if (!resultArea.classList.contains('hidden')) toast('Passenger count changed. Search again to refresh fares for this party.');
   }
-  if (field === 'adults' && next === 1 && Number(button.dataset.step) < 0) toast('At least one adult is required when travelling with children or infants.');
 }));
+updatePassengerCounters();
+const passengerNote = document.querySelector('.passenger-note');
+if (passengerNote) passengerNote.textContent = 'Maximum 9 adults and children combined. Lap infants do not occupy a seat; each infant requires an adult. Type a city or airport name, then choose the correct airport.';
 const outboundDateInput = document.querySelector('#outbound-date'); const returnDateInput = document.querySelector('#return-date');
 const isoDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const localToday = isoDate(new Date());
@@ -1358,6 +1386,7 @@ document.querySelector('#search-form').addEventListener('submit', async e => {
   const outboundDate = outboundDateInput.value;
   const returnDate = returnDateInput.value;
   if (!departure || !arrival || !outboundDate || (tripType === 'round' && !returnDate)) { toast('Choose From, To and travel date before searching.'); return; }
+  if (!validPassengerCounts(passengerCounterValues())) { toast('Maximum 9 adults and children combined; each lap infant requires an adult.'); return; }
   activePassengerCounts = passengerCounts(); passengerSearchStale = false;
   resetFarePricing();
   selectedOutbound = null; selectedReturn = null; roundReturnFlights = []; button.disabled = true; button.textContent = 'Searching…';
@@ -1563,7 +1592,7 @@ const createPortalBookingFromForm = async event => {
   const submit = event.currentTarget.querySelector('.issue-ticket');
   if (submit.disabled || bookingSubmissionPending) return;
   const confirmedQuote = currentBookingQuote();
-  if (!confirmedQuote) { toast('Verify and review all passenger prices before booking.'); void verifyBookingPrice(); return; }
+  if (!confirmedQuote) { bookingQuoteError = 'The price quote expired. Refresh prices or return to search; no booking was sent.'; refreshBookingPricePanel(); toast(bookingQuoteError); return; }
   clearFormErrors(event.currentTarget);
   const invalidDate = validateSplitDateControls(event.currentTarget);
   if (invalidDate) { invalidDate.closest('label')?.querySelector('[data-date-part]')?.focus(); toast('Correct the highlighted date.'); return; }
@@ -1627,6 +1656,7 @@ const createPortalBookingFromForm = async event => {
     email: event.currentTarget.querySelector('[name="contact-email"]')?.value.trim()
   };
   bookingSubmissionPending = true;
+  bookingReviewAllowed = false;
   submit.disabled = true; submit.textContent = 'Creating booking…';
   try {
     const response = await secureFetch('/api/bookings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ quoteId: confirmedQuote.quoteId, totalCny: confirmedQuote.total, itinerary, passengers: { travellers, contact } }) });
@@ -1635,9 +1665,14 @@ const createPortalBookingFromForm = async event => {
     try { data = rawResponse ? JSON.parse(rawResponse) : {}; }
     catch {
       const status = response.status ? ` (HTTP ${response.status})` : '';
-      throw new Error(`Booking service is temporarily unavailable${status}. No PNR or ticket was created. Please try again shortly.`);
+      throw new Error(`Booking response could not be read${status}. Check existing bookings and contact support before retrying; the reservation result is unknown.`);
     }
-    if (!response.ok) throw new Error(data.error || 'Booking could not be created.');
+    if (!response.ok) {
+      if (response.status === 409 && data.code === 'FARE_REVIEW_REQUIRED' && data.safeToRefresh === true) {
+        bookingReviewAllowed = true; bookingQuoteError = data.error || 'Refresh and review the selected fare. No reservation was sent.';
+      }
+      throw new Error(data.error || 'Booking could not be created.');
+    }
     const booking = portalBookingFromRow(data.booking);
     bookings.unshift(booking);
     renderBookings();
@@ -1647,7 +1682,7 @@ const createPortalBookingFromForm = async event => {
     modal.querySelector('.view-created-booking').addEventListener('click', () => { modal.close(); showView('bookings'); openBookingDetail(booking.ref); });
     modal.showModal();
   } catch (error) { toast(error.message || 'Booking could not be created.'); }
-  finally { bookingSubmissionPending = false; bookingQuote = null; bookingQuoteError = 'Review the booking result before retrying. Verify the price again only if no reservation was created.'; refreshBookingPricePanel(); submit.disabled = true; submit.textContent = 'Book'; }
+  finally { bookingSubmissionPending = false; bookingQuote = null; if (!bookingReviewAllowed) bookingQuoteError = 'Review existing bookings before retrying. The submission result may need reconciliation.'; refreshBookingPricePanel(); submit.disabled = true; submit.textContent = 'Book'; }
 };
 // Capture the booking button click before any browser/default form handling.
 // A caught error must always be visible to the agent instead of silently

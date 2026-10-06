@@ -129,7 +129,17 @@ covered by the known-function migration. In staging, test two concurrent approva
 two concurrent agency payments, disabled users, cross-agency IDs and direct Supabase
 REST/RPC requests. Confirm exactly one credit/debit and no supplier retry.
 
-## Still required before broad public production use
+## Current update (2026-10-06)
+
+The historical checklist below is not a current-state certificate. Browser
+provider tokens have been replaced with opaque HttpOnly sessions; public portal
+HTTPS and request/security headers were reported verified by the user. The email
+second-step/password-renewal implementation requires the new migration, template
+and acceptance: see [docs/login-security.md](docs/login-security.md). It is not
+Supabase-native MFA. Provider-side key rotation, outbound supplier TLS, production
+DB tests, backup/restore and alerting still need evidence.
+
+## Historical requirements before broad public production use
 
 - HTTPS for the portal and authenticated TLS to the supplier. Domain setup is
   deferred, NOT replaced by these changes. Do not transmit real credentials or

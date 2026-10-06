@@ -13,6 +13,13 @@ export function createBrowserSessions({ now = Date.now, ttl = 12 * 3600000, limi
     return value;
   };
   const cookie = (req, value, age) => `${name}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${/^localhost(?::\d+)?$|^127\.0\.0\.1(?::\d+)?$/.test(req.headers.host || '') ? '' : '; Secure'}`;
+  const setCookie = (res, value) => {
+    const previous = res.getHeader?.('set-cookie');
+    // Replace this cookie only; preserve other restricted-session cookies.
+    const values = (previous ? [].concat(previous) : []).filter(item => !item.startsWith(`${name}=`));
+    values.push(value);
+    res.setHeader('set-cookie', values.length === 1 ? values[0] : values);
+  };
   return {
     find,
     token: req => find(req)?.access_token,
@@ -22,7 +29,7 @@ export function createBrowserSessions({ now = Date.now, ttl = 12 * 3600000, limi
       sessions.delete(idFor(req));
       const id = randomBytes(32).toString('hex');
       sessions.set(id, { ...session, deadline: now() + ttl });
-      res.setHeader('set-cookie', cookie(req, id, Math.floor(ttl / 1000)));
+      setCookie(res, cookie(req, id, Math.floor(ttl / 1000)));
     },
     renew(req, session) {
       const previous = find(req);
@@ -30,7 +37,8 @@ export function createBrowserSessions({ now = Date.now, ttl = 12 * 3600000, limi
       const deadline = previous.deadline;
       Object.assign(previous, session, { deadline }); // preserve absolute session deadline
     },
-    clear(req, res) { sessions.delete(idFor(req)); res.setHeader('set-cookie', cookie(req, '', 0)); },
+    clear(req, res) { sessions.delete(idFor(req)); setCookie(res, cookie(req, '', 0)); },
+    invalidateUser(userId) { for (const [id, value] of sessions) if ((value.userId || value.user?.id) === userId) sessions.delete(id); },
     checkMutation(req) {
       if (!find(req) || !['POST', 'PATCH', 'DELETE'].includes(req.method)) return;
       let origin;

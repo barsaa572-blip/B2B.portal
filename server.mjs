@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
 import { createBrowserSessions } from './backend/browser-session.mjs';
-import { textField, cleanPassengers } from './backend/input-validation.mjs';
+import { BookingReviewRequired } from './backend/booking-review.mjs';
+import { createLoginSecurity, emailStepRequired, passwordRotationRequired, passwordDue, passwordRevision, publicLoginProfile } from './backend/login-security.mjs';
+import { assertPortalAuthReady, sendPortalEmailCode, verifyPortalEmailCode, revokePortalProviderSession } from './backend/supabase-client.mjs';
+import { textField, cleanPassengers, cleanPassengerCounts } from './backend/input-validation.mjs';
 import { invoiceHtml, invoicePdf } from './backend/topup-invoice.mjs';
 import { createRefundQuotes } from './backend/refund-quotes.mjs';
 import { roundingEnabled, retailTicket, retailAmount, retailComponents, publicRetail, agencyPrice, agencyResponse } from './backend/retail-pricing.mjs';
@@ -48,11 +51,24 @@ const limitRequest = createLimiter();
 const browserSessions = createBrowserSessions();
 // This cookie has no portal authority: usable only for a five-minute setup retry.
 const inviteSessions = createBrowserSessions({ cookieName: 'nexahub_invite', ttl: 300000, limit: 1000 });
+const loginPendingSessions = createBrowserSessions({ cookieName: 'nexahub_login_pending', ttl: 300000, limit: 1000 });
+const invalidateAccountSessions = userId => { browserSessions.invalidateUser(userId); loginPendingSessions.invalidateUser(userId); };
+const loginSecurity = createLoginSecurity({ pending: loginPendingSessions, sessions: browserSessions,
+  signIn: signInWithPassword, profileForToken: profileForAccessToken,
+  sendCode: sendPortalEmailCode, verifyCode: verifyPortalEmailCode,
+  changePassword: (profile, input) => changeOwnPassword(profile, input, { onUpdated: invalidateAccountSessions }), revoke: revokePortalProviderSession,
+  assertReady: assertPortalAuthReady, limit: limitRequest });
 const protectPayment = (profile, pnr, action, reference, amount, execute, retail = null) => guardedPayment({
   begin: beginFinancialOperation, finish: finishFinancialOperation, actor: profile.id, pnr, action, reference, amount, retail
 }, execute);
 const authenticatedProfile = req => req.securityProfile || profileForAccessToken(bearer(req));
-const bearer = req => browserSessions.token(req) || req.headers.authorization?.replace(/^Bearer\s+/i, '');
+// Provider password/OTP tokens cannot bypass the portal's second-step gate.
+const bearer = req => browserSessions.token(req) || (!loginSecurity.active() ? req.headers.authorization?.replace(/^Bearer\s+/i, '') : undefined);
+const validSecuritySession = (req, profile) => {
+  const session = browserSessions.find(req);
+  return (!emailStepRequired() || session?.emailVerified === true)
+    && (!passwordRotationRequired() || (session?.securityRevision === passwordRevision(profile) && !passwordDue(profile)));
+};
 const requiredText = (value, label) => {
   if (!value && label === 'Payment reference') return 'Not provided';
   if (label === 'Password') { if (typeof value !== 'string' || value.length < 8 || value.length > 128 || !/\p{L}/u.test(value) || !/\p{N}/u.test(value) || !/[^\p{L}\p{N}\s]/u.test(value)) throw new Error('Use 8–128 password characters including a letter, number and special character.'); return value; }
@@ -474,10 +490,12 @@ async function searchFlights(url, res) {
   const departure = url.searchParams.get('departure')?.toUpperCase();
 const arrival = url.searchParams.get('arrival')?.toUpperCase();
 const date = url.searchParams.get('date');
-const adults = url.searchParams.get('adults') || '1';
-const children = url.searchParams.get('children') || '0';
-const infants = url.searchParams.get('infants') || '0';
-const passengers = { adults: Math.max(1, Number(adults) || 1), children: Math.max(0, Number(children) || 0), infants: Math.max(0, Number(infants) || 0) };
+const adults = url.searchParams.get('adults') ?? '1';
+const children = url.searchParams.get('children') ?? '0';
+const infants = url.searchParams.get('infants') ?? '0';
+let passengers;
+try { passengers = cleanPassengerCounts({ adults, children, infants }); }
+catch { return send(res, 400, { error: 'Maximum 9 adults and children combined; each lap infant requires an adult. Use whole-number passenger counts.' }); }
 const trip = url.searchParams.get('trip') || 'oneway';
 const returnDate = url.searchParams.get('returnDate');
 const departureToken = url.searchParams.get('departureToken');
@@ -696,16 +714,21 @@ async function createLiveSpringBooking(profile, body) {
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
   const payload = createSpringBookingPayload(body);
   const selection = priceSelection(body.itinerary.flights, { adults: payload.adultNum, children: payload.childNum, infants: payload.infantNum });
-  const agreed = priceQuotes.require(body.quoteId, profile.id, selection);
+  let agreed;
+  try { agreed = priceQuotes.require(body.quoteId, profile.id, selection); }
+  catch { throw new BookingReviewRequired('The price quote expired or no longer matches. Refresh prices or search again. No reservation was sent.'); }
   const client = createSpringClient();
   const token = await client.getAccessToken();
-  const checked = verifiedPrice(await client.getSpecificPrice(priceRequest(selection), token.accessToken), selection);
-  if (JSON.stringify(checked) !== JSON.stringify(agreed)) throw new Error('Spring price changed. Verify and review the new price before booking.');
+  let checked;
+  try { checked = verifiedPrice(await client.getSpecificPrice(priceRequest(selection), token.accessToken), selection); }
+  catch { throw new BookingReviewRequired('The selected fare could not be confirmed. Refresh prices or search again. No reservation was sent.'); }
+  if (JSON.stringify(checked) !== JSON.stringify(agreed)) throw new BookingReviewRequired('Spring price changed. Refresh and review the new price before booking. No reservation was sent.');
   // Claim once, after the async check and before the external booking mutation.
   // A parallel submission or an uncertain result must not replay this quote.
-  priceQuotes.require(body.quoteId, profile.id, selection);
+  try { priceQuotes.require(body.quoteId, profile.id, selection); }
+  catch { throw new BookingReviewRequired('The price quote expired during verification. Refresh prices or search again. No reservation was sent.'); }
   const retailPrice = roundingEnabled() ? priceQuotes.requireRetail(body.quoteId, profile.id, selection) : null;
-  if (roundingEnabled() && !retailPrice) throw new Error('Sale price expired. Search and review the price again.');
+  if (roundingEnabled() && !retailPrice) throw new BookingReviewRequired('Sale price expired. Refresh and review the price again. No reservation was sent.');
   priceQuotes.consume(body.quoteId);
   body.totalCny = checked.total;
   const result = await client.bookOrder(payload, token.accessToken);
@@ -1392,14 +1415,16 @@ try {
   url = new URL(req.url, 'http://localhost');
   checkRequest(req);
   browserSessions.checkMutation(req);
+  loginPendingSessions.checkMutation(req);
   if (url.pathname.startsWith('/api/')) {
     const ip = clientAddress(req, process.env.TRUST_PROXY_LOOPBACK === 'true');
     limitRequest(`ip:${ip}`, 1200, 60000);
     if (url.pathname === '/api/auth/login') limitRequest(`login:${ip}`, 30, 900000);
     if (url.pathname === '/api/auth/refresh') limitRequest(`refresh:${ip}`, 120, 60000);
-    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/accept-invite', '/api/locations', '/api/fx/cny-mnt'];
-    if (url.pathname === '/api/auth/accept-invite') {
-      limitRequest(`invite:${ip}`, 10, 900000);
+    const publicPaths = ['/api/health', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout', '/api/auth/accept-invite', '/api/auth/verify-email', '/api/auth/resend-code', '/api/auth/renew-password', '/api/locations', '/api/fx/cny-mnt'];
+    if (['/api/auth/verify-email', '/api/auth/resend-code', '/api/auth/renew-password'].includes(url.pathname)) limitRequest(`login-step:${ip}`, 30, 900000);
+    if (url.pathname === '/api/auth/accept-invite' || (loginSecurity.active() && url.pathname.startsWith('/api/auth/'))) {
+      if (url.pathname === '/api/auth/accept-invite') limitRequest(`invite:${ip}`, 10, 900000);
       let origin;
       try { origin = new URL(req.headers.origin); } catch { throw new HttpError(403, 'Same-origin request required.'); }
       if (origin.host !== req.headers.host || !['http:', 'https:'].includes(origin.protocol)) throw new HttpError(403, 'Same-origin request required.');
@@ -1408,6 +1433,10 @@ try {
       if (!bearer(req)) return send(res, 401, { error: 'Please sign in to continue.' });
       try { req.securityProfile = await profileForAccessToken(bearer(req)); }
       catch { return send(res, 401, { error: 'Your login session is invalid or inactive.' }); }
+      if (!validSecuritySession(req, req.securityProfile)) {
+        browserSessions.clear(req, res);
+        return send(res, 401, { error: 'Sign in again to complete account security checks.' });
+      }
       const actor = req.securityProfile.id;
       limitRequest(`actor:${actor}`, 240, 60000);
       if (url.pathname === '/api/auth/password') limitRequest(`password:${actor}`, 5, 900000);
@@ -1435,7 +1464,21 @@ if (url.pathname === '/api/auth/accept-invite') {
   }
   catch (error) { return send(res, error.status || 400, { error: error instanceof HttpError ? error.message : 'Invitation could not be completed. Contact your administrator.' }); }
 }
-if (url.pathname === '/api/auth/logout' && req.method === 'POST') { browserSessions.clear(req, res); return send(res, 200, { ok: true }); }
+if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+  const previous = browserSessions.find(req);
+  browserSessions.clear(req, res);
+  await loginSecurity.cancel(req, res);
+  await revokePortalProviderSession(previous?.access_token);
+  return send(res, 200, { ok: true });
+}
+if (['/api/auth/verify-email', '/api/auth/resend-code', '/api/auth/renew-password'].includes(url.pathname)) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
+  try {
+    const body = await readJson(req);
+    const operation = { '/api/auth/verify-email': 'verify', '/api/auth/resend-code': 'resend', '/api/auth/renew-password': 'rotate' }[url.pathname];
+    return send(res, 200, await loginSecurity[operation](req, res, body));
+  } catch (error) { return send(res, error.status || 503, { error: error instanceof HttpError ? error.message : 'Verification failed. Sign in again or contact your administrator.' }); }
+}
 if (url.pathname === '/api/flights/prices' && req.method === 'POST') {
   let selections;
   try {
@@ -1580,25 +1623,42 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     return send(res, 200, { booking: await updatePortalBooking(profile, match[1], status) });
   }
   return send(res, 404, { error: 'Booking endpoint not found.' });
-} catch (error) { return send(res, 403, { error: "Booking request is not allowed." }); } }
+} catch (error) {
+  if (error instanceof BookingReviewRequired) return send(res, 409, { error: error.message, code: 'FARE_REVIEW_REQUIRED', safeToRefresh: true });
+  return send(res, 403, { error: "Booking request is not allowed. If submission was attempted, check existing bookings before retrying." });
+} }
 if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await authenticatedProfile(req))); } catch (error) { return send(res, 403, { error: "Wallet access is not allowed." }); } }
 if (url.pathname === '/api/auth/password' && req.method === 'POST') {
-  try { return send(res, 200, await changeOwnPassword(req.securityProfile, await readJson(req))); }
+  try {
+    const result = await changeOwnPassword(req.securityProfile, await readJson(req), { onUpdated: invalidateAccountSessions });
+    browserSessions.invalidateUser(req.securityProfile.id);
+    loginPendingSessions.invalidateUser(req.securityProfile.id);
+    browserSessions.clear(req, res);
+    return send(res, 200, result);
+  }
   catch (error) { return send(res, error.status || 502, { error: "Request could not be completed. Check your input or try again later." }); }
 }
-if (url.pathname === '/api/auth/login' && req.method === 'POST') { try { const { email, password } = await readJson(req);
-if (!email || !password) return send(res, 400, { error: 'Email and password are required.' });
-const session = await signInWithPassword(email, password);
-const profile = await profileForAccessToken(session.access_token); browserSessions.establish(req, res, session); return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile }); } catch (error) { return send(res, 401, { error: 'Sign in failed. Check your credentials and account status.' }); } }
-if (url.pathname === '/api/auth/refresh' && req.method === 'POST') { try {
-await readJson(req);
+if (url.pathname === '/api/auth/login' && req.method === 'POST') {
+  try { return send(res, 200, await loginSecurity.start(req, res, await readJson(req))); }
+  catch (error) { return send(res, error.status || 401, { error: error instanceof HttpError ? error.message : 'Sign in failed. Check your credentials and account status.' }); }
+}
+if (url.pathname === '/api/auth/refresh' && req.method === 'POST') {
+let refreshedSession;
 const previous = browserSessions.find(req);
+try {
+await readJson(req);
 if (!previous?.refresh_token) return send(res, 401, { error: 'Please sign in again.' });
 const session = await refreshAuthSession(previous.refresh_token);
+refreshedSession = session;
 const profile = await profileForAccessToken(session.access_token);
+if (profile.id !== previous.userId || !validSecuritySession(req, profile)) throw new HttpError(401, 'Please sign in again.');
 browserSessions.renew(req, session);
-return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile });
-} catch (error) { return send(res, 401, { error: "Your login session has expired." }); } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await authenticatedProfile(req);
+return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile: publicLoginProfile(profile) });
+} catch (error) {
+browserSessions.clear(req, res);
+await revokePortalProviderSession(refreshedSession?.access_token || previous?.access_token);
+return send(res, 401, { error: "Your login session has expired." });
+} } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await authenticatedProfile(req);
 if (url.pathname === '/api/topups' && req.method === 'GET') return send(res, 200, await getTopupRequests(profile));
 if (url.pathname === '/api/topups' && req.method === 'POST') { const body = await readJson(req);
 const amountMnt = Number(body.amountMnt);

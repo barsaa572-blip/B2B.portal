@@ -2,6 +2,7 @@ import { getCnyMntRate } from './fx-rate.mjs';
 import { HttpError } from './request-security.mjs';
 import { publicRetail } from './retail-pricing.mjs';
 import { emailField } from './input-validation.mjs';
+import { passwordRotationRequired } from './login-security.mjs';
 
 export async function storeRetailPrice(profile, pnr, action, reference, snapshot) {
   await secretRequest('/rest/v1/rpc/store_retail_price', { method: 'POST', body: {
@@ -42,7 +43,7 @@ export function validatePasswordChange({ currentPassword, newPassword, confirmPa
 }
 
 // Identity comes only from the server-authenticated profile, never the form.
-export async function changeOwnPassword(profile, input) {
+export async function changeOwnPassword(profile, input, { onUpdated = () => {} } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError(400, 'Password fields are required.');
   validatePasswordChange(input);
   if (!profile?.id || !profile?.email) throw new HttpError(401, 'Please sign in again.');
@@ -58,10 +59,12 @@ export async function changeOwnPassword(profile, input) {
       body: { password: input.newPassword, current_password: input.currentPassword }
     });
     if (!response.ok) throw new HttpError(400, 'Password could not be updated. Try a stronger password or contact your administrator.');
+    onUpdated(profile.id); // Invalidate local sessions even if timestamp persistence fails.
+    if (passwordRotationRequired()) await recordPasswordChange(profile.id);
     return { ok: true };
   } finally {
     // The temporary reauthentication session must not remain usable.
-    await request('/auth/v1/logout?scope=local', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${fresh.access_token}` } }).catch(() => {});
+    await request('/auth/v1/logout?scope=global', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${fresh.access_token}` } }).catch(() => {});
   }
 }
 
@@ -139,6 +142,36 @@ export async function refreshAuthSession(refreshToken) {
   return data;
 }
 
+export async function assertPortalAuthReady() {
+  const ready = await secretRequest('/rest/v1/rpc/portal_auth_security_ready', { method: 'POST', body: {} });
+  if (ready !== true) throw new HttpError(503, 'Login security setup is not ready. Contact your administrator.');
+}
+
+async function recordPasswordChange(userId) {
+  try { await secretRequest('/rest/v1/rpc/record_portal_password_change', { method: 'POST', body: { p_user_id: userId } }); }
+  catch { throw new HttpError(503, 'Password was updated, but renewal tracking failed. Sign in with the new password and contact your administrator.'); }
+}
+
+export async function sendPortalEmailCode(email) {
+  const { publishableKey } = config();
+  const response = await request('/auth/v1/otp', { method: 'POST', headers: { apikey: publishableKey }, body: { email, create_user: false } });
+  if (!response.ok) throw new HttpError(503, 'Verification email could not be sent. Wait a minute and try again.');
+}
+
+export async function verifyPortalEmailCode(email, code) {
+  const { publishableKey } = config();
+  const response = await request('/auth/v1/verify', { method: 'POST', headers: { apikey: publishableKey }, body: { email, token: code, type: 'email' } });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok || !value.access_token || !value.refresh_token || !value.user?.id) throw new HttpError(400, 'Verification code is invalid, already used or expired.');
+  return value;
+}
+
+export async function revokePortalProviderSession(accessToken) {
+  if (!accessToken) return;
+  const { publishableKey } = config();
+  await request('/auth/v1/logout?scope=local', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${accessToken}` } }).catch(() => {});
+}
+
 // Only a human form submission consumes the invitation; page GETs do not.
 // Provider bearer tokens never leave this function or become browser storage.
 export async function acceptPortalInvitation(input, { session = null, onVerified = () => {} } = {}) {
@@ -166,6 +199,7 @@ export async function acceptPortalInvitation(input, { session = null, onVerified
       throw new HttpError(400, 'Password setup failed. Try a stronger password within five minutes, or contact your administrator.');
     }
     complete = true;
+    if (passwordRotationRequired()) await recordPasswordChange(profile.id);
     return { ok: true };
   } finally {
     if (complete || !retained) await request('/auth/v1/logout?scope=global', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${verified.access_token}` } }).catch(() => {});
@@ -194,7 +228,12 @@ export async function profileForAccessToken(accessToken) {
     const agencies = await secretRequest(`/rest/v1/agencies?select=active&id=eq.${encodeURIComponent(profile.agency_id)}&limit=1`);
     if (!agencies[0]?.active) throw new Error('Your agency is inactive. Please contact the platform administrator.');
   }
-  return { id: user.id, email: user.email, ...profile };
+  let passwordSecurity;
+  if (passwordRotationRequired()) {
+    const rows = await secretRequest(`/rest/v1/password_security?select=password_changed_at,revision&user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
+    passwordSecurity = rows[0] || null;
+  }
+  return { id: user.id, email: user.email, ...profile, ...(passwordRotationRequired() ? { passwordSecurity } : {}) };
 }
 
 export async function requirePlatformAdmin(accessToken) {

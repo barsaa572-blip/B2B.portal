@@ -26,7 +26,7 @@ test('password changes reauthenticate the server identity and use a user-scoped 
     if (url.includes('/token?')) return Response.json(badPassword ? {} : { access_token:'fresh-user-token', user:{ id:wrongIdentity ? 'other-user' : 'self' } }, { status:badPassword ? 400 : 200 });
     assert.equal(options.headers.authorization, 'Bearer fresh-user-token');
     if (url.endsWith('/user')) return Response.json(updateFailed ? { message:input.newPassword } : { id:'self' }, { status:updateFailed ? 400 : 200 });
-    assert.ok(url.includes('/logout?scope=local')); return new Response(null, { status:204 });
+    assert.ok(url.includes('/logout?scope=global')); return new Response(null, { status:204 });
   };
   const profile = { id:'self', email:'self@example.invalid' };
   assert.deepEqual(await changeOwnPassword(profile, { ...input, email:'victim@example.invalid', id:'victim' }), { ok:true });

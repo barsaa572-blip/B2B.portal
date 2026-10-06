@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { cleanPassengerCounts } from './input-validation.mjs';
 
 const fail = message => { throw new Error(message); };
 const amount = value => {
@@ -12,8 +13,7 @@ const integer = (value, label) => {
 
 export function priceSelection(flights, passengers) {
   if (!Array.isArray(flights) || flights.length < 1 || flights.length > 2) fail('Select one or two flight segments.');
-  const counts = Object.fromEntries(['adults', 'children', 'infants'].map(key => [key, integer(passengers?.[key], key)]));
-  if (counts.adults < 1 || counts.children < 0 || counts.infants < 0 || counts.infants > counts.adults || Object.values(counts).reduce((a, b) => a + b, 0) > 9) fail('Invalid passenger counts (maximum 9 travellers; infants require an adult).');
+  const counts = cleanPassengerCounts(passengers);
   const segments = flights.map(flight => {
     const s = flight?.spring || {};
     const segHeadId = integer(s.segHeadId, 'segment ID');

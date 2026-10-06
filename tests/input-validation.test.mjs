@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  textField, emailField, cleanPassengers
+  textField, emailField, cleanPassengers, cleanPassengerCounts
 } from '../backend/input-validation.mjs';
 
 const valid = () => ({
@@ -81,4 +81,25 @@ test('extra role, agency and price fields are removed', () => {
     });
   }
   assert.deepEqual(cleanPassengers(input), expected);
+});
+
+test('seat limit excludes lap infants and supports 9 adults with 9 infants', () => {
+  const party = (adults, children, infants) => ({ ...valid(), travellers: [
+    ...Array.from({ length: adults }, () => ({ ...valid().travellers[0], type: 'ADT' })),
+    ...Array.from({ length: children }, () => ({ ...valid().travellers[0], type: 'CHD' })),
+    ...Array.from({ length: infants }, () => ({ ...valid().travellers[0], type: 'INF' }))
+  ] });
+  for (const [adults, children, infants] of [[9, 0, 9], [6, 3, 6], [1, 8, 1]]) {
+    const input = party(adults, children, infants), before = structuredClone(input);
+    assert.deepEqual(cleanPassengers(input), before);
+    assert.deepEqual(input, before);
+  }
+  for (const counts of [[9, 1, 0], [6, 4, 0], [6, 3, 7], [0, 1, 0], [0, 0, 1]]) invalid(() => cleanPassengers(party(...counts)));
+});
+
+test('search/pricing counts reject malformed numbers instead of silently correcting them', () => {
+  assert.deepEqual(cleanPassengerCounts({ adults: '9', children: '0', infants: '9' }), { adults: 9, children: 0, infants: 9 });
+  for (const key of ['adults', 'children', 'infants']) for (const raw of ['', ' ', '1.5', -1, NaN, Infinity, true, null, {}, '1e0', '0x1', '9007199254740993']) {
+    invalid(() => cleanPassengerCounts({ adults: 1, children: 0, infants: 0, [key]: raw }));
+  }
 });

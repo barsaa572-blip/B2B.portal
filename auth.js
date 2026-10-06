@@ -113,6 +113,65 @@
     window.applyBookingScope?.(role); if (role === 'platform') window.loadAdministration?.(); if (role === 'office') window.loadTeamAccess?.();
     window.loadTopupInvoices?.(); window.loadWallet?.(); window.loadBookings?.(); window.loadDashboard?.(); bindSidebarAccount(value); scheduleRefresh(value);
   };
+  const finishLogin = result => {
+    const next = makeSession(result);
+    save(next); sessionStorage.removeItem('flightb2b-demo-session'); applyRole(next);
+  };
+  const renderLoginStep = result => {
+    const emailStep = result.nextStep === 'email';
+    if (!emailStep && result.nextStep !== 'password') throw new Error('Sign in could not be completed.');
+    sessionStorage.removeItem(storageKey); stopRefresh();
+    root.hidden = false;
+    root.innerHTML = safeHtml(`<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png" alt="NEXAHUB by Air Sales"></div><form class="auth-form"><h2>${emailStep ? 'Check your email' : 'Renew your password'}</h2><p>${emailStep ? 'Enter the one-time code sent to your company email. This sign-in expires in five minutes.' : 'Passwords must be renewed every six months. For an existing account, the first renewal starts this period. Sign in again after saving.'}</p>
+      ${emailStep ? '<label>Verification code<input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" minlength="6" maxlength="10" required></label>' : '<label>Current password<input name="currentPassword" type="password" autocomplete="current-password" maxlength="1024" required></label><label>New password<input name="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label><label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label><p class="auth-note">Use a letter, number and special character. Choose a different password.</p>'}
+      <p class="auth-error" role="alert" hidden></p><p class="auth-note" role="status" data-login-status></p><button class="primary auth-signin" type="submit">${emailStep ? 'Verify code' : 'Renew password'}</button>
+      ${emailStep ? '<button type="button" class="text-btn" data-login-resend>Send another code</button>' : ''}<button type="button" class="text-btn" data-login-cancel>Back to sign in</button></form></section>`);
+    const form = root.querySelector('form'), submit = form.querySelector('[type="submit"]'), error = form.querySelector('.auth-error'), resend = form.querySelector('[data-login-resend]'), cancel = form.querySelector('[data-login-cancel]'), status = form.querySelector('[data-login-status]');
+    let busy = false, timer;
+    const expiresAt = Date.now() + Number(result.expiresIn ?? 300) * 1000;
+    let resendAt = Date.now() + Number(result.resendAfter ?? 60) * 1000;
+    const stop = () => clearInterval(timer);
+    const update = () => {
+      if (!form.isConnected) { stop(); return; }
+      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      if (resend) { const wait = Math.max(0, Math.ceil((resendAt - Date.now()) / 1000)); resend.disabled = busy || wait > 0 || !remaining; resend.textContent = wait ? `Send another code (${wait}s)` : 'Send another code'; }
+      submit.disabled = busy || !remaining;
+      if (!remaining) status.textContent = 'This sign-in expired. Go back and sign in again.';
+    };
+    timer = setInterval(update, 1000); update();
+    cancel.onclick = async () => {
+      if (busy) return;
+      busy = true; update();
+      try { await fetch('/api/auth/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch {}
+      stop(); render();
+    };
+    const request = async (path, body) => {
+      const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const value = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(value.error || 'Verification failed. Try again.');
+      return value;
+    };
+    if (resend) resend.onclick = async () => {
+      if (busy) return;
+      busy = true; error.hidden = true; update();
+      try { const next = await request('/api/auth/resend-code', {}); resendAt = Date.now() + next.resendAfter * 1000; status.textContent = 'A new code was sent. Use the most recent email.'; }
+      catch (issue) { error.textContent = issue.message; error.hidden = false; resendAt = Date.now() + 60000; }
+      finally { busy = false; update(); }
+    };
+    form.onsubmit = async event => {
+      event.preventDefault(); if (busy || Date.now() >= expiresAt) return;
+      busy = true; error.hidden = true; update();
+      try {
+        const values = Object.fromEntries(new FormData(form));
+        const next = await request(emailStep ? '/api/auth/verify-email' : '/api/auth/renew-password', values);
+        form.reset(); stop();
+        if (next.accessToken === 'cookie') finishLogin(next);
+        else if (next.signInAgain) showNotice('Password renewed. Sign in with your new password.');
+        else renderLoginStep(next);
+      } catch (issue) { error.textContent = issue.message; error.hidden = false; }
+      finally { busy = false; update(); }
+    };
+  };
   const render = () => {
     root.innerHTML = safeHtml(`<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png?v=flightmark-20260921" alt="NEXAHUB by Air Sales" width="2172" height="724"></div><form class="auth-form"><h2>Sign in</h2><p>Use your company email and password to continue.</p><label>Email address<input type="email" id="login-email" placeholder="name@company.mn" required autocomplete="email" /></label><label>Password<input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" /></label><p class="auth-error" role="alert" hidden></p><button class="primary auth-signin" type="submit">Sign in</button></form></section>`);
     root.querySelector('form').addEventListener('submit', async event => {
@@ -121,7 +180,8 @@
       try {
         const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
         const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Sign in failed.');
-        const next = makeSession(result); save(next); sessionStorage.removeItem('flightb2b-demo-session'); applyRole(next);
+        root.querySelector('#login-password').value = '';
+        if (result.nextStep) renderLoginStep(result); else finishLogin(result);
       } catch (err) { error.textContent = err.message; error.hidden = false; submit.disabled = false; submit.textContent = 'Sign in'; }
     });
   };
