@@ -1,5 +1,12 @@
 # Security fixes and controlled activation — 2026-10-06
 
+Latest authorization, 2026-10-07: the user paused remaining test-site work and
+requested direct production promotion. The test backend is confirmed active with
+supplier actions disabled; DNS/HTTPS and real auth acceptance remain incomplete.
+The current code passed 250/250 local Node 24 tests again. Production env must
+remain separate: do not copy test config or enable SQL/SMTP-dependent policies
+without their prerequisite checks. No production deployment is certified here.
+
 User-provided VPS output on 2026-10-06 confirms `flightb2b` runs
 `/usr/bin/node /opt/flightb2b/server.mjs` with Node **18.19.1**. The previously
 installed isolated `/opt/nexahub-node/bin/node` must be checked on the VPS and
@@ -15,7 +22,10 @@ backend health and the live process executable. Reported result: service
 confirmation; direct SSH is still unavailable. `/usr/bin/node` was not replaced.
 
 Status: runtime-only migration confirmed by the user. Application security
-changes remain local, NOT pushed/deployed/activated on production.
+changes were published to develop as
+`fad9eee9b1dd59481ed713aabf8503ec8651296e` on 2026-10-07 (user push plus remote
+ref verification). They are NOT promoted/deployed/activated on production;
+test VPS deployment and real SQL/SMTP acceptance remain pending.
 SSH to root@202.131.1.50 failed with permission denied. Never ask the user to paste
 a password, signing key, API key, bearer token or entire environment file.
 

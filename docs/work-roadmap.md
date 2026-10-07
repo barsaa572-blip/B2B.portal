@@ -6,6 +6,18 @@ Local implementation does **not** imply VPS deployment or production acceptance.
 
 ## Latest user decisions and reported deployment
 
+- Latest override, 2026-10-07: the user explicitly paused test-site setup and
+  requested direct production promotion of the current code. Test backend on
+  4174 and production were reported active; test DNS remains absent and Spring
+  is disabled only in test. Full remote acceptance is incomplete. Local Node 24
+  tests passed 250/250 again. Prepare main without copying test secrets/settings;
+  SQL/SMTP-dependent login policy activation remains separately gated. This is
+  an exception for this release, not evidence of a production deployment.
+- Publication subsequently confirmed on 2026-10-07: the user pushed develop
+  and a remote read verified `fad9eee9b1dd59481ed713aabf8503ec8651296e`.
+  Production main remains `5bbc444`; the earlier credential blocker below is
+  historical for that attempt. Test VPS rollout/SQL/SMTP and production promotion
+  have not yet occurred. Deploy only the exact verified test revision first.
 - 2026-10-07 authorized publication attempt: local develop contains security
   commit `36cabe8` and template sanitization `65ab144`. Neither was pushed:
   native GH credentials are invalid and the Codex GitHub write API returns 403.

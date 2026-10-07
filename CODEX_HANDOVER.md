@@ -2,6 +2,23 @@
 
 **Current work ledger: 6 October 2026.**
 
+**Latest user override, 7 October 2026:** pause further test-site setup and promote
+the current security code to production now. The user confirmed the isolated
+test backend is active on 4174, production remains active, and test DNS is absent.
+Spring is disabled only in the separate test env, with a private backup. Full
+HTTPS/browser/SQL/SMTP staging acceptance is NOT complete. Node 24 local tests
+passed 250/250 again before promotion. Preserve production env and Node override;
+do not activate email/password policies without their SQL/template/SMTP checks,
+and do not change supplier endpoints. Production push/deployment still requires
+explicit success evidence; this entry records authorization, not completion.
+
+**Publication confirmed, 7 October 2026:** the user pushed `develop` from normal
+PowerShell. A read-only remote check verified
+`fad9eee9b1dd59481ed713aabf8503ec8651296e` on develop and unchanged
+`5bbc4442373c933b1f9b070408cf892a4f00b404` on main. The blocker below is the
+earlier attempt, not current publication status. Test VPS deployment, SQL/SMTP
+acceptance and production promotion are still pending; do not claim deployed.
+
 **Git publication attempt, 7 October 2026:** security payload committed locally
 as `36cabe8c8dac1a39f367caa0a1a2d93a57b3c0bd`; public supplier hosts were then
 removed from `.env.example` in `65ab1441c23cf4a0e00966bb049d171381a0dd8d`.
