@@ -5,7 +5,7 @@
     every = setInterval, cancel = clearInterval,
     channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('nexahub-activity') : null } = {}) => {
     let running = false, idleAt = 0, absoluteAt = 0, userId, timer;
-    let dirty = false, lastSend = 0, busy = false, generation = 0;
+    let dirty = false, lastSend = 0, lastInput = 0, busy = false, generation = 0;
     const bounds = value => {
       if (!Number.isFinite(value?.idleExpiresAt) || !Number.isFinite(value?.sessionExpiresAt)) return;
       idleAt = Math.min(value.idleExpiresAt, value.sessionExpiresAt);
@@ -22,7 +22,8 @@
       const current = generation;
       busy = true; dirty = false; lastSend = now();
       try {
-        const value = await send();
+        // A queued event must not gain another minute of lifetime when flushed.
+        const value = await send({ elapsedMs: Math.max(0, Math.floor(now() - lastInput)) });
         if (!running || generation !== current) return;
         bounds(value);
         channel?.postMessage({ userId, idleExpiresAt: idleAt, sessionExpiresAt: absoluteAt });
@@ -34,10 +35,15 @@
     };
     const input = event => {
       if (!running || event.isTrusted !== true || doc.visibilityState === 'hidden') return;
+      // Hovering is not work. Dragging, wheel input, typing and clicks are.
+      if (event.type === 'pointermove' && !(event.buttons > 0)) return;
+      lastInput = now();
       dirty = true; void tick();
     };
-    for (const type of ['pointerdown', 'pointermove', 'keydown', 'input', 'scroll', 'wheel']) {
-      doc.addEventListener(type, input, { passive: true, capture: true });
+    // scroll can be emitted by programmatic focus/scrolling and DOM updates.
+    // Observe its physical causes instead, never the generated scroll event.
+    for (const type of ['pointerdown', 'pointermove', 'keydown', 'input', 'wheel']) {
+      doc.addEventListener(type, event => input({ type, isTrusted: event.isTrusted, buttons: event.buttons }), { passive: true, capture: true });
     }
     doc.addEventListener('visibilitychange', () => { void tick(); }); // Not activity.
     if (channel) channel.onmessage = event => {
@@ -47,10 +53,11 @@
     return {
       start(value) {
         stop(); userId = value.profile?.id; generation++;
-        // Old releases lack these bounds: perform a server check before trusting them.
+        // auth.js validates restored cookies first; fallback bounds are local only.
         idleAt = Number(value.idleExpiresAt || now() + 1200000);
         absoluteAt = Number(value.sessionExpiresAt || now() + 12 * 3600000);
-        running = true; dirty = !value.idleExpiresAt; lastSend = -Infinity;
+        // Restoring a page is not human activity and must never touch the server.
+        running = true; dirty = false; lastInput = now(); lastSend = -Infinity;
         timer = every(() => { void tick(); }, 1000); void tick();
         return running;
       }, stop, update: bounds

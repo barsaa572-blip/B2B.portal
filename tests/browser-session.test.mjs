@@ -89,3 +89,18 @@ test('real activity extends idle timeout but cannot revive expired sessions or e
   now = 29 * 60000; assert.ok(sessions.find(request(cookie)));
   now = 30 * 60000; assert.throws(() => sessions.touch(request(cookie)), { status: 401 });
 });
+test('delayed activity uses elapsed age and rejects future, stale or invalid input', () => {
+  let now = 0;
+  const sessions = createBrowserSessions({ now: () => now });
+  const cookie = establish(sessions);
+  now = 60000;
+  assert.equal(sessions.touch(request(cookie), { elapsedMs: 30000 }).idleExpiresAt, 1230000);
+  const before = sessions.find(request(cookie)).idleDeadline;
+  for (const elapsedMs of [-1, '0', NaN, Infinity, 0.1, 1200001]) {
+    assert.throws(() => sessions.touch(request(cookie), { elapsedMs }), { status: 400 });
+    assert.equal(sessions.find(request(cookie)).idleDeadline, before);
+  }
+  now = 1230000;
+  assert.equal(sessions.find(request(cookie)), null);
+  assert.throws(() => sessions.touch(request(cookie), { elapsedMs: 0 }), { status: 401 });
+});

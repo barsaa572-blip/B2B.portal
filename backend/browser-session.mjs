@@ -39,10 +39,13 @@ export function createBrowserSessions({ now = Date.now, ttl = 12 * 3600000, idle
       const { deadline, idleDeadline } = previous;
       Object.assign(previous, session, { deadline, idleDeadline }); // Automatic refresh is NOT human activity.
     },
-    touch(req) {
+    touch(req, { elapsedMs = 0 } = {}) {
       const value = find(req);
       if (!value) throw new HttpError(401, 'Your session expired after 20 minutes of inactivity. Sign in again.');
-      value.idleDeadline = Math.min(value.deadline, now() + idleMs);
+      // The browser may flush buffered input later. Its age can only reduce the
+      // extension, never add time beyond the server clock or revive an expiry.
+      if (!Number.isSafeInteger(elapsedMs) || elapsedMs < 0 || elapsedMs > idleMs) throw new HttpError(400, 'Activity age is invalid.');
+      value.idleDeadline = Math.min(value.deadline, Math.max(value.idleDeadline, now() + idleMs - elapsedMs));
       return { idleExpiresAt: value.idleDeadline, sessionExpiresAt: value.deadline };
     },
     clear(req, res) { sessions.delete(idFor(req)); setCookie(res, cookie(req, '', 0)); },

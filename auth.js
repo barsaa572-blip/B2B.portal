@@ -36,12 +36,12 @@
     document.body.classList.remove('role-agent', 'role-office', 'role-platform'); root.hidden = false; render();
   };
   const activity = createPortalActivity({
-    send: async () => {
+    send: async input => {
       const current = session();
       if (Number(current?.expiresAt || 0) - Date.now() < 120000 && !await refreshPortalSession()) {
         throw Object.assign(new Error('Session expired.'), { status: 401 });
       }
-      const response = await fetch('/api/auth/activity', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const response = await fetch('/api/auth/activity', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
       if (!response.ok) throw Object.assign(new Error('Session check failed.'), { status: response.status });
       return response.json();
     },
@@ -246,6 +246,21 @@
   // Retire legacy browser-stored bearer tokens on upgrade.
   if (existing?.accessToken && existing.accessToken !== 'cookie') { sessionStorage.removeItem(storageKey); existing = null; }
   if (!valid(existing)) { if (existing) sessionStorage.removeItem(storageKey); render(); return; }
-  if (existing.refreshToken && Number(existing.expiresAt || 0) - Date.now() < 120000) refreshPortalSession().then(value => value ? applyRole(value) : signOut());
-  else applyRole(existing);
+  // sessionStorage is a UI cache, never proof of a live session. A reload must
+  // validate the server cookie WITHOUT renewing inactivity first.
+  root.hidden = false;
+  root.textContent = 'Checking your session…';
+  void (async () => {
+    try {
+      const response = await fetch('/api/auth/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !Number.isFinite(result.idleExpiresAt) || !Number.isFinite(result.sessionExpiresAt)) throw new Error('Session expired.');
+      if (session()?.profile?.id !== existing.profile.id || session()?.sessionExpiresAt !== existing.sessionExpiresAt) return;
+      const next = { ...existing, ...result }; save(next);
+      if (next.refreshToken && Number(next.expiresAt || 0) - Date.now() < 120000) {
+        const renewed = await refreshPortalSession();
+        if (renewed) applyRole(renewed); else signOut();
+      } else applyRole(next);
+    } catch { signOut(); showNotice('Your session expired. Sign in again.'); }
+  })();
 })();

@@ -2,6 +2,32 @@
 
 **Current work ledger: 6 October 2026.**
 
+**Idle logout follow-up, 7 October 2026:** the user confirmed real email code
+delivery, first password renewal and a fresh OTP login. They reported remaining
+signed in after 20 minutes and reload, with no other tab. Supplied Nginx logs
+show successful /api/auth/activity calls with no demonstrated 20-minute gap;
+they do not identify which event emitted them. New regressions reproduce raw
+trusted scroll/hover keeping sessions alive and queued input adding up to a
+minute. The local fix excludes raw scroll/hover, retains deliberate dragging,
+wheel/typing/click input, sends bounded elapsed input age, never auto-touches on
+page restoration, and validates reload cookies through a read-only authenticated
+POST /api/auth/session. Cache-busting script versions were advanced. Local Node
+24 tests pass 259/259, including auth UI/controller and actual HTTP snapshots.
+This fix is not yet deployed; production acceptance after deployment remains
+required. Chrome read-only inspection failed at browser request-header policy
+loading, and no alternative credential/browser-security bypass was used.
+
+**Production deployment reported complete, 7 October 2026:** after the pinned
+`16dd7545bc4ca69fbd005423e500c1462f6a6490` deployment block, the user supplied
+`active`, `Website HTTP: 200`, and `READY: Production шинэчлэлт амжилттай.`
+This is user-provided confirmation, not direct SSH inspection. The block preserves
+production env and the existing Node 24 service override, backs up code/dependencies,
+runs isolated tests, conditionally checks already-enabled auth policies, restarts
+production, and applies guarded HSTS. It does not newly enable email/password
+policies or alter supplier URLs. Next: read-only production auth readiness/flags,
+then SQL/template/SMTP acceptance before any required-policy activation. Test DNS
+and HTTPS remain paused; the test service was left active with Spring disabled.
+
 **Latest user override, 7 October 2026:** pause further test-site setup and promote
 the current security code to production now. The user confirmed the isolated
 test backend is active on 4174, production remains active, and test DNS is absent.

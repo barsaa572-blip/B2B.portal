@@ -1461,11 +1461,22 @@ if (blockedSupplierRoute(url.pathname, req.method)) return send(res, 503, { erro
 if (url.pathname === '/api/auth/activity') {
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
   try {
-    await readJson(req);
+    const body = await readJson(req);
     // Only this authenticated same-origin endpoint renews idle time. Background
     // refresh, status checks and polling must never keep an unattended browser alive.
-    return send(res, 200, browserSessions.touch(req));
+    return send(res, 200, browserSessions.touch(req, { elapsedMs: body.elapsedMs }));
   } catch (error) { return send(res, error.status || 400, { error: 'Your session expired. Sign in again.' }); }
+}
+if (url.pathname === '/api/auth/session') {
+  // POST preserves the existing same-origin auth checks; this is a read only.
+  if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
+  try {
+    await readJson(req);
+    const session = browserSessions.find(req);
+    if (!session) return send(res, 401, { error: 'Your session expired. Sign in again.' });
+    return send(res, 200, { idleExpiresAt: session.idleDeadline,
+      sessionExpiresAt: session.deadline, profile: publicLoginProfile(req.securityProfile) });
+  } catch (error) { return send(res, error.status || 400, { error: 'Session check failed.' }); }
 }
 if (url.pathname === '/api/auth/accept-invite') {
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });

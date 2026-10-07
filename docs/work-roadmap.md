@@ -6,6 +6,46 @@ Local implementation does **not** imply VPS deployment or production acceptance.
 
 ## Latest user decisions and reported deployment
 
+- Idle follow-up: user confirms no other tab and reload still shows signed-in
+  UI. Supplied Nginx activity timestamps include 04:11:05, 04:22:28, 04:22:30 and
+  04:23:31 UTC, all 200: no 20-minute inactivity gap is demonstrated, but event
+  provenance is unavailable. Regressions reproduced trusted scroll/hover and
+  delayed input problems. Local fixes remove raw scroll/hover, carry bounded
+  input age to the server, suppress page-load touches, and validate restored
+  cookies with an authenticated, same-origin read-only session snapshot.
+  Node 24 full suite: 259 pass, zero fail. No secret audit findings. Actual
+  production idle acceptance remains pending; no claim of a deployed fix yet.
+- Production auth acceptance is partially confirmed by the user: email OTP
+  arrived, first password renewal succeeded, and a fresh OTP/password login
+  succeeded afterward. That second OTP is expected because renewal invalidates
+  the prior password revision. However, the user reported the UI remained signed
+  in after 20 minutes without interaction: idle logout is NOT accepted yet.
+  Read-only public production assets match the current local auth/activity/index
+  sources after CRLF normalization; 10 focused idle/session tests passed. Actual
+  browser state/server expiry and other-tab activity still need distinguishing;
+  no guessed fix or new production deployment was made for this report.
+- The user subsequently supplied a production SQL Editor screenshot showing
+  portal_auth_security_ready = true after the matching migration. Backend
+  service-role preflight must still be rechecked before activation. Required
+  email/password policies and device signing key are not yet enabled. Next
+  configure only the Magic Link email template with .Token, preserve Invite
+  User, verify SMTP/code delivery, then perform guarded activation/acceptance.
+- Production read-only preflight supplied after deployment: isolated Node
+  24.21.0 is confirmed; AUTH email/password policies, device signing key and
+  trusted-loopback proxy flag are all false/not-ready; portalAuthSchemaReady is
+  false. This result alone does not distinguish a missing RPC from missing
+  permissions or a failing readiness predicate. All supplied Spring endpoints
+  remain HTTP (JSON 7003, SOAP 7001). Do not claim supplier transport encrypted
+  or required email/password policies active. Next apply/review the matching
+  portal auth migration and verify readiness, then template/SMTP acceptance;
+  proxy-IP rate-limit configuration also remains pending.
+- Production rollout subsequently reported complete on 2026-10-07: the user ran
+  the pinned `16dd7545bc4ca69fbd005423e500c1462f6a6490` block and supplied active,
+  Website HTTP 200 and deployment READY. Direct SSH remains unavailable. This
+  supersedes earlier pending-promotion entries, not SQL/SMTP acceptance. The
+  deployment does not newly activate email/password policies or modify Spring
+  endpoints. Next inspect production auth flags/schema read-only. Test backend
+  remains active with Spring disabled; DNS/HTTPS work stays paused.
 - Latest override, 2026-10-07: the user explicitly paused test-site setup and
   requested direct production promotion of the current code. Test backend on
   4174 and production were reported active; test DNS remains absent and Spring
