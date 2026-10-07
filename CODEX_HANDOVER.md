@@ -2,6 +2,19 @@
 
 **Current work ledger: 6 October 2026.**
 
+**Git publication attempt, 7 October 2026:** security payload committed locally
+as `36cabe8c8dac1a39f367caa0a1a2d93a57b3c0bd`; public supplier hosts were then
+removed from `.env.example` in `65ab1441c23cf4a0e00966bb049d171381a0dd8d`.
+Local `develop` contains both; `security-test-rollout` retains the first commit.
+No push succeeded. Native Git credential helper failed; `gh auth status` reports
+the saved login invalid. Codex GitHub's repo metadata reports push permission,
+but its Git-blob write API returns 403/resource not accessible by integration.
+The original template upload was also blocked by review; its supplier hosts were
+removed before a new sanitized request, not bypassed. Reauthenticate GitHub before
+retrying. Remote develop remains `e89cc9f`, main `5bbc444`; no production code
+promotion or test VPS changes have been executed. Do not claim these committed
+changes are already deployed. Preserve the two unrelated untracked typo files.
+
 Read [docs/work-roadmap.md](docs/work-roadmap.md) first for current status,
 deferred Spring questions, login rollout and the YeeFlightLink assessment. The
 August notes below are historical and do not certify current deployment.

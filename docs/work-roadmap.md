@@ -6,6 +6,13 @@ Local implementation does **not** imply VPS deployment or production acceptance.
 
 ## Latest user decisions and reported deployment
 
+- 2026-10-07 authorized publication attempt: local develop contains security
+  commit `36cabe8` and template sanitization `65ab144`. Neither was pushed:
+  native GH credentials are invalid and the Codex GitHub write API returns 403.
+  Remote develop/main remain e89cc9f/5bbc444; no test-service installation or
+  production code deployment occurred. Reauthenticate GitHub before retrying.
+  New public template has blank Spring URLs; this does not erase older public
+  endpoint-only history, and no actual provider secret was found in the audit.
 - Test VPS inspection: `/opt/flightb2b-test` and `/etc/flightb2b-test` exist,
   but `flightb2b-test` is not installed (`LoadState=not-found`, inactive, no
   FragmentPath). Both DNS lookups then returned no address, and staging rejected
