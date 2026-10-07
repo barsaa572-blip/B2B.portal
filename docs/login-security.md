@@ -2,6 +2,11 @@
 
 Prepared 2026-10-06. Local mocks only; not activated or certified on production.
 
+Latest requested behavior and gated activation are documented in
+[security-fixes-2026-10-06.md](security-fixes-2026-10-06.md): 20-minute human-activity
+idle timeout, fixed 24-hour same-browser email receipt, persistent private
+AUTH_DEVICE_SECRET, and one-year host-only HSTS. Production activation is pending.
+
 ## Controls
 
 - `AUTH_EMAIL_OTP_REQUIRED=true`: password first, company-email code second.
@@ -21,6 +26,12 @@ Prepared 2026-10-06. Local mocks only; not activated or certified on production.
   expiry, so backend-only table/RPC privileges are a mandatory rollout gate.
 - Supabase tokens, passwords and OTPs never enter browser storage. Code, password,
   sender credentials and token values must not be logged.
+- Successful email verification sets a signed HttpOnly, Secure host-only browser
+  receipt valid for 24 hours. Ordinary logout/idle expiry keeps this receipt but
+  still requires the password at the next login. It is never an API credential.
+  Password/email/revision changes, another browser and expiry require fresh OTP.
+  `AUTH_DEVICE_SECRET` must be a private persistent 64–128 hex-character random
+  key before enabling email checks; the VPS helper generates it without printing.
 
 ## Rollout order (keep flags false until step 4)
 

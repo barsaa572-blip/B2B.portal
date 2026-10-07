@@ -38,7 +38,7 @@ test('HTTP email second-step, password rotation and bearer bypass controls use o
   const probe = createServer(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening');
   const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
   const env = { ...process.env, PORT: String(port), APP_ENV: 'test', AUTH_EMAIL_OTP_REQUIRED: 'true', AUTH_PASSWORD_ROTATION_REQUIRED: 'true',
-    SUPABASE_URL: `http://127.0.0.1:${provider.address().port}`, SUPABASE_PUBLISHABLE_KEY: 'public-test', SUPABASE_SECRET_KEY: 'service-test' };
+    AUTH_DEVICE_SECRET: 'a'.repeat(64), SUPABASE_URL: `http://127.0.0.1:${provider.address().port}`, SUPABASE_PUBLISHABLE_KEY: 'public-test', SUPABASE_SECRET_KEY: 'service-test' };
   for (const key of Object.keys(env)) if (key.startsWith('SPRING_')) env[key] = '';
   const child = spawn(process.execPath, ['server.mjs'], { cwd: fileURLToPath(new URL('..', import.meta.url)), env, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(async () => {
@@ -105,16 +105,36 @@ test('HTTP email second-step, password rotation and bearer bypass controls use o
     assert.ok(events.some(e => e.path === '/auth/v1/logout' && e.query === '?scope=global'));
     assert.equal((await call('/api/auth/verify-email', { cookie: pendingCookie, body: { code: '123456' } })).status, 401);
   });
-  let sessionCookie;
+  let sessionCookie, deviceCookie;
   await t.test('fresh password plus OTP gets a cookie; replay and raw OTP bearer remain blocked', async () => {
     const response = await login(); const pending = cookieFrom(response, 'nexahub_login_pending');
     const verified = await call('/api/auth/verify-email', { cookie: pending, body: { code: '123456' } });
     assert.equal(verified.status, 200); sessionCookie = cookieFrom(verified, 'nexahub_session');
+    deviceCookie = cookieFrom(verified, 'nexahub_email_device_local');
+    assert.ok(deviceCookie);
     const result = await verified.json(); assert.equal(result.accessToken, 'cookie'); assert.equal(result.profile.passwordSecurity, undefined);
     assert.doesNotMatch(JSON.stringify(result), /server-email|server-password/);
     assert.equal((await call('/api/bookings', { cookie: sessionCookie })).status, 200);
     assert.equal((await call('/api/bookings', { authorization: 'Bearer server-email-token' })).status, 401);
     assert.equal((await call('/api/auth/verify-email', { cookie: pending, body: { code: '123456' } })).status, 401);
+  });
+  await t.test('activity is authenticated and same-origin; daily receipt survives logout but cannot authenticate alone', async () => {
+    assert.equal((await call('/api/auth/activity', { body: {} })).status, 401);
+    assert.equal((await call('/api/auth/activity', { cookie: sessionCookie, body: {}, noOrigin: true })).status, 403);
+    const touch = await call('/api/auth/activity', { cookie: sessionCookie, body: {} });
+    assert.equal(touch.status, 200);
+    const bounds = await touch.json(); assert.ok(bounds.idleExpiresAt > Date.now());
+    assert.ok(bounds.idleExpiresAt <= bounds.sessionExpiresAt);
+    const logout = await call('/api/auth/logout', { cookie: sessionCookie + '; ' + deviceCookie, body: {} });
+    assert.equal(logout.status, 200); assert.equal(cookieFrom(logout, 'nexahub_email_device_local'), undefined);
+    assert.equal((await call('/api/bookings', { cookie: deviceCookie })).status, 401);
+    const sent = events.filter(e => e.path === '/auth/v1/otp').length;
+    const loginAgain = await call('/api/auth/login', { cookie: deviceCookie, body: { email: 'self@example.invalid', password: currentPassword } });
+    assert.equal(loginAgain.status, 200); assert.equal((await loginAgain.json()).accessToken, 'cookie');
+    sessionCookie = cookieFrom(loginAgain, 'nexahub_session');
+    assert.equal(events.filter(e => e.path === '/auth/v1/otp').length, sent);
+    assert.equal((await call('/api/bookings', { cookie: sessionCookie })).status, 200);
+    assert.equal((await call('/api/auth/login', { cookie: deviceCookie, body: { email: 'self@example.invalid', password: 'Wrong-password' } })).status, 401);
   });
   await t.test('password revision changes and inactive profiles invalidate existing cookies', async () => {
     security.revision = 'externally-changed';

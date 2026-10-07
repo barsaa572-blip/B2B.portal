@@ -1,5 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
+import { springEndpoint, springEnabled, requireSpringEnabled } from './supplier-transport.mjs';
 
 const xmlEscape = value => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -48,8 +49,8 @@ const finiteNumber = value => {
 // (the transport behind Node's fetch).  Use the native HTTP client so this
 // SOAP request is HTTP/1.1 with an explicit Content-Length, just like the
 // supplier's XML demo.
-const postSoapXml = (endpoint, xml) => new Promise((resolve, reject) => {
-  const url = new URL(endpoint);
+const postSoapXml = (endpoint, xml, env) => new Promise((resolve, reject) => {
+  const url = new URL(springEndpoint(endpoint, env));
   const transport = url.protocol === 'https:' ? https : http;
   const request = transport.request({
     protocol: url.protocol,
@@ -88,8 +89,8 @@ const postSoapXml = (endpoint, xml) => new Promise((resolve, reject) => {
 
 export function getSpringSoapStatus(env = process.env) {
   const endpoint = serviceEndpoint(env.SPRING_ORDER_DETAIL_WSDL_URL || env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
-  const configured = Boolean(endpoint && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD);
-  const enabled = env.SPRING_CREDIT_PAYMENT_ENABLED === 'true';
+  const configured = springEnabled(env) && Boolean(endpoint && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD);
+  const enabled = springEnabled(env) && env.SPRING_CREDIT_PAYMENT_ENABLED === 'true';
   return {
     creditPaymentEnabled: enabled,
     creditPaymentReady: enabled && configured,
@@ -100,6 +101,7 @@ export function getSpringSoapStatus(env = process.env) {
 }
 
 export function createSpringSoapClient(env = process.env) {
+  requireSpringEnabled(env);
   const endpoint = serviceEndpoint(env.SPRING_ORDER_DETAIL_WSDL_URL || env.SPRING_CREDIT_PAYMENT_WSDL_URL || env.SPRING_XML_WSDL_URL);
   const username = String(env.SPRING_XML_USERNAME || '').trim();
   const password = String(env.SPRING_XML_PASSWORD || '').trim();
@@ -126,7 +128,7 @@ export function createSpringSoapClient(env = process.env) {
 
     let response;
     try {
-      response = await postSoapXml(endpoint, body);
+      response = await postSoapXml(endpoint, body, env);
     } catch (error) {
       // Keep the browser message useful without exposing the SOAP body, XML
       // credentials, or any part of the request payload.
@@ -141,14 +143,12 @@ export function createSpringSoapClient(env = process.env) {
       errMsg: xmlValue(responseXml, 'errMsg') || xmlValue(responseXml, 'message') || xmlValue(responseXml, 'faultstring')
     };
     if (!response.ok || result.ifSuccess !== 'Y') {
-      // Keep the SOAP response in the server journal only.  It contains no
-      // request credentials, and lets us see Spring's exact business error.
+      // A supplier can reflect credentials/passenger data in an error response.
+      // Never journal raw XML or free-text supplier errors.
       console.warn('Spring credit payment rejected', {
         httpStatus: response.status,
-        ifSuccess: result.ifSuccess,
-        errCode: result.errCode,
-        errMsg: result.errMsg,
-        response: String(responseXml).slice(0, 6000)
+        ifSuccess: ['Y', 'N'].includes(result.ifSuccess) ? result.ifSuccess : 'unknown',
+        errCode: /^[A-Z]{0,8}-?\d{1,6}$/.test(result.errCode || '') ? result.errCode : 'SUPPLIER_ERROR'
       });
       const detail = result.errMsg || `Spring credit payment failed (${response.status}).`;
       throw new Error(`Spring credit payment failed${result.errCode ? ` (${result.errCode})` : ''}: ${detail}`);
@@ -167,7 +167,7 @@ export function createSpringSoapClient(env = process.env) {
 
     let response;
     try {
-      response = await postSoapXml(endpoint, body);
+      response = await postSoapXml(endpoint, body, env);
     } catch (error) {
       const detail = error?.cause?.message || error?.message || 'connection failed';
       throw new Error(`Spring order-detail network request failed: ${detail}`);

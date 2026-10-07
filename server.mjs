@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createBrowserSessions } from './backend/browser-session.mjs';
+import { createRememberedEmail } from './backend/remembered-email.mjs';
 import { BookingReviewRequired } from './backend/booking-review.mjs';
 import { createLoginSecurity, emailStepRequired, passwordRotationRequired, passwordDue, passwordRevision, publicLoginProfile } from './backend/login-security.mjs';
 import { assertPortalAuthReady, sendPortalEmailCode, verifyPortalEmailCode, revokePortalProviderSession } from './backend/supabase-client.mjs';
@@ -23,6 +24,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSpringClient, getSpringStatus } from './backend/spring-client.mjs';
 import { createSpringSoapClient, getSpringSoapStatus } from './backend/spring-soap-client.mjs';
+import { blockedSupplierRoute } from './backend/supplier-transport.mjs';
 import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
@@ -49,6 +51,7 @@ const sendPdf = (res, filename, content) => {
 const readJson = readJsonBody;
 const limitRequest = createLimiter();
 const browserSessions = createBrowserSessions();
+const rememberedEmail = createRememberedEmail();
 // This cookie has no portal authority: usable only for a five-minute setup retry.
 const inviteSessions = createBrowserSessions({ cookieName: 'nexahub_invite', ttl: 300000, limit: 1000 });
 const loginPendingSessions = createBrowserSessions({ cookieName: 'nexahub_login_pending', ttl: 300000, limit: 1000 });
@@ -57,7 +60,7 @@ const loginSecurity = createLoginSecurity({ pending: loginPendingSessions, sessi
   signIn: signInWithPassword, profileForToken: profileForAccessToken,
   sendCode: sendPortalEmailCode, verifyCode: verifyPortalEmailCode,
   changePassword: (profile, input) => changeOwnPassword(profile, input, { onUpdated: invalidateAccountSessions }), revoke: revokePortalProviderSession,
-  assertReady: assertPortalAuthReady, limit: limitRequest });
+  assertReady: assertPortalAuthReady, limit: limitRequest, remembered: rememberedEmail });
 const protectPayment = (profile, pnr, action, reference, amount, execute, retail = null) => guardedPayment({
   begin: beginFinancialOperation, finish: finishFinancialOperation, actor: profile.id, pnr, action, reference, amount, retail
 }, execute);
@@ -66,7 +69,8 @@ const authenticatedProfile = req => req.securityProfile || profileForAccessToken
 const bearer = req => browserSessions.token(req) || (!loginSecurity.active() ? req.headers.authorization?.replace(/^Bearer\s+/i, '') : undefined);
 const validSecuritySession = (req, profile) => {
   const session = browserSessions.find(req);
-  return (!emailStepRequired() || session?.emailVerified === true)
+  return (!emailStepRequired() || (session?.emailVerified === true && session.emailVerifiedUntil > Date.now()
+      && session.securityRevision === passwordRevision(profile)))
     && (!passwordRotationRequired() || (session?.securityRevision === passwordRevision(profile) && !passwordDue(profile)));
 };
 const requiredText = (value, label) => {
@@ -1453,6 +1457,16 @@ try {
   return send(res, error.status || 400, { error: "Invalid request." });
 }
 if (url.pathname === '/api/health') return send(res, 200, { ok: true, service: 'flight-b2b-backend' });
+if (blockedSupplierRoute(url.pathname, req.method)) return send(res, 503, { error: 'Spring is disabled in this test environment. Login and local test data remain available.', code: 'SUPPLIER_DISABLED' });
+if (url.pathname === '/api/auth/activity') {
+  if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
+  try {
+    await readJson(req);
+    // Only this authenticated same-origin endpoint renews idle time. Background
+    // refresh, status checks and polling must never keep an unattended browser alive.
+    return send(res, 200, browserSessions.touch(req));
+  } catch (error) { return send(res, error.status || 400, { error: 'Your session expired. Sign in again.' }); }
+}
 if (url.pathname === '/api/auth/accept-invite') {
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed.' });
   try {
@@ -1653,7 +1667,7 @@ refreshedSession = session;
 const profile = await profileForAccessToken(session.access_token);
 if (profile.id !== previous.userId || !validSecuritySession(req, profile)) throw new HttpError(401, 'Please sign in again.');
 browserSessions.renew(req, session);
-return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile: publicLoginProfile(profile) });
+return send(res, 200, { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, idleTimeoutSeconds: 1200, idleExpiresAt: previous.idleDeadline, sessionExpiresAt: previous.deadline, profile: publicLoginProfile(profile) });
 } catch (error) {
 browserSessions.clear(req, res);
 await revokePortalProviderSession(refreshedSession?.access_token || previous?.access_token);
@@ -1724,7 +1738,7 @@ if (!isPublicAsset(requested)) return send(res, 404, 'Not found', 'text/plain');
 const file = normalize(join(ROOT, requested));
 if (!file.startsWith(normalize(ROOT))) return send(res, 403, 'Forbidden', 'text/plain'); try {
   const content = await readFile(file);
-  send(res, 200, requested === 'index.html' ? environmentPage(content, process.env.APP_ENV) : content, MIME[extname(file)] || 'application/octet-stream');
+  send(res, 200, requested === 'index.html' ? environmentPage(content, process.env.APP_ENV, process.env.STAGING_SUPPLIER_MODE) : content, MIME[extname(file)] || 'application/octet-stream');
 } catch { send(res, 404, 'Not found', 'text/plain'); } }).listen(PORT, '127.0.0.1', () => {
   console.log(`NEXAHUB by Air Sales listening on http://127.0.0.1:${PORT}`);
   const reconcileExpiredReservations = async () => {

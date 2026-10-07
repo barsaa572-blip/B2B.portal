@@ -27,7 +27,7 @@ const root = path.resolve(__dirname, '..');
     });
     await page.goto('http://127.0.0.1:4199/');
     for (const name of ['styles.css', 'auth.css', 'nexahub-brand.css']) await page.addStyleTag({ path: path.join(root, name) });
-    for (const name of ['dompurify.js', 'safe-html.js', 'auth.js']) await page.addScriptTag({ path: path.join(root, name) });
+    for (const name of ['dompurify.js', 'safe-html.js', 'session-activity.js', 'auth.js']) await page.addScriptTag({ path: path.join(root, name) });
     const signIn = async () => {
       await page.locator('#login-email').fill('mock@example.invalid');
       await page.locator('#login-password').fill('MockPassword1!');

@@ -1,11 +1,25 @@
 # Controlled release — Windows Git and VPS together
 
-**Not executed by this task.** Browser QA was blocked by the local automation
-sandbox (Edge launch failed; in-app browser could not reach localhost). The full
-Node/mock HTTP tests pass (223 passed, 0 failed; local Node 22.23.2). SQL runtime
-and production Node 18 acceptance have not been run. Run the browser check in your normal Windows PowerShell
-before committing/pushing. No real email, account or supplier transaction is used
-by that check. Keep the new AUTH flags false for this initial code deployment.
+**Policy update, 2026-10-06:** future releases go through the isolated test site
+first. These commands describe the earlier release and are not sufficient for
+future production approval. Follow [testing-release-policy.md](testing-release-policy.md)
+and accept the exact final code/migrations on test before production promotion.
+
+**Runtime update, 2026-10-06:** the user completed a production service-only move
+to `/opt/nexahub-node/bin/node` **24.21.0** after 223 deployed-source tests passed;
+the guarded restart reported active/HTTP 200/READY. The historical Node 18 notes
+below are not current runtime status. The latest local security patch has 244
+passing tests, but still requires browser/test-site acceptance before promotion.
+
+**Browser acceptance update, 2026-10-06:** the user ran both
+`check-html-security.cjs` and `check-login-security-browser.cjs` in normal
+PowerShell and supplied all PASS results, including actual checkout/admin DOM,
+email code/renewal/token-free storage and mobile/cancellation. Earlier desktop
+sandbox launch failures are historical only. The current full local mock suite
+has 244 passing tests on Node 22 and 24. These isolated checks send no real email,
+account or supplier transaction and do not replace remote test-site/SQL/SMTP
+acceptance. No security code push or production activation is confirmed. Keep
+the new AUTH flags false until the relevant rollout gates pass.
 
 ## 1. Windows PowerShell (not the VPS terminal)
 

@@ -1,5 +1,12 @@
 # NEXAHUB test environment (manual rollout)
 
+**Latest confirmed hostname:** `test.nexahub.airsales.ub.mn`. The user chose this
+existing hostname after both candidate DNS checks returned no address; the earlier
+`test.nexahub.ub.mn` plan is superseded. Restore DNS A -> `202.131.1.50`, verify
+TLS and test Auth redirects before deployment. Test-first releases also apply to
+the first YeeFlightLink integration. Never disable isolation guards to start.
+See [the current release policy](../../docs/testing-release-policy.md).
+
 Production stays at `/opt/flightb2b`, port 4173, service `flightb2b`, branch `main`.
 Test uses `/opt/flightb2b-test`, port 4174, service/user `flightb2b-test`, branch
 `develop`, and `https://test.nexahub.airsales.ub.mn`.
@@ -29,7 +36,52 @@ Review test signup settings and disable public signup when accounts are admin-cr
 If the live DB has changes not represented in Git, reconcile schema differences
 before declaring parity. Do not overwrite either database with the other.
 
+## Spring-free security acceptance (prepared 2026-10-07)
+
+Reuse the existing VPS test folders. The test unit is not installed, and the
+current test env is rejected because its Spring client ID matches production.
+Do not weaken that guard. To test authentication, idle logout, admin UI, wallet
+and invoice rendering with synthetic data while awaiting fresh Spring rights,
+use **STAGING_SUPPLIER_MODE=disabled**. Production keeps the default Spring mode.
+
+After this exact tested code is published to the test checkout (not production):
+
+```bash
+cd /opt/flightb2b-test
+/opt/nexahub-node/bin/node deploy/staging/auth-only.mjs --confirm-test-only
+/opt/nexahub-node/bin/node --env-file=/etc/flightb2b-test/flightb2b-test.env deploy/staging/start.mjs --check
+```
+
+The first command validates the unchanged separate test Supabase URL/keys against
+the production reference, privately backs up only the existing test env, removes
+all Spring credentials/URLs/settings and fallback search keys, writes explicit
+disabled booking/payment/status-sync flags, and replaces only the test env
+atomically. It does not start/restart services, write SQL, send email or contact
+providers. Never run it before its files are present: the old VPS checkout does
+not include this mode yet. Duplicate/unsupported env syntax fails closed. No
+environment content or credential is printed. Private backups remain root-only.
+
+The runtime shows **Spring OFF** in its TEST banner, reports readiness false,
+denies flight search (including fallback), pricing and all booking actions with
+HTTP 503/SUPPLIER_DISABLED after normal authentication, and cannot construct HTTP
+or SOAP clients even if stale settings were injected. Status sync does not claim
+work. Login/admin/local reads and invoice rendering remain available. Never copy
+real users, passports, invoices or wallets into test. Use designated test email
+recipients; accept test SQL/OTP template/SMTP before enabling required OTP.
+
+Re-enabling Spring is separate: configure fresh authorized test URLs/credentials,
+set STAGING_SUPPLIER_MODE=spring, rerun all existing origin/fingerprint guards and
+read-only supplier acceptance. There is no automatic reenable, production fallback
+or inferred transaction approval. This mode does not certify supplier behavior.
+
 ## 2. Publish the test branch from the local PC
+
+The block below is historical initial setup, **not today's next command**.
+Current inspection finds `main` at `5bbc444` and an existing `develop` at
+`e89cc9f`; security/test-mode changes are uncommitted. Review and integrate the
+tested patch into the test branch without overwriting existing branch work or
+including unrelated untracked files. Do not rerun `switch -c develop`, force
+push, or push directly to production main to update test.
 
 From the repository directory (current branch is `main`, no `develop` exists yet):
 
@@ -45,10 +97,12 @@ Do not push these changes to main as a way to update the test site.
 
 ## 3. Create a separate VPS checkout and secret file
 
-The VPS currently uses Node 18.19.1 at `/usr/bin/node` for production. Keep that
-binary unchanged during staging setup. Install the official Node 24.21.0 LTS Linux
-distribution separately at `/opt/nexahub-node`, verifying its official SHA256 first.
-Do not change PATH, package-manager Node, system symlinks or the production service.
+On 2026-10-06 the user confirmed production now uses the separate
+`/opt/nexahub-node/bin/node` **24.21.0**, after 223 deployed-source tests passed
+and a guarded service-only switch reported active/HTTP 200/READY. System Node
+at `/usr/bin/node` was not replaced. Reuse and inspect the separate runtime;
+do not overwrite or upgrade it during staging setup, because production now
+uses it too. Do not change PATH, system symlinks or the production service.
 Use `/opt/nexahub-node/bin/node --version` to verify the separate runtime before
 running this phase. Execute as root in the existing SSH session:
 
@@ -189,6 +243,5 @@ References:
 - https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html
 - https://nodejs.org/en/blog/release/v24.21.0
 
-Production Node 18 is end-of-life. Schedule its supported-LTS migration separately
-after running the app and supplier integration tests on staging; this rollout does
-not upgrade production automatically.
+The service-only production Node 24 migration is confirmed above; this staging
+rollout must not change production's executable or its service override.

@@ -8,6 +8,37 @@ August notes below are historical and do not certify current deployment.
 Current rates use the configured bank policy, not the historical markup description.
 New login-security flags remain false until explicit production acceptance.
 
+Latest security implementation: read [docs/security-fixes-2026-10-06.md](docs/security-fixes-2026-10-06.md).
+Price-refresh HTML protection, 20-minute human-activity idle expiry, fixed 24-hour
+signed browser email receipt, one-year HSTS and guarded VPS Node/config helpers
+are local only. SSH denied direct access; no application security configuration
+or SQL was changed. The user completed a runtime-only production migration:
+`flightb2b` now uses `/opt/nexahub-node/bin/node` **24.21.0**, via
+`/etc/systemd/system/flightb2b.service.d/90-nexahub-node24.conf`. The deployed
+source passed 223 tests on that VPS runtime, and the user reported active/HTTP
+200/READY after the guarded switch. `/usr/bin/node` remains unchanged. Future
+deployment commands must use the service runtime, not assume `/usr/bin/node`
+was upgraded; do not silently remove the service override.
+The user subsequently ran both isolated browser checks in normal PowerShell:
+all supplied HTML/admin/form/preview/checkout/login/mobile checks passed. The
+desktop sandbox browser failure is historical; remote test-site/SQL/SMTP
+acceptance and security-code promotion remain pending.
+Spring encryption needs supplier-confirmed HTTPS/tunnel; current URLs remain unchanged.
+
+**Latest release policy (2026-10-06): test first, production after acceptance.**
+Read [docs/testing-release-policy.md](docs/testing-release-policy.md). The user
+confirmed `test.nexahub.airsales.ub.mn` after the earlier `test.nexahub.ub.mn`
+plan, will obtain new Spring test access, and wants YeeFlightLink on test first.
+DNS currently returns no address; restore A -> 202.131.1.50 before setup. The test
+unit is not installed and its Spring client ID matches production. A local-only
+supplier-disabled test mode is now prepared: remove supplier keys/URLs with the
+guarded test-only helper, preserve separate Supabase, deny flight/booking actions
+and disable status sync. Full local suite: 250 passed on Node 22 and 24.21. See
+deploy/staging/README.md; none of this test code/config has been deployed yet.
+All future updates go through test before production; the historical
+direct-production commands below are not the current default release workflow.
+YeeFlightLink upstream production calls remain real even from our portal test site.
+
 Read this file before making changes. It is a short, safe replacement for the
 local Windows Codex conversation history. Do not commit credentials or tokens.
 

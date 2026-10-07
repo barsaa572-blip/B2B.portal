@@ -29,9 +29,21 @@ export function assertStaging(env, reference) {
   if (reference?.version !== 1 || !reference.supabaseOrigin || !reference.springOrigins?.length || !reference.fingerprints?.SUPABASE_SECRET_KEY || !reference.fingerprints?.SPRING_OAUTH_CLIENT_SECRET) throw new Error('A valid production isolation reference is required.');
   const database = origin(required(env, 'SUPABASE_URL'), 'SUPABASE_URL');
   if (!database.startsWith('https://') || database === reference.supabaseOrigin) throw new Error('Staging must use a separate HTTPS Supabase project, never the production project.');
-  for (const key of credentialKeys.slice(0, 4)) required(env, key);
+  const mode = env.STAGING_SUPPLIER_MODE || 'spring';
+  if (!['spring', 'disabled'].includes(mode)) throw new Error('STAGING_SUPPLIER_MODE must be spring or disabled.');
+  for (const key of credentialKeys.slice(0, mode === 'disabled' ? 2 : 4)) required(env, key);
   for (const key of credentialKeys) {
     if (env[key] && reference.fingerprints[key] === fingerprint(env[key])) throw new Error(`${key} matches production. Use separate test credentials.`);
+  }
+  if (mode === 'disabled') {
+    for (const [key, value] of Object.entries(env)) {
+      if (!key.startsWith('SPRING_') || !String(value || '').trim()) continue;
+      if (['SPRING_BOOKING_ENABLED', 'SPRING_CREDIT_PAYMENT_ENABLED', 'SPRING_STATUS_SYNC_ENABLED'].includes(key) && value === 'false') continue;
+      throw new Error(`${key} must be removed or empty when Spring is disabled. No supplier credentials may remain.`);
+    }
+    if (env.SPRING_BOOKING_ENABLED !== 'false' || env.SPRING_CREDIT_PAYMENT_ENABLED !== 'false' || env.SPRING_STATUS_SYNC_ENABLED !== 'false' || env.STAGING_TRANSACTIONS_CONFIRMED !== 'false') throw new Error('Disabled Spring mode requires booking, payment, status sync and transaction confirmation explicitly false.');
+    if (env.STAGING_SPRING_ALLOWED_ORIGINS?.trim() || env.SERPAPI_KEY?.trim()) throw new Error('Disabled supplier mode must not retain supplier origins or fallback search credentials.');
+    return;
   }
   const allowed = required(env, 'STAGING_SPRING_ALLOWED_ORIGINS').split(',').map(value => origin(value.trim(), 'STAGING_SPRING_ALLOWED_ORIGINS'));
   if (allowed.some(value => reference.springOrigins.includes(value))) throw new Error('A Spring origin matches production. Confirm separate test endpoints before proceeding.');

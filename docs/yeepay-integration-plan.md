@@ -11,6 +11,13 @@ ledger controls are reusable. Authentication, offer identifiers, passenger
 contracts, settlement currencies and after-sales state machines need adapters.
 MU / China Eastern inventory for this merchant is **not confirmed** by these docs.
 
+User decision on 2026-10-06: implement and accept this integration first on the
+isolated portal test site, requested as `test.nexahub.ub.mn`, then promote the
+accepted release to production. Follow [the test-first policy](testing-release-policy.md).
+Our test website is not a YeeFlightLink supplier sandbox; the reviewed FAQ's
+production-only limitation still applies. Existing staging configuration uses
+`test.nexahub.airsales.ub.mn` and must be reconciled before deployment.
+
 ## Evidence and limits
 
 Public documents read through the browser:
@@ -81,16 +88,21 @@ they are not aliases for the Spring implementations.
    Do not generate/share live keys or place a booking merely to discover these.
 2. **Offline adapter:** vendor-approved redacted fixtures + crypto interoperability
    vectors. Tampered signature/body fails closed. Zero vendor calls in tests.
-3. **Read-only pilot:** disabled feature flag → selected admin pilot, approved
+3. **Read-only pilot on the portal test site:** disabled feature flag → selected admin pilot, approved
    routes/quotas, search/rules/price only. No automatic background search fan-out.
    Existing Spring bookings continue through Spring.
-4. **Booking/ticketing pilot:** one approved route/channel/account. Only an explicitly
+4. **Booking/ticketing pilot from the portal test site:** one approved route/channel/account. Only an explicitly
    approved disposable/controlled production transaction, with spend limit and
    supplier support. Test concurrency, expiry, duplicate requests and uncertain
    pay/ticket outcomes before agent rollout. No real test environment is assumed.
 5. **After-sales & notifications:** callbacks + query reconciliation, cancellation,
    segment/passenger change/refund and settlement. Ancillary seats/food/baggage
    later, after core money flow is accepted.
+6. **Production promotion:** complete test-site/browser/financial acceptance, then
+   release only the exact reviewed code and migrations. Provision production
+   configuration independently; never copy test database rows, env secrets or
+   test wallet balances into production. Retest the final merge revision if it
+   differs from the accepted test revision. Subsequent changes use this same flow.
 
 ## Questions for YeePay (no keys/passwords in chat)
 

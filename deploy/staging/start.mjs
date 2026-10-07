@@ -8,5 +8,5 @@ try {
   console.error(`Staging startup blocked: ${error.code ? 'isolation reference could not be read' : error.message}`);
   process.exit(1);
 }
-if (process.argv.includes('--check')) console.log('Staging isolation checks passed. No server or supplier request was started.');
+if (process.argv.includes('--check')) console.log(`Staging isolation checks passed. Supplier mode: ${process.env.STAGING_SUPPLIER_MODE || 'spring'}. No server or supplier request was started.`);
 else await import('../../server.mjs');

@@ -16,9 +16,12 @@
     accessToken: result.accessToken,
     refreshToken: result.refreshToken || previous.refreshToken || null,
     expiresAt: Date.now() + Math.max(60, Number(result.expiresIn || 3600)) * 1000,
-    profile: result.profile || previous.profile
+    profile: result.profile || previous.profile,
+    idleExpiresAt: result.idleExpiresAt ?? previous.idleExpiresAt,
+    sessionExpiresAt: result.sessionExpiresAt ?? previous.sessionExpiresAt
   });
   const signOut = () => {
+    activity.stop();
     void fetch('/api/auth/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).catch(() => {});
     window.placeThemeToggle?.(false);
     const menu = document.querySelector('.sidebar-account-menu');
@@ -32,20 +35,40 @@
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     document.body.classList.remove('role-agent', 'role-office', 'role-platform'); root.hidden = false; render();
   };
-  window.forcePortalSignOut = signOut;
+  const activity = createPortalActivity({
+    send: async () => {
+      const current = session();
+      if (Number(current?.expiresAt || 0) - Date.now() < 120000 && !await refreshPortalSession()) {
+        throw Object.assign(new Error('Session expired.'), { status: 401 });
+      }
+      const response = await fetch('/api/auth/activity', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      if (!response.ok) throw Object.assign(new Error('Session check failed.'), { status: response.status });
+      return response.json();
+    },
+    expired: message => { signOut(); showNotice(message); },
+    changed: bounds => { const current = session(); if (valid(current)) save({ ...current, ...bounds }); }
+  });
+  window.forcePortalSignOut = () => { signOut(); showNotice('Your session expired. Sign in again.'); };
   const scheduleRefresh = value => {
     stopRefresh();
     if (!value?.refreshToken || !Number.isFinite(Number(value.expiresAt))) return;
     refreshTimer = setTimeout(async () => { if (!await refreshPortalSession()) signOut(); }, Math.max(10000, Number(value.expiresAt) - Date.now() - 120000));
   };
+  let refreshRequest = null;
   const refreshPortalSession = async () => {
+    if (refreshRequest) return refreshRequest;
+    refreshRequest = performRefresh();
+    try { return await refreshRequest; } finally { refreshRequest = null; }
+  };
+  const performRefresh = async () => {
     const previous = session();
     if (!previous?.refreshToken) return null;
     try {
       const response = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: previous.refreshToken }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.accessToken) return null;
-      const next = makeSession(result, previous); save(next); scheduleRefresh(next); return next;
+      if (session()?.profile?.id !== previous.profile?.id) return null; // Logout wins over an in-flight refresh.
+      const next = makeSession(result, previous); save(next); activity.update(next); scheduleRefresh(next); return next;
     } catch { return null; }
   };
   window.refreshPortalSession = refreshPortalSession;
@@ -107,6 +130,7 @@
     document.addEventListener('click', event => { if (!event.target.closest('.sidebar-foot')) { menu.hidden = true; more.setAttribute('aria-expanded', 'false'); } });
   };
   const applyRole = value => {
+    if (!activity.start(value)) return;
     window.placeThemeToggle?.(true);
     root.hidden = true; document.body.classList.remove('role-agent', 'role-office', 'role-platform');
     const role = roleKey(value.profile.role); document.body.classList.add(`role-${role}`);
@@ -122,7 +146,7 @@
     if (!emailStep && result.nextStep !== 'password') throw new Error('Sign in could not be completed.');
     sessionStorage.removeItem(storageKey); stopRefresh();
     root.hidden = false;
-    root.innerHTML = safeHtml(`<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png" alt="NEXAHUB by Air Sales"></div><form class="auth-form"><h2>${emailStep ? 'Check your email' : 'Renew your password'}</h2><p>${emailStep ? 'Enter the one-time code sent to your company email. This sign-in expires in five minutes.' : 'Passwords must be renewed every six months. For an existing account, the first renewal starts this period. Sign in again after saving.'}</p>
+    root.innerHTML = safeHtml(`<section class="auth-card"><div class="auth-intro"><img class="nexahub-auth-logo" src="/nexahub-logo.png" alt="NEXAHUB by Air Sales"></div><form class="auth-form"><h2>${emailStep ? 'Check your email' : 'Renew your password'}</h2><p>${emailStep ? 'Enter the one-time code sent to your company email. This sign-in expires in five minutes. This browser remembers successful email verification for 24 hours; your password is still required after signing out.' : 'Passwords must be renewed every six months. For an existing account, the first renewal starts this period. Sign in again after saving.'}</p>
       ${emailStep ? '<label>Verification code<input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" minlength="6" maxlength="10" required></label>' : '<label>Current password<input name="currentPassword" type="password" autocomplete="current-password" maxlength="1024" required></label><label>New password<input name="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label><label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label><p class="auth-note">Use a letter, number and special character. Choose a different password.</p>'}
       <p class="auth-error" role="alert" hidden></p><p class="auth-note" role="status" data-login-status></p><button class="primary auth-signin" type="submit">${emailStep ? 'Verify code' : 'Renew password'}</button>
       ${emailStep ? '<button type="button" class="text-btn" data-login-resend>Send another code</button>' : ''}<button type="button" class="text-btn" data-login-cancel>Back to sign in</button></form></section>`);

@@ -26,7 +26,7 @@ export const passwordRevision = profile => profile?.passwordSecurity?.revision |
 // A pending cookie is NEVER a portal session. It authorizes only these methods.
 // Dependencies are injected so tests cannot send real mail or change accounts.
 export function createLoginSecurity({ pending, sessions, signIn, profileForToken,
-  sendCode, verifyCode, changePassword, revoke, assertReady, limit,
+  sendCode, verifyCode, changePassword, revoke, assertReady, limit, remembered,
   emailRequired = emailStepRequired, rotationRequired = passwordRotationRequired,
   now = Date.now } = {}) {
   const active = () => emailRequired() || rotationRequired();
@@ -41,11 +41,11 @@ export function createLoginSecurity({ pending, sessions, signIn, profileForToken
     if (value?.access_token) await revoke(value.access_token);
   };
   const state = value => ({ nextStep: value.stage, expiresIn: Math.max(0, Math.floor((value.deadline - now()) / 1000)), resendAfter: Math.max(0, Math.ceil((value.lastSentAt + 60000 - now()) / 1000)) });
-  const complete = (req, res, session, profile) => {
+  const complete = (req, res, session, profile, emailUntil = null) => {
     if (rotationRequired() && passwordDue(profile, now())) throw new HttpError(401, 'Password renewal is required. Sign in again.');
-    sessions.establish(req, res, { ...session, userId: profile.id, securityRevision: passwordRevision(profile), emailVerified: emailRequired() });
+    const bounds = sessions.establish(req, res, { ...session, userId: profile.id, securityRevision: passwordRevision(profile), emailVerified: emailRequired(), emailVerifiedUntil: emailUntil });
     pending.clear(req, res);
-    return { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, profile: publicLoginProfile(profile) };
+    return { accessToken: 'cookie', refreshToken: 'cookie', expiresIn: session.expires_in, idleTimeoutSeconds: 1200, ...bounds, profile: publicLoginProfile(profile) };
   };
   const locked = async (req, value, execute) => {
     if (value.busy) throw new HttpError(409, 'A verification request is already in progress.');
@@ -60,6 +60,7 @@ export function createLoginSecurity({ pending, sessions, signIn, profileForToken
     async start(req, res, { email, password } = {}) {
       if (!email || typeof email !== 'string' || email.length > 254 || typeof password !== 'string' || !password || password.length > 1024) throw new HttpError(400, 'Email and password are required.');
       if (active()) await assertReady();
+      if (emailRequired()) remembered?.assertReady();
       const session = await signIn(email, password);
       let retained = false;
       try {
@@ -67,21 +68,23 @@ export function createLoginSecurity({ pending, sessions, signIn, profileForToken
         if (session.user?.id !== profile.id) throw new HttpError(401, 'Account verification failed.');
         sessions.clear(req, res);
         await discard(req, res);
-        if (!emailRequired() && (!rotationRequired() || !passwordDue(profile, now()))) {
-          const result = complete(req, res, session, profile);
+        const receipt = emailRequired() ? remembered?.find(req, profile) : null;
+        const needsEmail = emailRequired() && !receipt;
+        if (!needsEmail && (!rotationRequired() || !passwordDue(profile, now()))) {
+          const result = complete(req, res, session, profile, receipt?.until);
           retained = true;
           return result;
         }
-        if (emailRequired()) {
+        if (needsEmail) {
           limit(`email-code:${profile.id}`, 5, 900000);
           await sendCode(profile.email);
         }
         pending.establish(req, res, { ...session, userId: profile.id, email: profile.email,
-          securityRevision: passwordRevision(profile), stage: emailRequired() ? 'email' : 'password',
+          securityRevision: passwordRevision(profile), stage: needsEmail ? 'email' : 'password',
           attempts: 0, lastSentAt: now(), busy: false });
         retained = true;
         // Find uses the request cookie, which is still the previous identity.
-        return { nextStep: emailRequired() ? 'email' : 'password', expiresIn: 300, resendAfter: 60 };
+        return { nextStep: needsEmail ? 'email' : 'password', expiresIn: 300, resendAfter: 60 };
       } finally { if (!retained) await revoke(session.access_token); }
     },
     async verify(req, res, input) {
@@ -104,7 +107,8 @@ export function createLoginSecurity({ pending, sessions, signIn, profileForToken
             kept = true;
             return state(value);
           }
-          const result = complete(req, res, verified, profile);
+          const receipt = remembered?.establish(req, res, profile);
+          const result = complete(req, res, verified, profile, receipt?.until ?? now() + 24 * 3600000);
           kept = true;
           await revoke(value.access_token);
           return result;

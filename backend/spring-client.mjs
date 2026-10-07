@@ -3,6 +3,7 @@
  * Browser code must never import this module or receive its credentials.
  */
 import { createHash } from 'node:crypto';
+import { springEndpoint, springEnabled, requireSpringEnabled } from './supplier-transport.mjs';
 
 const required = (value, name) => {
   if (!value) throw new Error(`${name} is not configured on the server.`);
@@ -13,8 +14,8 @@ const trimUrl = value => value.replace(/\/+$/, '');
 
 export function getSpringStatus(env = process.env) {
   return {
-    httpJsonReady: Boolean((env.SPRING_TOKEN_URL || env.SPRING_HTTP_BASE_URL) && env.SPRING_OAUTH_CLIENT_ID && env.SPRING_OAUTH_CLIENT_SECRET),
-    xmlOrderQueryReady: Boolean(env.SPRING_XML_WSDL_URL && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD && env.SPRING_XML_ORDER_DETAILS_ACTION),
+    httpJsonReady: springEnabled(env) && Boolean((env.SPRING_TOKEN_URL || env.SPRING_HTTP_BASE_URL) && env.SPRING_OAUTH_CLIENT_ID && env.SPRING_OAUTH_CLIENT_SECRET),
+    xmlOrderQueryReady: springEnabled(env) && Boolean(env.SPRING_XML_WSDL_URL && env.SPRING_XML_USERNAME && env.SPRING_XML_PASSWORD && env.SPRING_XML_ORDER_DETAILS_ACTION),
     endpoints: {
       flightSearch: '/weekApiFlightSearch/ota/flights/searchFlightsOtaDayKegui',
       priceCheck: '/getSpecificPriceNew',
@@ -34,13 +35,15 @@ export function getSpringStatus(env = process.env) {
 }
 
 export function createSpringClient(env = process.env) {
+  requireSpringEnabled(env);
   const baseUrl = env.SPRING_HTTP_BASE_URL ? trimUrl(env.SPRING_HTTP_BASE_URL) : '';
   const endpoint = (variable, path) => env[variable] || `${required(baseUrl, 'SPRING_HTTP_BASE_URL')}${path}`;
 
   async function jsonRequest(url, payload, accessToken) {
     required(accessToken, 'Spring access token');
-    const response = await fetch(url, {
+    const response = await fetch(springEndpoint(url, env), {
       method: 'POST',
+      redirect: 'error',
       signal: AbortSignal.timeout(30_000),
       headers: {
         'content-type': 'application/json',
@@ -67,8 +70,9 @@ export function createSpringClient(env = process.env) {
       const grantType = 'SHA2';
       const timestamp = Date.now();
       const sign = createHash('md5').update(`${appKey}${grantType}${secret}${timestamp}${appKey}`, 'utf8').digest('hex').toUpperCase();
-      return fetch(endpoint('SPRING_TOKEN_URL', '/auth/oauth2/accessToken'), {
+      return fetch(springEndpoint(endpoint('SPRING_TOKEN_URL', '/auth/oauth2/accessToken'), env), {
         method: 'POST',
+        redirect: 'error',
         signal: AbortSignal.timeout(15_000),
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ appKey, grantType, sign, timestamp })

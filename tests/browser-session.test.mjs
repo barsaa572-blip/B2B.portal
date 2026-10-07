@@ -68,3 +68,24 @@ test('expired sessions free capacity; active session limit fails closed', () => 
   now = 100;
   assert.doesNotThrow(() => establish(sessions));
 });
+
+test('20 minute inactivity expires despite automatic refresh and background reads', () => {
+  let now = 0;
+  const sessions = createBrowserSessions({ now: () => now });
+  const cookie = establish(sessions);
+  now = 19 * 60000;
+  sessions.renew(request(cookie), { access_token: 'new', idleDeadline: 999999999 });
+  assert.ok(sessions.find(request(cookie)));
+  now = 20 * 60000;
+  assert.equal(sessions.find(request(cookie)), null);
+  assert.throws(() => sessions.touch(request(cookie)), { status: 401 });
+});
+test('real activity extends idle timeout but cannot revive expired sessions or exceed absolute cap', () => {
+  let now = 0;
+  const sessions = createBrowserSessions({ now: () => now, ttl: 30 * 60000 });
+  const cookie = establish(sessions);
+  now = 19 * 60000;
+  assert.deepEqual(sessions.touch(request(cookie)), { idleExpiresAt: 30 * 60000, sessionExpiresAt: 30 * 60000 });
+  now = 29 * 60000; assert.ok(sessions.find(request(cookie)));
+  now = 30 * 60000; assert.throws(() => sessions.touch(request(cookie)), { status: 401 });
+});

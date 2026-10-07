@@ -68,6 +68,23 @@ const root = path.resolve(__dirname, '..');
     assert.equal(result.collisions.length, 0, 'Dynamic markup uses clobbering id/name values.');
     console.log('PASS: dynamic form names');
 
+    // Actual checkout refresh with the real DOMPurify build, not a VM identity stub.
+    const checkoutSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+    const builders = checkoutSource.slice(checkoutSource.indexOf('const baggageSummary ='), checkoutSource.indexOf('const retailTotalMnt ='));
+    const refresh = checkoutSource.slice(checkoutSource.indexOf('const refreshBookingPricePanel ='), checkoutSource.indexOf('const verifyBookingPrice ='));
+    await page.setContent('<aside class="booking-price-panel"></aside>');
+    await page.addScriptTag({ content: `(() => {
+      const selectedOutbound = { fare: { baggage: { personalItem: '<img src=x onerror="window.__checkoutAttack=true">', cabinKg: '<b>bad</b>', checkedKg: 20 } } };
+      const selectedReturn = null, bookingQuoteError = '', bookingReviewAllowed = false, bookingQuoteLoading = false, bookingSubmissionPending = false;
+      const currentBookingQuote = () => null;
+      const escapeHtml = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+      ${builders}\n${refresh}\nrefreshBookingPricePanel();
+    })();` });
+    assert.equal(await page.locator('.booking-price-panel img').count(), 0);
+    assert.match(await page.locator('.booking-price-panel').textContent(), /20 kg included/);
+    assert.equal(await page.evaluate(() => window.__checkoutAttack === true), false);
+    console.log('PASS: checkout refresh escapes supplier text and sanitizes actual DOM');
+
     // Exercise the actual admin renderer and submit handlers, with fake API
     // responses only. Catch mappings that a synthetic form check cannot cover.
     const requests = [];

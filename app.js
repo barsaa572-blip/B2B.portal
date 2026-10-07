@@ -798,7 +798,7 @@ const baggageSummary = () => {
     ];
   }
   if (!rows.length) return '';
-  return `<section class="price-section"><div class="price-section-heading"><span>Baggage</span></div><div class="baggage-list">${rows.map(([name, value]) => `<button type="button" class="selected-fare-details"><span>${name}</span><span>${value}</span></button>`).join('')}</div></section>`;
+  return `<section class="price-section"><div class="price-section-heading"><span>Baggage</span></div><div class="baggage-list">${rows.map(([name, value]) => `<button type="button" class="selected-fare-details"><span>${escapeHtml(name)}</span><span>${escapeHtml(value)}</span></button>`).join('')}</div></section>`;
 };
 const checkoutPricePanel = () => {
   const quote = currentBookingQuote();
@@ -825,7 +825,7 @@ const currentBookingQuote = () => bookingQuote?.selectionKey === bookingPriceKey
 const refreshBookingPricePanel = () => {
   const panel = document.querySelector('.booking-price-panel');
   if (!panel) return;
-  panel.outerHTML = checkoutPricePanel();
+  panel.outerHTML = safeHtml(checkoutPricePanel());
   document.querySelector('.booking-price-panel')?.addEventListener('click', event => {
     if (event.target.closest('[data-refresh-booking-price]') && bookingReviewAllowed) { void verifyBookingPrice(); return; }
     if (event.target.closest('.selected-fare-details')) showSelectedFareDetails();

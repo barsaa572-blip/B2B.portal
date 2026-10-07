@@ -2,7 +2,7 @@ import { getCnyMntRate } from './fx-rate.mjs';
 import { HttpError } from './request-security.mjs';
 import { publicRetail } from './retail-pricing.mjs';
 import { emailField } from './input-validation.mjs';
-import { passwordRotationRequired } from './login-security.mjs';
+import { passwordRotationRequired, emailStepRequired } from './login-security.mjs';
 
 export async function storeRetailPrice(profile, pnr, action, reference, snapshot) {
   await secretRequest('/rest/v1/rpc/store_retail_price', { method: 'POST', body: {
@@ -60,7 +60,7 @@ export async function changeOwnPassword(profile, input, { onUpdated = () => {} }
     });
     if (!response.ok) throw new HttpError(400, 'Password could not be updated. Try a stronger password or contact your administrator.');
     onUpdated(profile.id); // Invalidate local sessions even if timestamp persistence fails.
-    if (passwordRotationRequired()) await recordPasswordChange(profile.id);
+    if (passwordRotationRequired() || emailStepRequired()) await recordPasswordChange(profile.id);
     return { ok: true };
   } finally {
     // The temporary reauthentication session must not remain usable.
@@ -199,7 +199,7 @@ export async function acceptPortalInvitation(input, { session = null, onVerified
       throw new HttpError(400, 'Password setup failed. Try a stronger password within five minutes, or contact your administrator.');
     }
     complete = true;
-    if (passwordRotationRequired()) await recordPasswordChange(profile.id);
+    if (passwordRotationRequired() || emailStepRequired()) await recordPasswordChange(profile.id);
     return { ok: true };
   } finally {
     if (complete || !retained) await request('/auth/v1/logout?scope=global', { method: 'POST', headers: { apikey: publishableKey, authorization: `Bearer ${verified.access_token}` } }).catch(() => {});
@@ -229,11 +229,11 @@ export async function profileForAccessToken(accessToken) {
     if (!agencies[0]?.active) throw new Error('Your agency is inactive. Please contact the platform administrator.');
   }
   let passwordSecurity;
-  if (passwordRotationRequired()) {
+  if (passwordRotationRequired() || emailStepRequired()) {
     const rows = await secretRequest(`/rest/v1/password_security?select=password_changed_at,revision&user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
     passwordSecurity = rows[0] || null;
   }
-  return { id: user.id, email: user.email, ...profile, ...(passwordRotationRequired() ? { passwordSecurity } : {}) };
+  return { id: user.id, email: user.email, ...profile, ...((passwordRotationRequired() || emailStepRequired()) ? { passwordSecurity } : {}) };
 }
 
 export async function requirePlatformAdmin(accessToken) {
