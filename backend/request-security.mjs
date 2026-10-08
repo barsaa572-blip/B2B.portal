@@ -15,7 +15,7 @@ export const securityHeaders = {
 };
 
 // Only explicitly public assets may be served. Never expose the repository.
-const scripts = new Set(['app.js', 'auth.js', 'session-activity.js', 'admin.js', 'team.js', 'interface.js', 'flight-detail-card.js', 'ticket-status.js', 'dompurify.js', 'safe-html.js']);
+const scripts = new Set(['money-display.js', 'app.js', 'auth.js', 'session-activity.js', 'admin.js', 'team.js', 'interface.js', 'flight-detail-card.js', 'ticket-status.js', 'dompurify.js', 'safe-html.js']);
 export function isPublicAsset(path) {
   return path === 'index.html' || path === 'nexahub-logo.png' || path === 'nexahub-favicon.png' || scripts.has(path) || /^[a-z][a-z0-9-]*\.css$/.test(path);
 }

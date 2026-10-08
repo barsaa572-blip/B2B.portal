@@ -6,7 +6,7 @@
   const escape = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const cny = value => `¥ ${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const mnt = value => `₮ ${Math.round(Number(value || 0)).toLocaleString('en-US')}`;
-  const money = value => fxRate ? mnt(Number(value || 0) * Number(fxRate.effectiveRateMnt || 0)) : '—';
+  const money = value => globalThis.PortalMoney ? PortalMoney.markupCny(Number(Number(value || 0).toFixed(2)), {rate:fxRate?.effectiveRateMnt}) : fxRate ? mnt(Number(value || 0) * Number(fxRate.effectiveRateMnt || 0)) : '—';
   const moneyWithCny = value => `${money(value)}<small class="currency-secondary">${cny(value)} CNY</small>`;
   const notify = message => { const toast = byId('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); };
   const api = async (path, options = {}) => {
@@ -52,7 +52,9 @@
     if (topupTarget) topupTarget.innerHTML = safeHtml((overview.topups || []).map(item => {
       const company = agency(item.agency_id)?.name || 'Agency';
       const status = String(item.status || 'pending');
-      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><strong>${mnt(item.amount_mnt)}</strong><small class="currency-secondary">${cny(item.amount_cny)} CNY wallet credit</small></td><td><strong>${mnt(item.total_mnt)}</strong></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td class="admin-actions"><div class="admin-action-group">${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button><button class="secondary topup-delete" data-topup-id="${item.id}">Delete</button>` : ''}</div></td></tr>`;
+      const q = item.pricing_model === 'cny-funding-v1' ? item.funding_quote : null;
+      const breakdown = q ? `<details class="funding-breakdown"><summary>Funding breakdown</summary><p>Bank receipt: <strong>${cny(q.totalCny)} CNY</strong><br>Wallet / supplier principal: ${cny(q.principalCny)} CNY<br>Service fee (3%, non-refundable): ${cny(q.serviceFeeCny)} CNY<br>Correspondent fee: ${cny(q.correspondentFeeCny)} CNY<br>Bank fee allowance: ${cny(q.bankFeeCny)} CNY (tariff ${mnt(q.bankTariffMnt)})<br>Saved Golomt sell rate: ${escape(q.rateMnt)} · ${escape(q.rateDate)}<br>${status === 'approved' ? 'Receipt verified; principal credited.' : 'Quote only; not received income.'}</p></details>` : '';
+      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><strong>${mnt(item.amount_mnt)}</strong><small class="currency-secondary">${cny(item.amount_cny)} CNY wallet credit</small></td><td><strong>${mnt(item.total_mnt)}</strong>${q ? `<small>${cny(q.totalCny)} CNY to transfer</small>` : ''}${breakdown}</td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td class="admin-actions"><div class="admin-action-group">${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button><button class="secondary topup-delete" data-topup-id="${item.id}">Delete</button>` : ''}</div></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No top-up invoices yet.</td></tr>');
   };
   const modal = () => {
@@ -194,7 +196,26 @@
     });
     byId('#add-user')?.addEventListener('click', openUser);
     byId('#agency-list')?.addEventListener('click', event => { const button = event.target.closest('[data-agency-id]'); if (!button) return; if (button.classList.contains('agency-open')) openAgencyAccess(button.dataset.agencyId); if (button.classList.contains('wallet-adjust')) openAdjustment(button.dataset.agencyId); if (button.classList.contains('agency-edit')) openEditAgency(button.dataset.agencyId); if (button.classList.contains('agency-delete')) remove('agencies', button.dataset.agencyId); });
-    byId('#admin-topups')?.addEventListener('click', async event => { const approve = event.target.closest('.topup-approve'); const remove = event.target.closest('.topup-delete'); const button = approve || remove; if (!button) return; const deleting = Boolean(remove); if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Approve this invoice and credit the agency wallet?')) return; button.disabled = true; try { if (deleting) await api(`/api/topups/${button.dataset.topupId}`, { method: 'DELETE' }); else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, { method: 'POST' }); await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.'); } catch (issue) { button.disabled = false; notify(issue.message); } });
+    byId('#admin-topups')?.addEventListener('click', async event => {
+      const approve = event.target.closest('.topup-approve'), remove = event.target.closest('.topup-delete'), button = approve || remove;
+      if (!button) return;
+      const deleting = Boolean(remove), invoice = overview.topups.find(item => item.id === button.dataset.topupId);
+      let receipt = {};
+      if (!deleting && invoice?.pricing_model === 'cny-funding-v1') {
+        const bankReference = prompt('Банканд орсон орлогын баталгаат гүйлгээний дугаар:');
+        if (bankReference == null) return;
+        const receivedCny = prompt('Банканд бодитоор орсон NET CNY дүн (wallet үндсэн дүн биш):', String(invoice.funding_quote.totalCny));
+        if (receivedCny == null) return;
+        receipt = {confirmed:true, bankReference, receivedCny};
+      }
+      if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Банкны орлогыг тулгасан уу? Зөвхөн үндсэн дүн wallet-д орно.')) return;
+      button.disabled = true;
+      try {
+        if (deleting) await api(`/api/topups/${button.dataset.topupId}`, {method:'DELETE'});
+        else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, {method:'POST', body:JSON.stringify(receipt)});
+        await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.');
+      } catch (issue) { button.disabled = false; notify(issue.message); }
+    });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-invite')) resendInvite(button); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();
     setInterval(() => { if (document.visibilityState === 'visible' && isPlatformAdmin()) load(); }, 5000);

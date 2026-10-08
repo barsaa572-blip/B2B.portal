@@ -1,11 +1,38 @@
 # NEXAHUB work ledger — 2026-10-06
 
+## Pricing update — 8 October 2026, local only
+
+- Supersedes per-ticket proposal: exact CNY funding, 3% at top-up only,
+  non-refundable funding fee; net airline refund 1,800 credits 1,800 CNY.
+- New Golomt CNY account MN940015001605336659; saved invoice SELL FX, MNT
+  primary / small CNY. Portal official FX + display-only currency switch,
+  MNT-10 up/down, exact wallet/supplier CNY. Admin fee/receipt breakdown.
+- Unit/mock HTTP + PostgreSQL/WASM guards and rendered PDF tested. User reports
+  actual browser PASS at 1280px and 390px on 8 October in normal PowerShell.
+  Real multi-session concurrency remains pending; user has no Docker Desktop.
+  The new disposable PostgreSQL runner is prepared, not actually accepted.
+  VPS Docker 29.1.3 subsequently confirmed, host psql absent. Secret-free test
+  bundle plus isolated VPS commands prepared in cny-concurrency-vps.md;
+  User subsequently supplied all four independent-session PASS results and final
+  PostgreSQL concurrency PASS on 8 October. The isolated mock container was
+  removed automatically; no real financial data was changed. No host psql install
+  needed. Publication and production migration/activation/deployment still pending.
+  Production
+  SQL/flags/deployment/financial acceptance not performed. See pricing-cny-
+  funding.md and cny-funding-release.md. Never reset funds to force activation.
+  Spring/Yeeflightlink/test-site pending tasks remain unchanged.
+
 This is the persistent record requested by the user: do Spring-independent work
 first, retain supplier questions, do not silently invent airline behavior.
 Local implementation does **not** imply VPS deployment or production acceptance.
 
 ## Latest user decisions and reported deployment
 
+- Idle fix deployment subsequently reported complete: user supplied Website HTTP
+  200 and Idle logout deployment READY after the pinned 07417e2 block. This is
+  user-provided deployment evidence. Next leave a single tab untouched for 21
+  minutes and confirm sign-in UI plus denied restoration after reload. Actual
+  production inactivity acceptance is still pending.
 - Idle follow-up: user confirms no other tab and reload still shows signed-in
   UI. Supplied Nginx activity timestamps include 04:11:05, 04:22:28, 04:22:30 and
   04:23:31 UTC, all 200: no 20-minute inactivity gap is demonstrated, but event

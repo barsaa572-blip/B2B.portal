@@ -1,6 +1,38 @@
 # Flight B2B Portal — Codex handover
 
+**Latest pricing implementation, 8 October 2026 (NOT DEPLOYED):** user cancelled
+per-ticket 3%. Exact CNY funding principal + upfront non-refundable 3% and bank
+fees; no ticket/change markup; airline net refund only (1,800 credits 1,800).
+Golomt CNY account MN940015001605336659. Official Mongolbank MNT display with
+charge-up/refund-down 10 MNT; display-only selector retains passenger inputs.
+Invoice MNT primary / small CNY at frozen Golomt SELL. Local additive SQL and
+verified-receipt approval; activation refuses nonzero funds/pending operations.
+See docs/pricing-cny-funding.md and docs/cny-funding-release.md. User supplied
+browser PASS at 1280px and 390px in ordinary PowerShell on 8 October (isolated
+mock UI, not a live payment). Latest Node 24 suite 284/284 and local
+SQL financial checks pass. Real multi-session concurrency remains pending;
+user has no Docker Desktop. A safe network-isolated disposable PostgreSQL runner
+was added, NOT executed successfully. Do not auto-install Docker or bypass this
+gate with production payments. User subsequently confirms Docker 29.1.3 on VPS,
+host psql absent. Prepared secret-free 22-file test archive with SHA256 and
+transfer/run instructions in docs/cny-concurrency-vps.md; no Git push needed
+for the isolated test. On 8 October the user supplied all four independent-session
+PostgreSQL PASS results and final concurrency PASS from that verified archive on
+the VPS: same-invoice once, bank-reference isolation, net-only refund once,
+funding refuses unresolved supplier operation. Output confirms only this run's
+disposable mock container/data removed; image remains cached. This supersedes
+earlier pending concurrency statements. No real bank/Spring/Supabase payment
+was used. Publication, production backup/migration/activation/env/deployment
+remain pending. No Git push,
+production SQL/env change or real supplier/bank mutation was performed.
+
 **Current work ledger: 6 October 2026.**
+
+**Idle-fix deployment reported complete, 7 October 2026:** after the pinned
+`07417e2b49415bfdaa9b0fedc81f77415d1ca4f6` block, the user supplied Website HTTP
+200 and `READY: Idle logout засвар орлоо.` This supersedes the pending-deployment
+statement below. Real 20-minute unattended logout/reload acceptance is still
+pending; do not declare that behavior certified based on deployment health alone.
 
 **Idle logout follow-up, 7 October 2026:** the user confirmed real email code
 delivery, first password renewal and a fresh OTP login. They reported remaining

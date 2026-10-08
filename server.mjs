@@ -6,6 +6,8 @@ import { createLoginSecurity, emailStepRequired, passwordRotationRequired, passw
 import { assertPortalAuthReady, sendPortalEmailCode, verifyPortalEmailCode, revokePortalProviderSession } from './backend/supabase-client.mjs';
 import { textField, cleanPassengers, cleanPassengerCounts } from './backend/input-validation.mjs';
 import { invoiceHtml, invoicePdf } from './backend/topup-invoice.mjs';
+import { cnyFundingEnabled } from './backend/pricing-model.mjs';
+import { fundingQuote } from './backend/cny-funding.mjs';
 import { createRefundQuotes } from './backend/refund-quotes.mjs';
 import { roundingEnabled, retailTicket, retailAmount, retailComponents, publicRetail, agencyPrice, agencyResponse } from './backend/retail-pricing.mjs';
 import { storeRetailPrice, getPrivateRetailPrice, retailPricingAudit, settleRetailRefund, assertRetailSchemaReady } from './backend/supabase-client.mjs';
@@ -1685,10 +1687,17 @@ await revokePortalProviderSession(refreshedSession?.access_token || previous?.ac
 return send(res, 401, { error: "Your login session has expired." });
 } } if (url.pathname.startsWith('/api/topups') || url.pathname.startsWith('/api/invoices/')) { try { const profile = await authenticatedProfile(req);
 if (url.pathname === '/api/topups' && req.method === 'GET') return send(res, 200, await getTopupRequests(profile));
+if (url.pathname === '/api/topups/quote' && req.method === 'POST') {
+  if (!cnyFundingEnabled()) throw new HttpError(409, 'CNY funding is not enabled.');
+  if (!profile.agency_id) throw new HttpError(403, 'Agency is required.');
+  await assertRetailSchemaReady();
+  const body = await readJson(req);
+  return send(res, 200, fundingQuote(body.amountCny, await getCnyMntRate()));
+}
 if (url.pathname === '/api/topups' && req.method === 'POST') { const body = await readJson(req);
 const amountMnt = Number(body.amountMnt);
-if (!Number.isFinite(amountMnt) || amountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
-const invoice = await createTopupRequest({ profile, amountMnt, paymentReference: body.paymentReference, note: body.note }); return send(res, 201, { invoice, downloadUrl: `/api/invoices/${invoice.id}` }); } const topupMatch = url.pathname.match(/^\/api\/topups\/([\w-]+)$/);
+if (!cnyFundingEnabled() && (!Number.isFinite(amountMnt) || amountMnt <= 0)) throw new Error('Top-up amount must be greater than zero.');
+const invoice = await createTopupRequest({ profile, amountMnt, amountCny:body.amountCny, paymentReference: body.paymentReference, note: body.note }); return send(res, 201, { invoice, downloadUrl: `/api/invoices/${invoice.id}` }); } const topupMatch = url.pathname.match(/^\/api\/topups\/([\w-]+)$/);
 if (topupMatch && req.method === 'DELETE') { await deleteTopupRequest(profile, topupMatch[1]); return send(res, 200, { ok: true }); } const invoiceMatch = url.pathname.match(/^\/api\/invoices\/([\w-]+)$/);
 if (invoiceMatch && req.method === 'GET') { const invoice = await getTopupInvoice(profile, invoiceMatch[1]); if (url.searchParams.get('format') === 'pdf') return sendPdf(res, `${String(invoice.invoice_number).replace(/[^A-Za-z0-9_-]/g, '')}.pdf`, await invoicePdf(invoice)); return send(res, 200, await invoiceDocument(invoice), 'text/html; charset=utf-8'); } return send(res, 404, { error: 'Invoice endpoint not found.' }); } catch (error) { return send(res, 403, { error: 'Request could not be completed. Check your input and access permissions.' }); } } if (url.pathname.startsWith('/api/admin/')) { try { const admin = await requirePlatformAdmin(bearer(req));
 if (url.pathname === '/api/admin/overview' && req.method === 'GET') return send(res, 200, await getAdminOverview());
@@ -1706,7 +1715,7 @@ if (url.pathname === '/api/admin/wallet-reset' && req.method === 'POST') { const
 if (body.confirmation !== 'RESET WALLETS') throw new Error('Confirmation text must be RESET WALLETS.');
 await clearAllWalletBalancesAndHistory({ createdBy: admin.id }); return send(res, 200, { ok: true }); }
 const approveMatch = url.pathname.match(/^\/api\/admin\/topups\/([\w-]+)\/approve$/);
-if (approveMatch && req.method === 'POST') { await approveTopupRequest(approveMatch[1], admin.id); return send(res, 200, { ok: true }); } const agencyMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)$/);
+if (approveMatch && req.method === 'POST') { await approveTopupRequest(approveMatch[1], admin.id, await readJson(req)); return send(res, 200, { ok: true }); } const agencyMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)$/);
 if (agencyMatch && req.method === 'PATCH') {
   const body = await readJson(req);
   return send(res, 200, await updateAgency(agencyMatch[1], {
@@ -1727,6 +1736,7 @@ if (url.pathname === '/api/admin/agencies' && req.method === 'POST') {
   const address = requiredText(body.address, 'Office address');
   const initialBalanceMnt = Number(body.initialBalanceMnt || 0);
   if (!Number.isFinite(initialBalanceMnt) || initialBalanceMnt < 0) throw new Error('Opening balance must be a valid MNT amount.');
+  if (cnyFundingEnabled() && initialBalanceMnt !== 0) throw new HttpError(400, 'Use a verified CNY funding invoice for an opening balance.');
   const rate = await getCnyMntRate();
   const initialBalance = initialBalanceMnt / Number(rate.effectiveRateMnt);
   return send(res, 201, await createAgency({ name, registrationNumber, email, phone, address, initialBalance, createdBy: admin.id }));
@@ -1736,7 +1746,7 @@ if (agencyMatch && req.method === 'PATCH') { const body = await readJson(req); r
 if (userMatch[1] === admin.id && body.active === false) throw new Error('You cannot deactivate your own administrator account.');
 const role = ['agent', 'office_manager', 'platform_admin'].includes(body.role) ? body.role : null;
 if (!role) throw new Error('Valid role is required.'); return send(res, 200, await updateUser(userMatch[1], { fullName: requiredText(body.fullName, 'Full name'), phone: body.phone === undefined ? undefined : requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role, active: Boolean(body.active) })); } if (userMatch && req.method === 'DELETE') { if (userMatch[1] === admin.id) throw new Error('You cannot delete your own administrator account.'); await deleteUser(userMatch[1]); return send(res, 200, { ok: true }); } const body = await readJson(req);
-if (url.pathname === '/api/admin/agencies' && req.method === 'POST') { const name = requiredText(body.name, 'Agency name'); const registrationNumber = requiredText(body.registrationNumber, 'Registration number'); const email = requiredText(body.email, 'Email address'); const phone = requiredText(body.phone, 'Contact phone'); const initialBalanceMnt = Number(body.initialBalanceMnt || 0); if (!Number.isFinite(initialBalanceMnt) || initialBalanceMnt < 0) throw new Error('Opening balance must be a valid MNT amount.'); const rate = await getCnyMntRate(); const initialBalance = initialBalanceMnt / Number(rate.effectiveRateMnt); return send(res, 201, await createAgency({ name, registrationNumber, email, phone, initialBalance, createdBy: admin.id })); } if (url.pathname === '/api/admin/users' && req.method === 'POST') { const email = requiredText(body.email, 'Email');
+if (url.pathname === '/api/admin/agencies' && req.method === 'POST') { const name = requiredText(body.name, 'Agency name'); const registrationNumber = requiredText(body.registrationNumber, 'Registration number'); const email = requiredText(body.email, 'Email address'); const phone = requiredText(body.phone, 'Contact phone'); const initialBalanceMnt = Number(body.initialBalanceMnt || 0); if (!Number.isFinite(initialBalanceMnt) || initialBalanceMnt < 0) throw new Error('Opening balance must be a valid MNT amount.'); if (cnyFundingEnabled() && initialBalanceMnt !== 0) throw new HttpError(400, 'Use a verified CNY funding invoice for an opening balance.'); const rate = await getCnyMntRate(); const initialBalance = initialBalanceMnt / Number(rate.effectiveRateMnt); return send(res, 201, await createAgency({ name, registrationNumber, email, phone, initialBalance, createdBy: admin.id })); } if (url.pathname === '/api/admin/users' && req.method === 'POST') { const email = requiredText(body.email, 'Email');
 const fullName = requiredText(body.fullName, 'Full name');
 const role = ['agent', 'office_manager'].includes(body.role) ? body.role : null;
 if (!role || !body.agencyId) throw new Error('Agency and valid role are required.'); return send(res, 201, await createUser({ email, fullName, phone: requiredText(body.phone, 'Phone number'), agencyId: body.agencyId, branchId: body.branchId, role })); } if (url.pathname === '/api/admin/wallet-adjustments' && req.method === 'POST') { const agencyId = requiredText(body.agencyId, 'Agency');

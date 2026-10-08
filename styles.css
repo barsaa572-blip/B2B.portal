@@ -17,3 +17,11 @@
 .balance-card>div b{font-size:16px;font-variant-numeric:tabular-nums}
 .booking-flight-history{display:grid;gap:4px;margin:10px 0;padding:11px 13px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;color:#778299}.booking-flight-history small{font-size:10px;font-weight:800;letter-spacing:.08em}.booking-flight-history strong{color:#64748b;font-size:12px;text-decoration:line-through}.booking-flight-history em{font-size:11px;font-style:normal}
 .counter button:disabled{opacity:.4;cursor:not-allowed}.counter button:disabled:hover{background:inherit}
+/* Currency switching changes numeric text, never rebuilds passenger forms. */
+.currency-toolbar{display:flex;justify-content:flex-end;min-height:38px;margin-bottom:16px;gap:8px}
+.funding-breakdown{min-width:220px;max-width:340px;margin-top:8px;font-size:12px;line-height:1.7}
+.currency-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;margin-left:auto}
+.currency-switch select{width:auto;min-width:80px;padding:8px;border:1px solid #dbe4ef;border-radius:8px;background:white;color:#0b2f5b}
+html[data-theme="dark"] .currency-switch select{background:#181b22;color:#eaf3ff;border-color:#373a45}
+html[data-display-currency="CNY"] [data-money-cny] + .currency-secondary,html[data-display-currency="CNY"] #wallet-balance-cny,html[data-display-currency="CNY"] .balance-cny-copy{display:none}
+@media(max-width:600px){.currency-switch{font-size:0}.currency-switch select{font-size:12px;min-width:68px}}

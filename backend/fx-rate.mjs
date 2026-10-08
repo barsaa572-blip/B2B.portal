@@ -1,5 +1,9 @@
 // The platform service fee is charged separately on the invoice. Do not add a
 // hidden exchange-rate markup to the agency's CNY wallet credit.
+import { cnyFundingEnabled } from './pricing-model.mjs';
+import moneyDisplay from '../money-display.js';
+import { createModelTwoFxService } from './pricing-model-two-fx.mjs';
+let modelTwoRate;
 const DEFAULT_TOPUP_MARKUP_MNT = 0;
 const DEFAULT_SOURCE = 'http://127.0.0.1:8000/api/rates/bank/GolomtBank?limit=1';
 const CACHE_MS = 6 * 60 * 60 * 1000;
@@ -37,6 +41,13 @@ function configuredFallback() {
 }
 
 export async function getCnyMntRate() {
+  if (cnyFundingEnabled()) {
+    modelTwoRate ||= createModelTwoFxService({
+      officialUrl: process.env.MONGOLBANK_CNY_RATE_API_URL || undefined,
+      fundingUrl: process.env.GOLOMT_BANK_CNY_RATE_API_URL || undefined
+    });
+    return modelTwoRate();
+  }
   if (cachedRate && Date.now() - cachedRate.loadedAt < CACHE_MS) return cachedRate.value;
   try {
     const response = await fetch(process.env.GOLOMT_BANK_CNY_RATE_API_URL || DEFAULT_SOURCE, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
@@ -57,7 +68,8 @@ export async function getCnyMntRate() {
 export function quoteCnyToMnt(amountCny, rate, purpose = 'sale') {
   const amount = number(amountCny);
   if (!Number.isFinite(amount)) throw new Error('A valid CNY amount is required.');
-  const selectedRate = purpose === 'refund' ? rate?.refundRateMnt : rate?.topupRateMnt ?? rate?.effectiveRateMnt;
+  const selectedRate = cnyFundingEnabled() ? rate?.effectiveRateMnt : purpose === 'refund' ? rate?.refundRateMnt : rate?.topupRateMnt ?? rate?.effectiveRateMnt;
   if (!isRate(selectedRate)) throw new Error('A valid CNY/MNT rate is required.');
+  if (cnyFundingEnabled()) return moneyDisplay.roundMnt(Number(amount.toFixed(2)), selectedRate, purpose === 'refund' ? 'refund' : 'charge');
   return Math.round(amount * selectedRate);
 }

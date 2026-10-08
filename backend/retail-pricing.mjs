@@ -1,5 +1,7 @@
-// MNT is the sale price; CNY cents are the wallet settlement unit.
-// BigInt arithmetic avoids floating-point ceil errors at exact 100 MNT boundaries.
+// Legacy quotes settle the rounded MNT price; v3 quotes settle exact CNY.
+// BigInt display rounding is 10 MNT for CNY funding, 100 for historical legacy.
+import { cnyFundingEnabled } from './pricing-model.mjs';
+import moneyDisplay from '../money-display.js';
 const SCALE = 1000000n;
 function decimal(value, places, name) {
   if (!['number','string'].includes(typeof value) || String(value).trim() === '' || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 1e10) throw new Error(`Invalid ${name}.`);
@@ -8,9 +10,10 @@ function decimal(value, places, name) {
 }
 const cents = value => decimal(value, 2, 'CNY amount');
 const nearest = (a, b) => (a + b / 2n) / b;
-export const roundingEnabled = () => process.env.MNT_ROUNDING_ENABLED === 'true';
+export const roundingEnabled = () => cnyFundingEnabled() || process.env.MNT_ROUNDING_ENABLED === 'true';
 
 export function roundMntCny(amountCny, rateMnt, direction = 'charge') {
+  if (cnyFundingEnabled()) return moneyDisplay.roundMnt(amountCny, rateMnt, direction);
   if (!['charge', 'refund'].includes(direction)) throw new Error('Invalid rounding direction.');
   const rate = decimal(rateMnt, 6, 'exchange rate');
   if (rate <= 0n) throw new Error('Invalid exchange rate.');
@@ -30,8 +33,9 @@ export function settleMnt(amountMnt, rateMnt) {
 function finish(supplierCny, rate, direction, lines, amountMnt) {
   rate = Number(decimal(rate, 6, 'exchange rate')) / 1e6;
   const supplier = Number(cents(supplierCny)) / 100;
-  const walletCny = settleMnt(amountMnt, rate);
-  return { version: 1, direction, rateMnt: Number(rate), amountMnt, walletCny,
+  const displayOnly = cnyFundingEnabled();
+  const walletCny = displayOnly ? supplier : settleMnt(amountMnt, rate);
+  return { version: displayOnly ? 3 : 1, direction, rateMnt: Number(rate), amountMnt, walletCny,
     lines, supplierCny: supplier,
     marginCny: Number((direction === 'refund' ? supplier - walletCny : walletCny - supplier).toFixed(2)),
     adjustmentMnt: Number((direction === 'refund' ? supplier * rate - amountMnt : amountMnt - supplier * rate).toFixed(6)),
@@ -48,6 +52,7 @@ export function retailTicket(price, rateMnt) {
     const unitFareMnt = roundMntCny(Number(fare / count) / 100, rateMnt);
     const unitTaxesMnt = roundMntCny(Number(taxes / count) / 100, rateMnt);
     return { type: row.type, count: row.count, unitFareMnt, unitTaxesMnt,
+      ...(cnyFundingEnabled() ? { fareCny: Number(row.fare), taxesCny: Number(row.taxes), totalCny: Number((Number(row.fare) + Number(row.taxes)).toFixed(2)) } : {}),
       fareMnt: unitFareMnt * row.count, taxesMnt: unitTaxesMnt * row.count,
       totalMnt: (unitFareMnt + unitTaxesMnt) * row.count };
   });
@@ -61,7 +66,7 @@ export function retailAmount(supplierCny, rateMnt, direction = 'charge') {
 }
 
 export function retailComponents(components, rateMnt) {
-  const lines = Object.entries(components).map(([type, value]) => ({ type, totalMnt: roundMntCny(value, rateMnt) }));
+  const lines = Object.entries(components).map(([type, value]) => ({ type, totalMnt: roundMntCny(value, rateMnt), ...(cnyFundingEnabled() ? { totalCny: value } : {}) }));
   const source = Number(Object.values(components).reduce((sum, value) => sum + cents(value), 0n)) / 100;
   return finish(source, rateMnt, 'charge', lines, lines.reduce((sum, line) => sum + line.totalMnt, 0));
 }
@@ -75,6 +80,7 @@ export function publicRetail(snapshot) {
 
 export function agencyPrice(price, snapshot) {
   if (!snapshot) return price;
+  if (snapshot.version === 3) return { currency: 'CNY', total: price.total, fare: price.fare, taxes: price.taxes, breakdown: price.breakdown, retail: publicRetail(snapshot), ...(price.quoteId ? { quoteId: price.quoteId, expiresAt: price.expiresAt } : {}) };
   return { currency: 'CNY', total: snapshot.walletCny,
     fare: snapshot.lines.reduce((sum, row) => sum + row.fareMnt, 0) / snapshot.rateMnt,
     taxes: snapshot.lines.reduce((sum, row) => sum + row.taxesMnt, 0) / snapshot.rateMnt,
@@ -94,7 +100,7 @@ export function agencyBooking(booking) {
   const strip = value => {
     if (!value || typeof value !== 'object') return;
     for (const key of Object.keys(value)) {
-      if (['supplierCny','marginCny','adjustmentMnt','conversionResidualMnt','combPrice','orderMoneyCny'].includes(key)) delete value[key];
+      if (['supplierCny','marginCny','serviceFeeCny','adjustmentMnt','conversionResidualMnt','combPrice','orderMoneyCny'].includes(key)) delete value[key];
       else strip(value[key]);
     }
   };
@@ -112,7 +118,7 @@ export function agencyResponse(value) {
   if (value.pnr && value.itinerary && value.passengers) return agencyBooking(value);
   if (value.retail && value.amountsCny) {
     const result = structuredClone(value);
-    result.amountsCny = value.appId ? { additionalPayment: value.retail.walletCny } : { refund: value.retail.walletCny };
+    result.amountsCny = value.retail.version === 3 ? structuredClone(value.amountsCny) : value.appId ? { additionalPayment: value.retail.walletCny } : { refund: value.retail.walletCny };
     result.retail = publicRetail(value.retail);
     return result;
   }

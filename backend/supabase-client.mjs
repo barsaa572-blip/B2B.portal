@@ -1,7 +1,10 @@
 import { getCnyMntRate } from './fx-rate.mjs';
 import { HttpError } from './request-security.mjs';
 import { publicRetail } from './retail-pricing.mjs';
-import { emailField } from './input-validation.mjs';
+import { cnyFundingEnabled } from './pricing-model.mjs';
+import { fundingQuote, invoiceNumber as newInvoiceNumber } from './cny-funding.mjs';
+import { emailField, textField } from './input-validation.mjs';
+import moneyDisplay from '../money-display.js';
 import { passwordRotationRequired, emailStepRequired } from './login-security.mjs';
 
 export async function storeRetailPrice(profile, pnr, action, reference, snapshot) {
@@ -12,7 +15,7 @@ export async function storeRetailPrice(profile, pnr, action, reference, snapshot
 }
 
 export async function assertRetailSchemaReady() {
-  const ready = await secretRequest('/rest/v1/rpc/retail_pricing_ready', { method: 'POST', body: {} });
+  const ready = await secretRequest(`/rest/v1/rpc/${cnyFundingEnabled() ? 'cny_funding_ready' : 'retail_pricing_ready'}`, { method: 'POST', body: {} });
   if (ready !== true) throw new Error('Retail pricing migration is not ready. No booking was sent.');
 }
 
@@ -442,9 +445,27 @@ export async function deleteUser(id) {
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || 'Unable to delete user.'); }
 }
 
-export async function createTopupRequest({ profile, amountMnt, paymentReference, note }) {
+export async function createTopupRequest({ profile, amountMnt, amountCny: requestedCny, paymentReference, note }) {
   if (!['agent', 'office_manager', 'platform_admin'].includes(profile.role)) throw new Error('Top-up access denied.');
   if (!profile.agency_id) throw new Error('Your account is not assigned to an agency.');
+  if (cnyFundingEnabled()) {
+    if (note != null && (typeof note !== 'string' || note.length > 1000)) throw new Error('Invalid note.');
+    if (paymentReference != null && (typeof paymentReference !== 'string' || paymentReference.length > 200)) throw new Error('Invalid payment reference.');
+    await assertRetailSchemaReady();
+    const quote = fundingQuote(requestedCny, await getCnyMntRate());
+    const number = newInvoiceNumber();
+    const created = await secretRequest('/rest/v1/topup_requests', { method: 'POST', body: {
+      invoice_number: number, agency_id: profile.agency_id, requested_by: profile.id,
+      amount_cny: quote.principalCny, amount_mnt: quote.rows[0].amountMnt,
+      service_fee_mnt: quote.rows[1].amountMnt, correspondent_fee_cny: quote.correspondentFeeCny,
+      correspondent_fee_mnt: quote.rows[2].amountMnt, bank_transfer_fee_mnt: quote.rows[3].amountMnt,
+      total_mnt: quote.totalMnt, bank_name: quote.account.bank,
+      official_cny_mnt_rate: quote.rateMnt, effective_cny_mnt_rate: quote.rateMnt,
+      markup_mnt: 0, rate_date: quote.rateDate, pricing_model: quote.model, funding_quote: quote,
+      payment_reference: paymentReference || number, note: note || null
+    } });
+    return created[0];
+  }
   const walletAmountMnt = Math.round(Number(amountMnt));
   if (!Number.isFinite(walletAmountMnt) || walletAmountMnt <= 0) throw new Error('Top-up amount must be greater than zero.');
   if (!Number.isSafeInteger(walletAmountMnt) || walletAmountMnt > 1_000_000_000) throw new Error('Top-up amount exceeds the supported limit (1 billion MNT).');
@@ -786,7 +807,23 @@ export async function getTicketIssueDetails(booking) {
   return { issuedAt: issue.created_at, agent: agents[0] || null };
 }
 
-export async function approveTopupRequest(id, approvedBy) {
+export async function approveTopupRequest(id, approvedBy, receipt = {}) {
+  const rows = await secretRequest(`/rest/v1/topup_requests?select=pricing_model&id=eq.${encodeURIComponent(id)}&limit=1`);
+  if (!rows[0]) throw new HttpError(404, 'Invoice not found.');
+  if (rows[0].pricing_model === 'cny-funding-v1') {
+    if (receipt.confirmed !== true) throw new HttpError(400, 'Confirm the bank receipt before approval.');
+    const reference = textField(receipt.bankReference, 'Bank reference', {max:200});
+    if (reference.length < 5) throw new HttpError(400, 'Bank reference is too short.');
+    // The RPC compares this exact net receipt against the frozen invoice and
+    // atomically credits principal only. Client-supplied fees are never used.
+    let cents;
+    try { cents = moneyDisplay.integer(receipt.receivedCny, 2, 'received CNY'); }
+    catch { throw new HttpError(400, 'Exact received CNY amount required.'); }
+    if (cents <= 0n || cents > 300_000_000n) throw new HttpError(400, 'Invalid received CNY amount.');
+    return secretRequest('/rest/v1/rpc/approve_cny_topup', { method:'POST', body:{
+      p_topup_id:id, p_actor:approvedBy, p_bank_reference:reference, p_received_cny:Number(cents)/100
+    }});
+  }
   return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });
 }
 
