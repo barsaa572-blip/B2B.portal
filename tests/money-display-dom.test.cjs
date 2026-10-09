@@ -17,6 +17,7 @@ test('display-only switch changes only money text, retains inputs and stores no 
   assert.equal(storage.size,1);assert.equal(storage.get('nexahub-display-currency'),'MNT');
   assert.equal(money.markupCny('1<script>'),'—');assert.equal(money.markupCny(1,{rate:'1" onmouseover=alert(1)'}),'—');
   assert.equal(money.markupCny(1,{direction:'<script>'}).includes('<script>'),false);
+  assert.match(money.markupCny(2000), /class="money-value"/);
   const newPrice={nodeType:1,dataset:{moneyCny:'10',moneyRate:'536.29'},textContent:'',matches:()=>true};
   watch.callback([{addedNodes:[newPrice]}]);assert.equal(newPrice.textContent,'₮ 5,370');
   // Explicit user selector change uses the same display-only path.

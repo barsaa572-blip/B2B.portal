@@ -5,6 +5,7 @@ import { cnyFundingEnabled } from './pricing-model.mjs';
 import { fundingQuote, invoiceNumber as newInvoiceNumber } from './cny-funding.mjs';
 import { emailField, textField } from './input-validation.mjs';
 import moneyDisplay from '../money-display.js';
+import { approvalError, approvalDatabaseError, verifiedReceipt } from './cny-approval.mjs';
 import { passwordRotationRequired, emailStepRequired } from './login-security.mjs';
 
 export async function storeRetailPrice(profile, pnr, action, reference, snapshot) {
@@ -95,7 +96,7 @@ async function secretRequest(path, options = {}) {
   if (!configured) throw new Error('Database is not configured on this server.');
   const response = await request(path, { ...options, headers: { apikey: secretKey, authorization: `Bearer ${secretKey}`, prefer: 'return=representation', ...(options.headers || {}) } });
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error('Database request failed. Contact support if the problem persists.');
+  if (!response.ok) throw options.failure ? options.failure(data) : new Error('Database request failed. Contact support if the problem persists.');
   return data;
 }
 
@@ -809,19 +810,13 @@ export async function getTicketIssueDetails(booking) {
 
 export async function approveTopupRequest(id, approvedBy, receipt = {}) {
   const rows = await secretRequest(`/rest/v1/topup_requests?select=pricing_model&id=eq.${encodeURIComponent(id)}&limit=1`);
-  if (!rows[0]) throw new HttpError(404, 'Invoice not found.');
+  if (!rows[0]) throw approvalError(404, 'NOT_FOUND', 'Нэхэмжлэл олдсонгүй. Жагсаалтыг шинэчилнэ үү.');
   if (rows[0].pricing_model === 'cny-funding-v1') {
-    if (receipt.confirmed !== true) throw new HttpError(400, 'Confirm the bank receipt before approval.');
-    const reference = textField(receipt.bankReference, 'Bank reference', {max:200});
-    if (reference.length < 5) throw new HttpError(400, 'Bank reference is too short.');
+    const {reference, amount} = verifiedReceipt(receipt);
     // The RPC compares this exact net receipt against the frozen invoice and
     // atomically credits principal only. Client-supplied fees are never used.
-    let cents;
-    try { cents = moneyDisplay.integer(receipt.receivedCny, 2, 'received CNY'); }
-    catch { throw new HttpError(400, 'Exact received CNY amount required.'); }
-    if (cents <= 0n || cents > 300_000_000n) throw new HttpError(400, 'Invalid received CNY amount.');
-    return secretRequest('/rest/v1/rpc/approve_cny_topup', { method:'POST', body:{
-      p_topup_id:id, p_actor:approvedBy, p_bank_reference:reference, p_received_cny:Number(cents)/100
+    return secretRequest('/rest/v1/rpc/approve_cny_topup', { method:'POST', failure:approvalDatabaseError, body:{
+      p_topup_id:id, p_actor:approvedBy, p_bank_reference:reference, p_received_cny:amount
     }});
   }
   return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });

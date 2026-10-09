@@ -1,5 +1,205 @@
 # Flight B2B Portal — Codex handover
 
+## Price typography and top-up follow-up — 9 October 2026, LOCAL / NOT deployed
+
+- User's .ps1 publisher failed at load: running scripts disabled by Windows
+  policy. Git push did NOT begin. Added equivalent publish-topup-ui.mjs for
+  direct Node CLI, same explicit file list/test+browser gates/remote verification.
+  No ExecutionPolicy change, Invoke-Expression or PowerShell child process.
+  New helper not run to commit/push by agent; user command is now node publisher.
+- User now requests Git/VPS commands. Prepared scripts/publish-topup-ui.ps1
+  (explicit owned file list, excludes superseded drafts/typo files, unit + real
+  mock-browser gates, main-only push and remote SHA verification) and
+  scripts/deploy-topup-ui.sh (code-only pinned fast-forward, clean checkout,
+  unchanged manifests/SQL/env template, private backup, umask022 restoration,
+  runtime group-read/import gate, tests/preflight/restart/health). No npm ci,
+  SQL activation, env edit, FX cron rollout or manual wallet writes. Supabase
+  migration must NOT be rerun. See current commands at top of release doc.
+- Release-scoped Node24 suite 287/287 PASS, zero skipped. Earlier whole-folder
+  counts include 12 unrelated/superseded draft tests; the published test set
+  excludes them. PowerShell helper syntax PASS. Git Bash sandbox launch denied;
+  command block requires VPS bash -n before executing. No helper was run to
+  publish/deploy here; user asked for copy/paste commands. Production failure
+  cause remains unconfirmed until safe code is observed, not assumed resolved.
+- ACCEPTANCE UPDATE: User now supplies both updated browser PASS lines at
+  1280px and 390px: clear prices in both themes/currencies, grouped input,
+  fee hierarchy, preserved passengers and safe MOCK approvals. Locally viewed
+  generated prices-390, topup-390 and topup-1280 screenshots: prominent prices,
+  100,000 input and separate principal/fees/transfer total, no clipping seen.
+  This supersedes browser-rerun-pending notes below. No real approval or bank
+  rate-feed acceptance inferred; no new Git push or production deployment.
+- Follow-up user browser run failed at computed amount color: actual muted
+  rgb(177,191,210), parent rgb(234,243,255). The dark theme's large :is() label
+  group had greater specificity than the generic numeric inheritance rule.
+  Fixed the source label selector to exclude [data-money-cny], not the test
+  expectation. Added a regression test and context-rich browser assertions.
+  Targeted theme/money suite 5/5 PASS; browser rerun still required. Full suite
+  296/296 below predates this extra regression (not rerun this turn).
+- Latest screenshots: one-way/return/fare-choice prices tiny/faint and top-up
+  100000 lacked grouping. Root cause: currency spans inherited generic muted
+  11px label selectors. Money wrappers now have a typography-inheriting class;
+  last-loaded money-display.css restores 24px desktop / 22px mobile bold prices
+  in light/dark and both currencies. No monetary arithmetic changed.
+- Top-up principal is highlighted separately from fees and transfer total.
+  Input groups 100000 -> 100,000, preserves cents/caret; authoritative server
+  quote and frozen invoice remain unchanged. Fee/refund policy unchanged.
+- User again reports generic production Approve failure. Exact live cause is
+  NOT established. Local approval validates formatted bank receipt against
+  frozen total (not principal), guards missing quote, shows safe TOPUP_* failure
+  codes. No automatic retry, actual approval, wallet write or SQL bypass.
+- Node24 suite: 296/296 PASS, zero skipped, including isolated HTTP approval
+  and secret-redaction tests. Browser runner expanded to computed font/color
+  checks in all three contexts, both themes/currencies and 1280/390px, grouped
+  100,000 preview, mismatch/known-failure/success MOCK approvals. Edge launch
+  still denied in sandbox; new browser assertions/visual acceptance NOT run.
+  User must run scripts/check-cny-currency-browser.cjs in normal PowerShell;
+  screenshots saved under ignored tmp/security/price-topup-20261009.
+- No new Git push, NEXAHUB deployment or SQL execution. Prior three-hour FX
+  collector rollout remains accepted; do not redeploy it for these UI fixes.
+
+## FX collector deployed — 9 October 2026, user-supplied VPS evidence
+
+- SHA256 transfer checks and compose/build scope PASS; source changed to one
+  schedule.every(3).hours job, preserving callback/arguments and owner/mode.
+  Backup /var/backups/nexahub-fx-3h-pUQofc/cron.py.before; deployed source SHA256
+  3684d0ab76412d13f3c0fbba7635a16a1a3dbe9ec7dbd09ed745e577c8dc503f.
+- Cron image built successfully (Python3.14-slim per supplied build output),
+  offline image/source/syntax check PASS, cron recreated, runtime source check
+  PASS, restart guard and unchanged API/DB ID guards reached final READY.
+  Bank API HTTP200, NEXAHUB HTTP200. Bake/buildx warning did not block build.
+- Three-hour schedule/runtime rollout accepted; older pending-collector discovery
+  notes below are historical and superseded. No manual crawl executed by helper;
+  actual next bank collection/rate timestamp update remains unverified. Do not
+  guarantee bank site538.3 matches automatically or claim current feed refreshed.
+- This rollout changes /opt/mongolbank-rates only. NEXAHUB top-up spacing/grouped
+  input and safe approval errors still local/unpublished; updated actual browser
+  acceptance pending. No wallet approval, SQL rerun, markup/spread or data reset.
+
+## Local top-up UI / approval follow-up — 8 October 2026, NOT deployed
+
+- New user requirement: collect fresh bank/official FX every 3 hours. This means
+  the separate port8000 upstream collector, not merely fetching its cached API
+  response or extending NEXAHUB's ten-minute cache. NOT implemented yet: collector
+  service/entry point and current schedule are absent from this workspace and
+  VPS read-only service/timer discovery output is required. Use Ulaanbaatar time
+  for user-facing schedule; keep frozen invoice FX and failed-fetch validation.
+  User now supplies port8000 listener docker-proxy (pid2693); filtered systemd
+  list only sysstat-summary, no collector identified. Next inspect Docker name,
+  image/ports and public OpenAPI paths only, not environment or raw credentials.
+  Next evidence: containers mongolian-bank-api (mongolbank-rates-api, loopback
+  8000), mongolian-bank-db (postgres:15-alpine, loopback5432), mongolian-bank-cron
+  (mongolbank-rates-cron). OpenAPI includes /api/admin/crawl, crawl/{bank_name},
+  backfill/status, but methods/auth not inspected; do not trigger them blindly.
+  Existing cron container should be inspected/reconfigured persistently rather
+  than adding a second competing scheduler. Need compose source/mount metadata
+  and schedule-only sanitized cron output. Never dump Docker .Config.Env.
+  User inspected compose labels: /opt/mongolbank-rates/docker-compose.yml,
+  project directory /opt/mongolbank-rates, no cron container mounts returned.
+  Cron container reports UTC +0000; sanitized /etc cron/crontab scan returns no
+  schedules. Likely application scheduler/entrypoint, not confirmed. Inspect
+  scheduler source filenames and schedule-only matches next; do not install a
+  cron daemon, blindly modify /etc/crontab or restart API/DB. Schedule unchanged.
+  Next source-only match identifies /opt/mongolbank-rates/scripts/cron.py:42
+  schedule.every and :51 time.sleep. Application Python schedule, not crontab.
+  Need exact chain before .do and compose service label before guarded source
+  update/rebuild of cron ONLY; callbacks/secrets need not be printed or changed.
+  Final inspected chain is schedule.every().day.at(run_at).do(...); compose
+  service label cron. Prepared scripts/set-bank-crawl-interval.mjs and
+  scripts/deploy-bank-crawl-interval.sh; user uploads both to /tmp and checks
+  SHA256, bash -n then runs deployment script. Not executed on VPS yet. Helper
+  preserves callback/owner/mode and backs up outside build context, checks Python
+  AST/poll within60s; rollout builds cron only, verifies image offline/no-network,
+  recreates cron --no-deps and checks API/DB IDs unchanged. Source/image backups
+  retained; no automatic rollback. See docs/bank-crawl-three-hour-release.md.
+  6 targeted tests + full Node24/Python AST suite295/295 PASS. Git Bash syntax
+  check locally denied by sandbox; VPS bash -n is required. Three-hour interval
+  begins after registration, not fixed UTC/UB clock times; no manual crawl called.
+
+- User reports crowded top-up preview, missing input grouping, Golomt site 538.3
+  versus dated local feed 538, and generic admin approval error. Local changes:
+  spaced responsive quote rows (no duplicate principal), 10000 -> 10,000 input
+  with cents/caret preserved, strict grouped receipt normalization, safe coded
+  approval validation/business errors. RPC financial locks/receipt uniqueness,
+  exact NET invoice match and principal-only credit remain unchanged. No SQL
+  migration or actual financial approval performed.
+- Node24 full isolated suite: 289/289 PASS, including HTTP safe error mapping,
+  admin authorization and no provider payload disclosure. Fractional SELL 538.3
+  survives rate parsing and quote math without rounding or adding a spread.
+- Actual updated browser acceptance still pending: sandbox Edge crashed;
+  in-app browser timed out on localhost fixture. Own fixture server stopped.
+  Ordinary PowerShell scripts/check-cny-currency-browser.cjs needs a rerun.
+- User supplies VPS GolomtBank feed: id816, date2026-10-07, timestamp
+  2026-10-07T09:01:55.710998; CNY noncash buy533.9, sell538.0, cash sell539.9.
+  Portal 538 exactly matches this feed; no portal integer truncation demonstrated.
+  Need identify separate port8000 collector/service and its refresh schedule to
+  reconcile reported bank site538.3 (not independently verified). Feed/approval
+  cause still pending; no arbitrary +0.5 applied. Do not reprice frozen invoices
+  or call 538.5 an official bank quote. Browser acceptance also still pending.
+- User's new invoice screenshot INV-20261008-6DDE41AECB: principal 929.35 CNY,
+  service 27.88, correspondent 50, bank 9.30; total NET receipt 1016.53 CNY.
+  This illustrates principal versus receipt only; do not invent/approve receipt.
+  Exact production failure cause remains unconfirmed until coded error/context.
+
+**CNY funding production restored, 8 October 2026 — user evidence:** permission
+repair returned PASS for runtime imports as flightb2b, CNY preflight schema and
+both dated FX sources ready (2026-10-07), health ok, service active, website HTTP
+200 and READY. The earlier startup EACCES/failed deployment status is superseded.
+Release main verified at 9e66a74f6f7406d623e476f27fbcd6efc7fbefab. Repair granted
+service-group read/traverse to tracked runtime/public assets/dependencies only;
+private env/backups/artwork/.git and staging service were not part of the block.
+No wallet reset or fabricated financial approval occurred. Policy: exact CNY;
+nonrefundable top-up 3%; ticket/change markup 0%; airline net refund only; official
+MNT display step 10; invoices frozen Golomt SELL. Next production UI acceptance
+via fresh login/refresh, currency toggle retaining passenger input and top-up
+preview without creating/approving a payment. Real bank receipt, supplier issue,
+change and refund reconciliation remain NOT certified by health or isolated tests.
+Local release docs fix backup umask and service-user import gate; those doc edits
+are not separately pushed. No new runtime code commit needed for chmod/chgrp.
+Spring/Yeeflightlink and paused test-site work remain pending as before.
+
+**CNY funding activation progress, 8 October 2026:** user supplied full migration
+Success and then activation blocked on one pending AIR SALES test invoice,
+929.37 CNY, id 02253eb5-36fe-4c73-99d0-75a3712c8a9b. User confirms unpaid test;
+targeted guarded rejection preserved history (no wallet reset/deletion), with
+returned rejected status. User now supplies cny_funding_ready=true from Supabase:
+DB migration/activation confirmed by user evidence. Local release commit is
+9e66a74f6f7406d623e476f27fbcd6efc7fbefab. VPS revision/env flag/preflight/restart
+and production HTTP/UI acceptance are NOT yet confirmed. Next set exactly one
+PRICING_MODEL=cny-funding-v1 without touching secrets/endpoints, require pinned
+revision and preflight before restart. Earlier pending SQL statements below are
+superseded; do not claim production online from a DB readiness screenshot alone.
+
+**Publication verified / VPS mismatch, 8 October 2026:** read-only GitHub branch
+API confirms main at 9e66a74f6f7406d623e476f27fbcd6efc7fbefab. User ran final
+restart guard and received STOP: VPS new commit missing; the earlier prepare
+block had waited for commit input. Thus code rollout is NOT complete. SQL is
+already active; do not repeat migration/activation or rollback the model blindly.
+Next provide fixed-SHA VPS fetch/backup/ff-only install/test/preflight/restart
+without another commit prompt. Keep env secrets and supplier endpoints unchanged.
+
+**CNY runtime failure after rollout, 8 October 2026:** user subsequently reports
+VPS tests 272/272 pass and preflight all true (model cny-funding-v1, schema,
+official/funding FX dates 2026-10-07, nonrefundable funding 3%, ticket 0%). Final
+curl to 127.0.0.1:4173 fails; no service-active/website-200/READY evidence. Do
+NOT declare deployed successfully. Check service User/Group/status and code/deps
+readability first: rollout block set umask 077 for a private backup but did not
+restore it before Git checkout/npm ci. Root-run tests can conceal unreadable
+files for a non-root service. This is a hypothesis pending VPS diagnostics, not
+a confirmed cause. Never chmod the whole checkout/private env/artwork recursively
+or disable auth/SQL to make startup pass. SQL remains active; no reset/rollback.
+
+**Runtime cause confirmed, 8 October 2026:** user diagnostics show service User
+flightb2b, Result=exit-code, restart loop, code and pdf-lib package.json 600
+root:root; service-user import fails EACCES for backend/cny-funding.mjs. Only
+4174 staging listens. Backup umask leak is confirmed; root tests concealed it.
+Release docs now restore umask 022 after private backup and test imports as the
+service user. Repair only Git-tracked runtime/public code plus normal dependency
+files/dirs by giving actual service group read/traverse, never group write.
+Private env, .git, backup dirs, private invoice artwork and test service stay
+unchanged. Ownership stays root. Service stop/repair/probe/start/health pending;
+do not claim restored until active and HTTP 200 evidence.
+
+
 **Latest pricing implementation, 8 October 2026 (NOT DEPLOYED):** user cancelled
 per-ticket 3%. Exact CNY funding principal + upfront non-refundable 3% and bank
 fees; no ticket/change markup; airline net refund only (1,800 credits 1,800).

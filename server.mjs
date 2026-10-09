@@ -1715,7 +1715,14 @@ if (url.pathname === '/api/admin/wallet-reset' && req.method === 'POST') { const
 if (body.confirmation !== 'RESET WALLETS') throw new Error('Confirmation text must be RESET WALLETS.');
 await clearAllWalletBalancesAndHistory({ createdBy: admin.id }); return send(res, 200, { ok: true }); }
 const approveMatch = url.pathname.match(/^\/api\/admin\/topups\/([\w-]+)\/approve$/);
-if (approveMatch && req.method === 'POST') { await approveTopupRequest(approveMatch[1], admin.id, await readJson(req)); return send(res, 200, { ok: true }); } const agencyMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)$/);
+if (approveMatch && req.method === 'POST') {
+  const receipt = await readJson(req);
+  try { await approveTopupRequest(approveMatch[1], admin.id, receipt); return send(res, 200, { ok: true }); }
+  catch (error) {
+    if (error instanceof HttpError && /^TOPUP_[A-Z_]+$/.test(error.code || '')) return send(res, error.status, {error:error.message, code:error.code});
+    return send(res, 503, {error:'Баталгаажуулах үйлчилгээ түр боломжгүй байна. Орлого бүртгэгдсэн эсэхийг шалгаж, ижил гүйлгээний дугаартай дахин оролдоно уу.', code:'TOPUP_SERVICE_UNAVAILABLE'});
+  }
+} const agencyMatch = url.pathname.match(/^\/api\/admin\/agencies\/([\w-]+)$/);
 if (agencyMatch && req.method === 'PATCH') {
   const body = await readJson(req);
   return send(res, 200, await updateAgency(agencyMatch[1], {

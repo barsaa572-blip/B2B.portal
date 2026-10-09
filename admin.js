@@ -8,7 +8,7 @@
   const mnt = value => `₮ ${Math.round(Number(value || 0)).toLocaleString('en-US')}`;
   const money = value => globalThis.PortalMoney ? PortalMoney.markupCny(Number(Number(value || 0).toFixed(2)), {rate:fxRate?.effectiveRateMnt}) : fxRate ? mnt(Number(value || 0) * Number(fxRate.effectiveRateMnt || 0)) : '—';
   const moneyWithCny = value => `${money(value)}<small class="currency-secondary">${cny(value)} CNY</small>`;
-  const notify = message => { const toast = byId('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); };
+  const notify = (message, duration = 2800) => { const toast = byId('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), duration); };
   const api = async (path, options = {}) => {
     const request = () => { const current = session(); return fetch(path, { ...options, headers: { authorization: `Bearer ${current.accessToken}`, 'content-type': 'application/json', ...(options.headers || {}) } }); };
     let response = await request();
@@ -18,7 +18,7 @@
       window.forcePortalSignOut?.();
       throw new Error('__SESSION_EXPIRED__');
     }
-    if (!response.ok) throw new Error(data.error || 'Request failed.');
+    if (!response.ok) throw Object.assign(new Error(data.error || 'Request failed.'), {code:data.code});
     return data;
   };
   const agency = id => overview.agencies.find(item => item.id === id);
@@ -202,11 +202,18 @@
       const deleting = Boolean(remove), invoice = overview.topups.find(item => item.id === button.dataset.topupId);
       let receipt = {};
       if (!deleting && invoice?.pricing_model === 'cny-funding-v1') {
+        const total = invoice.funding_quote?.totalCny;
+        if (!Number.isFinite(total) || total <= 0) { notify('Нэхэмжлэлийн баталгаат нийт дүн олдсонгүй. Жагсаалтыг шинэчилнэ үү.', 7000); return; }
         const bankReference = prompt('Банканд орсон орлогын баталгаат гүйлгээний дугаар:');
         if (bankReference == null) return;
-        const receivedCny = prompt('Банканд бодитоор орсон NET CNY дүн (wallet үндсэн дүн биш):', String(invoice.funding_quote.totalCny));
+        const receivedCny = prompt(`Банканд бодитоор орсон NET CNY дүн. Нэхэмжлэлийн нийт дүн: ${cny(total)} CNY (wallet үндсэн дүн биш):`, total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
         if (receivedCny == null) return;
-        receipt = {confirmed:true, bankReference, receivedCny};
+        try {
+          const reference = bankReference.trim();
+          if (reference.length < 5 || reference.length > 200 || /[<>\u0000-\u001f\u007f]/.test(reference)) throw new Error('Банкны гүйлгээний дугаар 5–200 тэмдэгттэй байх ёстой.');
+          receipt = {confirmed:true, bankReference:reference, receivedCny:globalThis.PortalMoney.normalizeCnyInput(receivedCny)};
+          if (PortalMoney.integer(receipt.receivedCny, 2, 'receipt') !== PortalMoney.integer(total, 2, 'invoice total')) throw new Error(`Орсон дүн нэхэмжлэлийн нийт ${cny(total)} CNY-тэй таарахгүй байна. Банкны орлогыг тулгана уу; wallet үндсэн дүнг оруулахгүй.`);
+        } catch (issue) { notify(issue.message, 7000); return; }
       }
       if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Банкны орлогыг тулгасан уу? Зөвхөн үндсэн дүн wallet-д орно.')) return;
       button.disabled = true;
@@ -214,7 +221,7 @@
         if (deleting) await api(`/api/topups/${button.dataset.topupId}`, {method:'DELETE'});
         else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, {method:'POST', body:JSON.stringify(receipt)});
         await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.');
-      } catch (issue) { button.disabled = false; notify(issue.message); }
+      } catch (issue) { button.disabled = false; notify(issue.message + (/^TOPUP_[A-Z_]+$/.test(issue.code || '') ? ` (${issue.code})` : ''), 7000); }
     });
     byId('#user-list')?.addEventListener('click', event => { const button = event.target.closest('[data-user-id]'); if (!button) return; if (button.classList.contains('user-edit')) openEditUser(button.dataset.userId); if (button.classList.contains('user-invite')) resendInvite(button); if (button.classList.contains('user-delete')) remove('users', button.dataset.userId); });
     load();

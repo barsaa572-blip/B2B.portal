@@ -6,6 +6,13 @@ import {retailTicket,retailAmount,retailComponents,agencyPrice} from '../backend
 import {invoiceModel,invoiceHtml,invoicePdf} from '../backend/topup-invoice.mjs';
 import {PDFDocument} from 'pdf-lib';
 const rate={nonCashSellMnt:538,fundingRateDate:'2026-10-08'};
+test('funding preserves fractional sell FX in new quote without modifying saved quotes',()=>{
+  const saved=fundingQuote('10000',rate);
+  const fresh=fundingQuote('10000',{...rate,nonCashSellMnt:538.3});
+  assert.equal(fresh.rateMnt,538.3);assert.equal(fresh.rows[0].amountMnt,5383000);
+  assert.equal(fresh.totalCny,10359.29);
+  assert.equal(saved.rateMnt,538);assert.equal(saved.totalCny,10359.3);
+});
 export const savedInvoice = quote => ({invoice_number:'INV-CNY-TEST',created_at:'2026-10-08T01:00:00Z',agencyName:'ТЕСТ БАЙГУУЛЛАГА',agencyRegistrationNumber:'1234567',
   pricing_model:quote.model,funding_quote:quote,amount_cny:quote.principalCny,amount_mnt:quote.rows[0].amountMnt,
   service_fee_mnt:quote.rows[1].amountMnt,correspondent_fee_mnt:quote.rows[2].amountMnt,bank_transfer_fee_mnt:quote.rows[3].amountMnt,total_mnt:quote.totalMnt,status:'pending'});

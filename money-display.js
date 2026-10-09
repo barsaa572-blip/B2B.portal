@@ -17,7 +17,26 @@
   };
   const cny = value => `¥ ${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const mnt = value => `₮ ${Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-  const core = { integer, roundMnt, cny, mnt };
+  // Accept only canonical thousands groups; never silently turn malformed money into another amount.
+  const normalizeCnyInput = value => {
+    const text = String(value ?? '').trim();
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(text)) throw new Error('Enter a CNY amount with at most two decimal places.');
+    const raw = text.replaceAll(',', '');
+    integer(raw, 2, 'CNY amount');
+    return raw;
+  };
+  const formatCnyInput = (value, caret = String(value).length) => {
+    const original = String(value), raw = original.replaceAll(',', '');
+    // Existing commas may move while editing a digit in the middle of the field.
+    if (!/^[\d,]+(?:\.\d{0,2})?$/.test(original) || !/^\d+(?:\.\d{0,2})?$/.test(raw) || raw.length > 24) return {value:original, caret};
+    const [whole, fraction] = raw.split('.');
+    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction === undefined ? '' : '.' + fraction);
+    const before = original.slice(0, caret).replaceAll(',', '').length;
+    let next = 0, count = 0;
+    while (next < formatted.length && count < before) { if (formatted[next] !== ',') count++; next++; }
+    return {value:formatted, caret:next};
+  };
+  const core = { integer, roundMnt, cny, mnt, normalizeCnyInput, formatCnyInput };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   if (typeof document === 'undefined') return;
   let currency = 'MNT', officialRate = null;
@@ -37,7 +56,7 @@
       attrs.push(`data-money-rate="${Number(options.rate)}"`);
     }
     if (options.savedMnt != null && Number.isSafeInteger(options.savedMnt) && options.savedMnt >= 0) attrs.push(`data-money-mnt="${options.savedMnt}"`);
-    return `<span ${attrs.join(' ')}>${text(value, options)}</span>`;
+    return `<span ${attrs.join(' ')} class="money-value">${text(value, options)}</span>`;
   };
   const refresh = root => {
     const targets = [...(root.querySelectorAll?.('[data-money-cny]') || [])];

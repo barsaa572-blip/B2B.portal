@@ -3,8 +3,8 @@ const {createServer}=require('node:http'),fs=require('node:fs'),path=require('no
 const root=path.resolve(__dirname,'../..');
 (async()=>{
   const {fundingQuote}=await import('../../backend/cny-funding.mjs');
-  const q=fundingQuote(10000,{nonCashSellMnt:538,fundingRateDate:'2026-10-08'});
-  const rate={pricingModel:q.model,effectiveRateMnt:536.29,nonCashSellMnt:538,fundingRateDate:q.rateDate};
+  const q=fundingQuote(10000,{nonCashSellMnt:538.3,fundingRateDate:'2026-10-08'});
+  const rate={pricingModel:q.model,effectiveRateMnt:536.29,nonCashSellMnt:538.3,fundingRateDate:q.rateDate};
   const profile={id:'local-mock',agency_id:'local-agency',role:'platform_admin',full_name:'LOCAL TEST'};
   const invoice={id:'local-invoice',invoice_number:'INV-LOCAL-TEST',agency_id:profile.agency_id,status:'pending',pricing_model:q.model,funding_quote:q,amount_cny:q.principalCny,amount_mnt:q.rows[0].amountMnt,total_mnt:q.totalMnt,created_at:'2026-10-08T01:00:00Z'};
   const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png'};

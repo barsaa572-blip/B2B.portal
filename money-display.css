@@ -1,0 +1,22 @@
+/* Numeric currency wrappers inherit their amount's typography, never label styles. */
+.money-value[data-money-cny]{display:inline;font:inherit;color:inherit;letter-spacing:inherit;margin:0;white-space:nowrap}
+html[data-theme="dark"] .money-value[data-money-cny]{color:inherit}
+.flight .fare>strong,
+.pair-footer>strong,
+.flight .fare .passenger-price>strong,
+.pair-footer .passenger-price>strong,
+.fare-family-price .passenger-price>strong{display:block;font-size:24px;font-weight:800;line-height:1.25;letter-spacing:-.025em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.fare-family-price .passenger-price>strong{color:#006ac4}
+.fare-family-price>.passenger-price{max-width:none}
+html[data-theme="dark"] .flight .fare>strong,
+html[data-theme="dark"] .pair-footer>strong,
+html[data-theme="dark"] .flight .fare .passenger-price>strong,
+html[data-theme="dark"] .pair-footer .passenger-price>strong,
+html[data-theme="dark"] .fare-family-price .passenger-price>strong{color:#eaf3ff}
+@media(max-width:650px){
+  .flight .fare>strong,
+  .pair-footer>strong,
+  .flight .fare .passenger-price>strong,
+  .pair-footer .passenger-price>strong,
+  .fare-family-price .passenger-price>strong{font-size:22px}
+}

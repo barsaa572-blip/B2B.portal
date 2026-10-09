@@ -1,5 +1,66 @@
 # CNY funding release — not executed / acceptance-gated
 
+## Current code-only follow-up: use these commands, NOT the historical SQL steps
+
+9 October: release-scoped Node24 suite 287/287 PASS, zero skipped. This excludes
+the untracked superseded per-ticket proposal, unlike the earlier whole-folder
+296/297 counts. User browser acceptance PASS at both widths. PowerShell helper
+syntax and release guards pass; local Git Bash sandbox denies launch, so the VPS
+block explicitly runs bash -n before executing anything. No commit/push done by
+the agent for this request: user asked for commands. No migration/env change.
+
+Windows PowerShell (tests + mock browser + explicit staging + push + remote SHA).
+The .ps1 helper was blocked by the user's execution policy before any Git
+mutation. Use the equivalent Node publisher; do not change execution policy:
+
+```powershell
+Set-Location 'C:\Users\barsa\Documents\Codex\2026-08-05\za\outputs\B2B.portal'
+node .\scripts\publish-topup-ui.mjs
+```
+
+Only after Windows prints READY, run on VPS as root. Fetch/show retrieves the
+helper without changing the live checkout; it checks cleanliness, takes a
+private backup, restores umask022, stops/fast-forwards, checks runtime group
+readability, runs tests/preflight, restarts and checks health/public HTTP200.
+Any failure is STOP, not permission to reset wallets or reapply SQL.
+
+```bash
+(
+set -euo pipefail
+cd /opt/flightb2b
+git -c safe.directory=/opt/flightb2b fetch origin main
+export RELEASE_COMMIT=$(git -c safe.directory=/opt/flightb2b rev-parse origin/main)
+TASK_UI_DEPLOY=$(mktemp /tmp/nexahub-ui.XXXXXX.sh)
+git -c safe.directory=/opt/flightb2b show "${RELEASE_COMMIT}:scripts/deploy-topup-ui.sh" > "$TASK_UI_DEPLOY"
+bash -n "$TASK_UI_DEPLOY"
+bash "$TASK_UI_DEPLOY"
+)
+```
+
+No actual invoice approval was tested. After deployment, a real failure should
+show a safe TOPUP_* code. Do not approve a fake/unpaid invoice to test this.
+The code-only backup does not include node_modules; manifests are checked
+unchanged and npm reinstall is deliberately omitted. Separate FX cron rollout
+is not rerun; its helper/source are merely preserved in Git.
+
+## Historical original model rollout (already completed, do not repeat)
+
+**Latest status (9 October 2026):** Original main release 9e66a74 is deployed:
+user supplies schema ready, runtime imports as service user, health, active and
+public HTTP 200 after repairing code read permissions. Instructions below retain
+the original release sequence; do not repeat SQL activation or reset balances.
+Current local follow-up changes top-up spacing/grouping, restores bold/large
+money typography and safe approval errors/receipt checks. 296 unit/isolated HTTP
+tests pass (zero skipped). User supplied the updated browser PASS at both
+1280px and 390px after fixing the dark fare amount color regression. Targeted
+theme/money tests 5/5 PASS; generated mobile price/top-up and desktop top-up
+screenshots visually reviewed, no clipping seen. These are MOCK approvals,
+not proof that the real bank receipt was credited. Publication/deployment of
+this follow-up remains pending. The user accepted the separate three-hour FX collector
+rollout; actual next scheduled rate timestamp has not been verified. No new SQL
+required for this follow-up. Exact live approval cause still unknown. Do not
+claim a real approval succeeded or rate feed is corrected before evidence.
+
 Do NOT enable the new model until the browser check and isolated multi-session
 PostgreSQL money-lock checks pass. No live bank/Spring transaction is a test.
 Production has not changed. Stop on every error; do not reset balances/history.
@@ -21,8 +82,10 @@ Set-Location 'C:\Users\barsa\Documents\Codex\2026-08-05\za\outputs\B2B.portal'
 node .\scripts\check-cny-currency-browser.cjs 'C:\Users\barsa\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\playwright'
 ```
 
-Expected PASS at 1280px and 390px: actual portal currency, names/documents retained,
-no payment side effects, funding SELL preview, admin breakdown. If it fails,
+Expected PASS at 1280px and 390px: clear actual helper-rendered prices in light/dark
+and both currencies; grouped 100,000 input; principal/fee/total hierarchy; names
+retained; no real payment side effects; safe MOCK approval failures and success.
+Screenshots are saved in tmp/security/price-topup-20261009 for visual review. If it fails,
 send error output only (no secrets); do not push/activate yet. For visual review,
 `node tests/support/cny-ui-server.cjs` serves the same local fixtures at
 http://127.0.0.1:4199; finance mutations disabled. Stop it with Ctrl+C afterward.
@@ -113,11 +176,14 @@ tar --exclude=.git --exclude=tmp --exclude=logs --exclude=.tmp-retail-db --exclu
 tar -tzf "$CNY_BACKUP/code-and-dependencies.tar.gz" >/dev/null
 echo "Private backup: $CNY_BACKUP"
 
+# Private backup stays protected. Do not carry 077 into public code/dependencies.
+umask 022
 systemctl stop flightb2b
 git -c safe.directory=/opt/flightb2b merge --ff-only "$RELEASE"
 test "$(git rev-parse HEAD)" = "$RELEASE"
 npm ci --ignore-scripts
 node --test tests/*.test.*
+runuser -u "$(systemctl show flightb2b -p User --value)" -- /opt/nexahub-node/bin/node --input-type=module -e "await import('./backend/cny-funding.mjs'); await import('./backend/topup-invoice.mjs'); console.log('PASS: service-user runtime imports');"
 echo 'READY: code tested; service stopped for SQL activation.'
 )
 ```

@@ -7,6 +7,16 @@ const row = (bank, buy = 536.26, sell = buy, date = '2026-10-07') => ({
   bank_name: bank, date, rates: { cny: { noncash: { buy, sell } } }
 });
 
+test('fractional Golomt noncash sell is preserved, never rounded to whole MNT or marked up', async () => {
+  const rate = await createModelTwoFxService({now:()=>oct8, fetcher:async url=>({ok:true,json:async()=>[
+    url.includes('MongolBank') ? row('MongolBank') : row('GolomtBank',533.9,538.3)
+  ]})})();
+  assert.equal(rate.nonCashSellMnt,538.3);
+  assert.equal(rate.topupRateMnt,538.3);
+  assert.equal(rate.effectiveRateMnt,536.26);
+  assert.equal(rate.markupMnt,0);
+});
+
 test('confirmed Mongolbank feed is distinct from bank purchase FX', async () => {
   const requests = [];
   const getRate = createModelTwoFxService({ now: () => oct8, fetcher: async url => {

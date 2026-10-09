@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {fileURLToPath} from 'node:url';
 test('actual HTTP CNY funding uses server sell quote, tenant scope and verified admin receipt',async t=>{
-  const writes=[],receipts=[];let ready=true;
+  const writes=[],receipts=[];let ready=true, approvalFailure=null;
   const profiles={agent:{id:'agent',role:'agent',agency_id:'agency-a',active:true},admin:{id:'admin',role:'platform_admin',agency_id:'agency-a',active:true}};
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ulaanbaatar',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const provider=createServer(async(req,res)=>{
@@ -19,7 +19,11 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
     if(u.pathname==='/official'||u.pathname==='/bank')return send([{bank_name:u.pathname==='/official'?'MongolBank':'GolomtBank',date:today,rates:{cny:{noncash:{buy:u.pathname==='/official'?536.29:533.9,sell:u.pathname==='/official'?536.29:538}}}}]);
     if(u.pathname==='/rest/v1/rpc/cny_funding_ready')return send(ready);
     if(u.pathname==='/rest/v1/rpc/claim_spring_status_checks')return send([]);
-    if(u.pathname==='/rest/v1/rpc/approve_cny_topup'){receipts.push(body);return send({creditedCny:10000});}
+    if(u.pathname==='/rest/v1/rpc/approve_cny_topup'){
+      receipts.push(body);
+      if (approvalFailure) {res.statusCode=400;return send(approvalFailure);}
+      return send({creditedCny:10000});
+    }
     if(u.pathname==='/rest/v1/topup_requests'){
       if(req.method==='POST'){writes.push(body);return send([{...body,id:'invoice-1',status:'pending'}]);}
       if(u.searchParams.get('id')==='eq.invoice-1')return send([{id:'invoice-1',pricing_model:'cny-funding-v1',agency_id:'agency-a',requested_by:'agent',status:'pending'}]);
@@ -50,8 +54,21 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
   assert.equal((await call('/api/topups/quote',{body:{amountCny:'10000'}})).status,401);
   assert.equal((await call('/api/topups/quote',{cookie:agent,body:{amountCny:'10000'},origin:'https://foreign.test'})).status,403);
   assert.equal((await call('/api/admin/topups/invoice-1/approve',{cookie:agent,body:{confirmed:true,bankReference:'BANK-1',receivedCny:'10359.30'}})).status,403);
-  assert.equal((await call('/api/admin/topups/invoice-1/approve',{cookie:admin,body:{}})).status,403);assert.equal(receipts.length,0);
-  assert.equal((await call('/api/admin/topups/invoice-1/approve',{cookie:admin,body:{confirmed:true,bankReference:'BANK-1',receivedCny:'10359.30'}})).status,200);
+  const missing=await call('/api/admin/topups/invoice-1/approve',{cookie:admin,body:{}});
+  assert.equal(missing.status,400);assert.equal((await missing.json()).code,'TOPUP_CONFIRM_REQUIRED');assert.equal(receipts.length,0);
+  assert.equal((await call('/api/admin/topups/invoice-1/approve',{cookie:admin,body:{confirmed:true,bankReference:'BANK-1',receivedCny:'10,359.30'}})).status,200);
   assert.deepEqual(receipts[0],{p_topup_id:'invoice-1',p_actor:'admin',p_bank_reference:'BANK-1',p_received_cny:10359.3});
+  const approve=()=>call('/api/admin/topups/invoice-1/approve',{cookie:admin,body:{confirmed:true,bankReference:'BANK-1',receivedCny:'10359.30'}});
+  for(const [failure,status,code] of [
+    [{code:'P0001',message:'Receipt differs from the invoice; reconcile before credit'},409,'TOPUP_AMOUNT_MISMATCH'],
+    [{code:'23505',message:'PRIVATE BANK REFERENCE',details:'PRIVATE TOKEN'},409,'TOPUP_RECEIPT_DUPLICATE'],
+    [{code:'P0001',message:'Invoice/agency is unavailable or has an unresolved payment'},409,'TOPUP_UNAVAILABLE'],
+    [{code:'PGRST202',message:'PRIVATE SCHEMA'},503,'TOPUP_SCHEMA_UNAVAILABLE'],
+    [{code:'P0001',message:'PRIVATE TOKEN'},503,'TOPUP_SERVICE_UNAVAILABLE']
+  ]) {
+    approvalFailure=failure;const result=await approve();assert.equal(result.status,status);
+    const text=await result.text();assert.equal(JSON.parse(text).code,code);assert.doesNotMatch(text,/PRIVATE|fixture-secret/);
+  }
+  approvalFailure=null;
   ready=false;assert.equal((await call('/api/topups',{cookie:agent,body:{amountCny:'10000'}})).status,403);assert.equal(writes.length,1);
 });
