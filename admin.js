@@ -49,20 +49,72 @@
     }
     byId('#admin-network-balance').innerHTML = safeHtml(moneyWithCny(total));
     const topupTarget = byId('#admin-topups');
+    const expanded = new Set([...topupTarget?.querySelectorAll('details[open]') || []].map(node => node.dataset.topupId));
     if (topupTarget) topupTarget.innerHTML = safeHtml((overview.topups || []).map(item => {
       const company = agency(item.agency_id)?.name || 'Agency';
       const status = String(item.status || 'pending');
       const q = item.pricing_model === 'cny-funding-v1' ? item.funding_quote : null;
-      const breakdown = q ? `<details class="funding-breakdown"><summary>Funding breakdown</summary><p>Bank receipt: <strong>${cny(q.totalCny)} CNY</strong><br>Wallet / supplier principal: ${cny(q.principalCny)} CNY<br>Service fee (3%, non-refundable): ${cny(q.serviceFeeCny)} CNY<br>Correspondent fee: ${cny(q.correspondentFeeCny)} CNY<br>Bank fee allowance: ${cny(q.bankFeeCny)} CNY (tariff ${mnt(q.bankTariffMnt)})<br>Saved Golomt sell rate: ${escape(q.rateMnt)} · ${escape(q.rateDate)}<br>${status === 'approved' ? 'Receipt verified; principal credited.' : 'Quote only; not received income.'}</p></details>` : '';
-      return `<tr><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><strong>${mnt(item.amount_mnt)}</strong><small class="currency-secondary">${cny(item.amount_cny)} CNY wallet credit</small></td><td><strong>${mnt(item.total_mnt)}</strong>${q ? `<small>${cny(q.totalCny)} CNY to transfer</small>` : ''}${breakdown}</td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td class="admin-actions"><div class="admin-action-group">${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${item.id}">Approve</button><button class="secondary topup-delete" data-topup-id="${item.id}">Delete</button>` : ''}</div></td></tr>`;
+      const breakdown = q ? `<tr class="funding-detail-row"><td colspan="6"><details class="funding-breakdown" data-topup-id="${escape(item.id)}" ${expanded.has(item.id) ? 'open' : ''}><summary>Funding breakdown · ${escape(item.invoice_number)}</summary><dl class="funding-detail-grid"><div><dt>Wallet / supplier principal</dt><dd>${cny(q.principalCny)} CNY</dd></div><div><dt>Service fee (3%, non-refundable)</dt><dd>${cny(q.serviceFeeCny)} CNY</dd></div><div><dt>Correspondent fee (OUR)</dt><dd>${cny(q.correspondentFeeCny)} CNY</dd></div><div><dt>Bank fee allowance</dt><dd>${cny(q.bankFeeCny)} CNY <small>Tariff ${mnt(q.bankTariffMnt)}</small></dd></div><div class="funding-detail-total"><dt>Total bank receipt</dt><dd>${cny(q.totalCny)} CNY</dd></div></dl><div class="funding-detail-note"><span>Saved Golomt sell rate: ${escape(q.rateMnt)} · ${escape(q.rateDate)}</span><span>${status === 'approved' ? 'Receipt verified; principal credited.' : 'Quote only; not received income.'}</span></div></details></td></tr>` : '';
+      return `<tr class="funding-invoice-row"><td><strong>${escape(item.invoice_number)}</strong></td><td>${escape(company)}</td><td><div class="admin-money-stack"><strong>${mnt(item.amount_mnt)}</strong><small>${cny(item.amount_cny)} CNY wallet credit</small></div></td><td><div class="admin-money-stack"><strong>${mnt(item.total_mnt)}</strong>${q ? `<small>${cny(q.totalCny)} CNY to transfer</small>` : ''}</div></td><td><span class="tag ${status === 'approved' ? 'ticketed' : status === 'cancelled' ? 'cancelled' : 'pending'}">${escape(status)}</span></td><td class="admin-actions"><div class="admin-action-group">${status === 'pending' ? `<button class="primary topup-approve" data-topup-id="${escape(item.id)}">Approve</button><button class="secondary topup-delete" data-topup-id="${escape(item.id)}">Delete</button>` : ''}</div></td></tr>${breakdown}`;
     }).join('') || '<tr><td colspan="6" class="no-bookings">No top-up invoices yet.</td></tr>');
   };
   const modal = () => {
     let element = byId('#admin-modal');
     if (!element) { element = document.createElement('dialog'); element.id = 'admin-modal'; document.body.append(element); }
+    element.oncancel = null;
+    element.removeAttribute('aria-labelledby');
     return element;
   };
   const closeModal = element => element.close();
+  const openTopupApproval = invoice => {
+    if (byId('#admin-modal')?.open) return;
+    const isCny = invoice.pricing_model === 'cny-funding-v1';
+    const total = invoice.funding_quote?.totalCny;
+    if (isCny && (!Number.isFinite(total) || total <= 0)) { notify('Нэхэмжлэлийн баталгаат нийт дүн олдсонгүй. Жагсаалтыг шинэчилнэ үү.', 7000); return; }
+    const actorId = session().profile?.id;
+    const element = modal();
+    element.setAttribute('aria-labelledby', 'topup-approval-title');
+    element.innerHTML = safeHtml(`<form class="admin-form topup-approval-form"><button type="button" class="close" aria-label="Close">×</button><p class="eyebrow">BANK RECEIPT</p><h2 id="topup-approval-title">Approve top-up</h2><p>${escape(invoice.invoice_number)} · ${escape(agency(invoice.agency_id)?.name || 'Agency')}</p><dl class="approval-summary"><div><dt>Wallet-д орох үндсэн дүн</dt><dd>${cny(invoice.amount_cny)} CNY</dd></div>${isCny ? `<div><dt>Банканд орсон байх нийт дүн</dt><dd>${cny(total)} CNY</dd></div>` : ''}</dl>${isCny ? `<label>Банкны гүйлгээний дугаар<input name="bankReference" required minlength="5" maxlength="200" autocomplete="off" placeholder="Бодит орлогын гүйлгээний дугаар" /></label><label>Банканд бодитоор орсон NET дүн (CNY)<input name="receivedCny" required inputmode="decimal" autocomplete="off" placeholder="${escape(cny(total).slice(2))}" /></label>` : ''}<p class="approval-attestation">Батлахдаа банкны орлогыг тулгасан гэдгээ зөвшөөрнө. Зөвхөн үндсэн дүн wallet-д орно.</p><p class="admin-form-error" role="alert" hidden></p><div class="approval-actions"><button type="button" class="secondary approval-cancel">Cancel</button><button type="submit" class="primary">Confirm approval</button></div></form>`);
+    const form = element.querySelector('form'), error = form.querySelector('.admin-form-error');
+    let busy = false;
+    const cancel = () => { if (!busy) element.close(); };
+    element.querySelector('.close').onclick = cancel;
+    element.querySelector('.approval-cancel').onclick = cancel;
+    element.oncancel = event => { if (busy) event.preventDefault(); };
+    const amount = form.querySelector('[name="receivedCny"]');
+    amount?.addEventListener('input', () => {
+      const formatted = PortalMoney.formatCnyInput(amount.value, amount.selectionStart ?? amount.value.length);
+      amount.value = formatted.value;
+      amount.setSelectionRange(formatted.caret, formatted.caret);
+    });
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (busy) return;
+      error.hidden = true;
+      let receipt = {};
+      try {
+        if (!isPlatformAdmin() || session().profile?.id !== actorId) throw new Error('Дахин нэвтэрч банкны орлогыг шалгана уу.');
+        if (isCny) {
+          const values = new FormData(form), reference = String(values.get('bankReference') || '').trim();
+          if (reference.length < 5 || reference.length > 200 || /[<>\u0000-\u001f\u007f]/.test(reference)) throw new Error('Банкны гүйлгээний дугаар 5–200 тэмдэгттэй байх ёстой.');
+          receipt = {confirmed:true, bankReference:reference, receivedCny:PortalMoney.normalizeCnyInput(values.get('receivedCny'))};
+          if (PortalMoney.integer(receipt.receivedCny, 2, 'receipt') !== PortalMoney.integer(total, 2, 'invoice total')) throw new Error(`Орсон дүн нэхэмжлэлийн нийт ${cny(total)} CNY-тэй таарахгүй байна. Банкны орлогыг тулгана уу; wallet үндсэн дүнг оруулахгүй.`);
+        }
+        busy = true;
+        form.querySelectorAll('button,input').forEach(control => control.disabled = true);
+        await api(`/api/admin/topups/${encodeURIComponent(invoice.id)}/approve`, {method:'POST', body:JSON.stringify(receipt)});
+        element.close();
+        await load(); notify('Invoice approved and wallet credited.');
+      } catch (issue) {
+        error.textContent = issue.message + (/^TOPUP_[A-Z_]+$/.test(issue.code || '') ? ` (${issue.code})` : '');
+        error.hidden = false;
+      } finally {
+        busy = false;
+        form.querySelectorAll('button,input').forEach(control => control.disabled = false);
+      }
+    };
+    element.showModal();
+  };
   const openAgency = () => {
     const element = modal();
     element.innerHTML = safeHtml(`<form class="admin-form"><button type="button" class="close">×</button><p class="eyebrow">NEW AGENCY</p><h2>Create agency account</h2><p>Creates an isolated wallet and booking workspace.</p><label>Agency name<input name="agencyName" required /></label><label>Registration number<input name="registrationNumber" required /></label><label>Email address<input name="email" type="email" required /></label><label>Contact phone<input name="phone" type="tel" required /></label><label>Office address<input name="address" required /></label><label>Opening balance (MNT)<input name="initialBalanceMnt" type="number" step="1" min="0" value="0" /></label><p class="admin-form-error" hidden></p><button class="primary full">Create agency</button></form>`);
@@ -203,26 +255,11 @@
       if (!deleting && (!invoice || !['legacy', 'cny-funding-v1'].includes(invoice.pricing_model))) {
         notify('Нэхэмжлэлийн үнийн загвар дутуу байна. Жагсаалтыг шинэчилнэ үү; банкны орлогыг батлахгүй.', 7000); return;
       }
-      let receipt = {};
-      if (!deleting && invoice?.pricing_model === 'cny-funding-v1') {
-        const total = invoice.funding_quote?.totalCny;
-        if (!Number.isFinite(total) || total <= 0) { notify('Нэхэмжлэлийн баталгаат нийт дүн олдсонгүй. Жагсаалтыг шинэчилнэ үү.', 7000); return; }
-        const bankReference = prompt('Банканд орсон орлогын баталгаат гүйлгээний дугаар:');
-        if (bankReference == null) return;
-        const receivedCny = prompt(`Банканд бодитоор орсон NET CNY дүн. Нэхэмжлэлийн нийт дүн: ${cny(total)} CNY (wallet үндсэн дүн биш):`, total.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
-        if (receivedCny == null) return;
-        try {
-          const reference = bankReference.trim();
-          if (reference.length < 5 || reference.length > 200 || /[<>\u0000-\u001f\u007f]/.test(reference)) throw new Error('Банкны гүйлгээний дугаар 5–200 тэмдэгттэй байх ёстой.');
-          receipt = {confirmed:true, bankReference:reference, receivedCny:globalThis.PortalMoney.normalizeCnyInput(receivedCny)};
-          if (PortalMoney.integer(receipt.receivedCny, 2, 'receipt') !== PortalMoney.integer(total, 2, 'invoice total')) throw new Error(`Орсон дүн нэхэмжлэлийн нийт ${cny(total)} CNY-тэй таарахгүй байна. Банкны орлогыг тулгана уу; wallet үндсэн дүнг оруулахгүй.`);
-        } catch (issue) { notify(issue.message, 7000); return; }
-      }
-      if (!confirm(deleting ? 'Delete this pending invoice? This cannot be undone.' : 'Банкны орлогыг тулгасан уу? Зөвхөн үндсэн дүн wallet-д орно.')) return;
+      if (!deleting) { openTopupApproval(invoice); return; }
+      if (!confirm('Delete this pending invoice? This cannot be undone.')) return;
       button.disabled = true;
       try {
-        if (deleting) await api(`/api/topups/${button.dataset.topupId}`, {method:'DELETE'});
-        else await api(`/api/admin/topups/${button.dataset.topupId}/approve`, {method:'POST', body:JSON.stringify(receipt)});
+        await api(`/api/topups/${button.dataset.topupId}`, {method:'DELETE'});
         await load(); notify(deleting ? 'Pending invoice deleted.' : 'Invoice approved and wallet credited.');
       } catch (issue) { button.disabled = false; notify(issue.message + (/^TOPUP_[A-Z_]+$/.test(issue.code || '') ? ` (${issue.code})` : ''), 7000); }
     });

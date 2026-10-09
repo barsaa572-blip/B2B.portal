@@ -20,3 +20,28 @@
 .admin-audit-button{margin-top:18px}
 @media(max-width:650px){.admin-panel .panel-title{flex-direction:column;align-items:stretch}.admin-panel .panel-title input{width:100%}.admin-panel .no-bookings{text-align:left!important}.admin-heading-actions{flex-wrap:wrap}}
 #invoice-viewer{width:min(860px,calc(100vw - 32px));height:min(82vh,760px);padding:0;overflow:hidden}.invoice-viewer-head{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--line)}.invoice-viewer-head .close{position:static;font-size:24px;cursor:pointer}.invoice-viewer-head strong{font-size:14px}#invoice-viewer iframe{display:block;width:100%;height:calc(100% - 54px);border:0;background:#fff}
+
+/* Keep invoice amounts compact; the expandable breakdown uses the full table width. */
+#admin-topups .admin-money-stack{display:grid;gap:6px;white-space:nowrap}
+#admin-topups .admin-money-stack strong{font-size:14px;font-weight:600;color:var(--ink)}
+#admin-topups .admin-money-stack small{font-size:11px;line-height:1.4;color:var(--muted)}
+#admin-topups .funding-invoice-row td{border-bottom:0;vertical-align:top}
+#admin-topups .funding-detail-row>td{padding:0 16px 14px;width:auto}
+#admin-topups .funding-breakdown{padding:0;color:var(--ink);font-size:12px}
+#admin-topups .funding-breakdown summary{cursor:pointer;width:fit-content;padding:8px 0;color:var(--blue);font-weight:500}
+#admin-topups .funding-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 32px;border:1px solid var(--line);border-radius:8px;padding:18px;margin:6px 0 12px}
+#admin-topups .funding-detail-grid>div{display:flex;justify-content:space-between;gap:18px;align-items:baseline}
+#admin-topups .funding-detail-grid dt{font-weight:400;line-height:1.5}
+#admin-topups .funding-detail-grid dd{margin:0;text-align:right;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+#admin-topups .funding-detail-grid dd small{display:block;margin-top:4px;color:var(--muted);font-size:11px;font-weight:400}
+#admin-topups .funding-detail-total{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px}
+#admin-topups .funding-detail-total dd{font-size:14px;font-weight:600}
+#admin-topups .funding-detail-note{display:flex;justify-content:space-between;gap:18px;color:var(--muted);font-size:11px;line-height:1.5}
+#admin-modal:has(.topup-approval-form){width:min(500px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}
+#admin-modal .approval-summary{display:grid;gap:12px;margin:18px 0;padding:16px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink)}
+#admin-modal .approval-summary>div{display:flex;justify-content:space-between;gap:18px}
+#admin-modal .approval-summary dd{margin:0;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+#admin-modal .approval-attestation{font-size:12px;line-height:1.6;margin:18px 0;color:var(--ink)}
+#admin-modal .approval-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+html[data-theme="dark"] #admin-modal .admin-form-error{color:#ffb4b4!important}
+@media(max-width:650px){#admin-modal .topup-approval-form{padding:24px 20px}#admin-modal .approval-summary>div{flex-direction:column;gap:5px}#admin-modal .approval-actions>button{flex:1}}

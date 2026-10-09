@@ -1,5 +1,33 @@
 # Flight B2B Portal — Codex handover
 
+## Invoice spacing / single approval dialog / checkout total — 9 October 2026, LOCAL / NOT deployed
+
+- Starting local HEAD 5a469625d64426b8e7428b0e8f5c1a6ccaf5a97c. Latest
+  screenshots show model/quote delivered and the old three-popup approval flow;
+  no independent VPS revision verification performed. Older deployment notes
+  below are historical, not a statement of today's verified remote HEAD.
+- Invoice principal/payable amounts now use separate MNT/CNY lines. Frozen
+  quote breakdown is in its own full-width expandable table row with spaced
+  label/value groups and separate rate/status notes; open state survives polling.
+- Approve opens one custom dialog: reference + actual NET CNY and one final
+  Confirm approval button. Actual amount starts blank (expected total is only
+  a placeholder). No native prompts/confirm on approval, no automatic attestation,
+  no invented reference. Cancel/Escape before submit produce zero POSTs; pending
+  submit blocks duplicate submit/close/Escape. Exact-cents check stays inline;
+  backend codes appear in the same dialog. Legacy path remains explicit.
+- Checkout Price details total uses18px regular400 and ink color to match the
+  user reference, not24px extra-bold blue. Other already-approved20/18px600
+  search/fare prices remain unchanged. All financial arithmetic/schema unchanged.
+- Node24 release-scoped suite294/294 PASS, zero skipped, including actual
+  dialog-handler VM tests and existing HTTP/financial/tenant regressions.
+  Updated real mock-browser acceptance checks both1280/390, themes/currencies,
+  checkout total, detail rows, cancellation and the one-dialog receipt flow.
+  Browser visual acceptance still requires ordinary PowerShell (sandbox browser
+  launch was blocked in previous attempts); Node publisher gates before Git writes.
+- Both publishers now include admin.css. No commit/push/deploy or live approval
+  performed for these changes. Same short Node publisher + code-only VPS block;
+  no SQL activation, env update, bank crawler rebuild or manual wallet write.
+
 ## Proportional prices / approval metadata fix — 9 October 2026, LOCAL / NOT deployed
 
 - User production feedback: 24/22px weight800 prices too heavy; secondary

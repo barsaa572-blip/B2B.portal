@@ -1,5 +1,16 @@
 # NEXAHUB work ledger — 2026-10-06
 
+## Latest UI follow-up — 9 October 2026, LOCAL / NOT deployed
+
+- Invoice amounts on separate lines; full-width frozen breakdown with spacing,
+  disclosure remains open across polling. Approve uses one custom dialog with
+  actual receipt fields + final confirm; no native popup sequence or bypass.
+- Price details total18px regular400 to match user reference. No arithmetic,
+  invoice repricing, supplier or database changes.294/294 release tests PASS.
+- Updated desktop/mobile mock-browser checks are the publication gate; ordinary
+  PowerShell Node publisher then same code-only VPS block. No SQL step. Starting
+  local HEAD5a46962, current remote VPS revision not independently verified.
+
 ## New feedback follow-up — 9 October 2026, LOCAL / NOT deployed
 
 - Soften search/fare prices20/18px semibold600; make top-up secondary MNT

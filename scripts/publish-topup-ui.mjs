@@ -6,7 +6,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 export const releaseFiles=Object.freeze([
-  'admin.js', 'app.js', 'backend/supabase-client.mjs', 'backend/cny-approval.mjs',
+  'admin.js', 'admin.css', 'app.js', 'backend/supabase-client.mjs', 'backend/cny-approval.mjs',
   'index.html', 'money-display.js', 'money-display.css', 'night-theme.css', 'server.mjs', 'styles.css',
   'scripts/check-cny-currency-browser.cjs', 'scripts/publish-topup-ui.ps1', 'scripts/publish-topup-ui.mjs', 'scripts/deploy-topup-ui.sh',
   'scripts/set-bank-crawl-interval.mjs', 'scripts/deploy-bank-crawl-interval.sh',

@@ -10,7 +10,7 @@ if ((Invoke-ReleaseGit branch --show-current) -ne 'main') { throw 'STOP: main br
 $taskRemote = Invoke-ReleaseGit remote get-url origin
 if ($taskRemote -notin @('https://github.com/barsaa572-blip/B2B.portal.git', 'git@github.com:barsaa572-blip/B2B.portal.git')) { throw 'STOP: Unexpected origin.' }
 $taskFiles = @(
-    'admin.js', 'app.js', 'backend/supabase-client.mjs', 'backend/cny-approval.mjs',
+    'admin.js', 'admin.css', 'app.js', 'backend/supabase-client.mjs', 'backend/cny-approval.mjs',
     'index.html', 'money-display.js', 'money-display.css', 'night-theme.css', 'server.mjs', 'styles.css',
     'scripts/check-cny-currency-browser.cjs', 'scripts/publish-topup-ui.ps1', 'scripts/publish-topup-ui.mjs', 'scripts/deploy-topup-ui.sh',
     'scripts/set-bank-crawl-interval.mjs', 'scripts/deploy-bank-crawl-interval.sh',

@@ -8,6 +8,10 @@ html[data-theme="dark"] .money-value[data-money-cny]{color:inherit}
 .fare-family-price .passenger-price>strong{display:block;font-size:20px;font-weight:600;line-height:1.25;letter-spacing:normal;font-variant-numeric:tabular-nums;color:var(--ink)}
 .fare-family-price .passenger-price>strong{color:#006ac4}
 .fare-family-price>.passenger-price{max-width:none}
+/* Checkout total matches the regular-weight amount shown elsewhere in the portal. */
+.booking-price-panel .price-total{font-size:14px;font-weight:600;align-items:center}
+.booking-price-panel .price-total strong{font-size:18px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--ink);font-variant-numeric:tabular-nums}
+html[data-theme="dark"] .booking-price-panel .price-total strong{color:var(--ink)}
 html[data-theme="dark"] .flight .fare>strong,
 html[data-theme="dark"] .pair-footer>strong,
 html[data-theme="dark"] .flight .fare .passenger-price>strong,

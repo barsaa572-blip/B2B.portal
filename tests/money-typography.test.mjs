@@ -27,3 +27,13 @@ test('high-specificity dark fare label group excludes currency values',()=>{
   assert.match(css,/\.fare-family-price span:not\(\[data-money-cny\]\)/);
   assert.doesNotMatch(css,/\.fare-family-price span\s*[,)]/);
 });
+
+test('checkout total matches regular-weight reference and invoice breakdown has full-width spacing',()=>{
+  const css=read('money-display.css'),admin=read('admin.js'),layout=read('admin.css');
+  assert.match(css,/\.booking-price-panel \.price-total strong\{font-size:18px;font-weight:400/);
+  assert.match(css,/html\[data-theme="dark"\] \.booking-price-panel \.price-total strong\{color:var\(--ink\)\}/);
+  assert.match(admin,/<tr class="funding-detail-row"><td colspan="6">/);
+  assert.match(admin,/class="admin-money-stack"/);
+  assert.match(admin,/expanded\.has\(item\.id\)/);
+  assert.match(layout,/#admin-topups \.funding-detail-grid\{display:grid;[^}]*gap:14px 32px/);
+});

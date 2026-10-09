@@ -1,5 +1,13 @@
 # CNY funding follow-up release — deployed 9 October 2026, user evidence
 
+**Latest local follow-up, not deployed:** Invoice amounts are stacked, frozen
+breakdown is a full-width disclosure row, approval is one dialog with required
+real bank reference/NET CNY and one final submit. Checkout total18px regular400.
+Node24 tracked release suite294/294 PASS; updated real mock-browser verification
+runs in the Node publisher below before any Git write. Starting local HEAD
+5a469625d64426b8e7428b0e8f5c1a6ccaf5a97c; no independent current VPS SHA check.
+No financial rules/SQL/env changes; do not approve unpaid invoices for testing.
+
 **New local follow-up, not yet published:** Production TOPUP_CONFIRM_REQUIRED
 root cause was missing pricing_model/funding_quote in the admin overview SELECT.
 Those fields are now included; unknown model fails closed without empty receipt.
