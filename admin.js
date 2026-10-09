@@ -200,6 +200,9 @@
       const approve = event.target.closest('.topup-approve'), remove = event.target.closest('.topup-delete'), button = approve || remove;
       if (!button) return;
       const deleting = Boolean(remove), invoice = overview.topups.find(item => item.id === button.dataset.topupId);
+      if (!deleting && (!invoice || !['legacy', 'cny-funding-v1'].includes(invoice.pricing_model))) {
+        notify('Нэхэмжлэлийн үнийн загвар дутуу байна. Жагсаалтыг шинэчилнэ үү; банкны орлогыг батлахгүй.', 7000); return;
+      }
       let receipt = {};
       if (!deleting && invoice?.pricing_model === 'cny-funding-v1') {
         const total = invoice.funding_quote?.totalCny;

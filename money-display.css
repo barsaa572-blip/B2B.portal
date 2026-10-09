@@ -5,7 +5,7 @@ html[data-theme="dark"] .money-value[data-money-cny]{color:inherit}
 .pair-footer>strong,
 .flight .fare .passenger-price>strong,
 .pair-footer .passenger-price>strong,
-.fare-family-price .passenger-price>strong{display:block;font-size:24px;font-weight:800;line-height:1.25;letter-spacing:-.025em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.fare-family-price .passenger-price>strong{display:block;font-size:20px;font-weight:600;line-height:1.25;letter-spacing:normal;font-variant-numeric:tabular-nums;color:var(--ink)}
 .fare-family-price .passenger-price>strong{color:#006ac4}
 .fare-family-price>.passenger-price{max-width:none}
 html[data-theme="dark"] .flight .fare>strong,
@@ -18,5 +18,5 @@ html[data-theme="dark"] .fare-family-price .passenger-price>strong{color:#eaf3ff
   .pair-footer>strong,
   .flight .fare .passenger-price>strong,
   .pair-footer .passenger-price>strong,
-  .fare-family-price .passenger-price>strong{font-size:22px}
+  .fare-family-price .passenger-price>strong{font-size:18px}
 }

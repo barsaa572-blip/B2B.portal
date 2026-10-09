@@ -1,6 +1,43 @@
 # Flight B2B Portal — Codex handover
 
-## Price typography and top-up follow-up — 9 October 2026, LOCAL / NOT deployed
+## Proportional prices / approval metadata fix — 9 October 2026, LOCAL / NOT deployed
+
+- User production feedback: 24/22px weight800 prices too heavy; secondary
+  top-up MNT figures too small/faint. New styling uses 20px desktop /18px
+  mobile, weight600; MNT rows13px/500 in ink color, total MNT14px. No arithmetic,
+  frozen invoice, markup, fee, rounding, bank rate or wallet rule changes.
+- User now provides TOPUP_CONFIRM_REQUIRED on pending invoice. Root cause
+  found: getAdminOverview selected neither pricing_model nor funding_quote.
+  Frontend skipped CNY receipt prompts and sent {}; backend reread stored
+  cny-funding-v1 model and correctly rejected missing confirmed=true.
+- Explicit admin SELECT now includes those two fields. UI refuses unknown/
+  missing model instead of silently taking legacy path. Genuine legacy models
+  remain legacy; no saved invoice conversion/repricing, no auto confirmation.
+- Isolated HTTP regression exercises actual admin overview route with a mock
+  PostgREST that obeys SELECT columns: model + frozen quote must survive, agent
+  denied, legacy preserved, internal data omitted. Previous all-fields browser
+  fixture hid the production contract gap. Browser now covers missing model
+  causing zero approval POSTs, restrained typography and readable MNT themes.
+- Node24 release-scoped tests288/288 PASS, zero skipped. Updated browser run
+  still required on ordinary user PowerShell (sandbox browser launch remains
+  blocked). Existing node scripts/publish-topup-ui.mjs gates on browser before
+  Git writes; existing VPS code-only block remains valid. No new SQL required,
+  no publication/deployment/real approval performed this turn. Production still
+  65ad15b13ded0c30461a88ca2651258f62f6c18a until user deploys follow-up.
+
+## Price typography and top-up follow-up — 9 October 2026, DEPLOYED per user evidence
+
+- User supplies publisher commit 65ad15b13ded0c30461a88ca2651258f62f6c18a
+  and READY: Git push verified. Local HEAD matches this full revision.
+  User then supplies VPS READY: Production UI/approval update complete. This
+  follows the helper's preflight, service-user import, tests, restart, loopback
+  health and public HTTP200 guards. No independent VPS inspection performed.
+- This supersedes all local/unpublished/pending release notes below for this
+  payload. No SQL activation or manual wallet update performed by the helper.
+  Live invoice approval success and production visual acceptance are NOT yet
+  supplied; inspect safe TOPUP_* code on failure, never approve unpaid tests.
+  Unrelated untracked typo/superseded proposal files remain untouched. Only
+  these deployment-status notes changed locally after publication.
 
 - User's .ps1 publisher failed at load: running scripts disabled by Windows
   policy. Git push did NOT begin. Added equivalent publish-topup-ui.mjs for

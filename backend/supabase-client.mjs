@@ -286,7 +286,7 @@ export async function getAdminOverview() {
     secretRequest('/rest/v1/branches?select=id,agency_id,name&order=name.asc'),
     secretRequest('/rest/v1/profiles?select=id,agency_id,branch_id,role,full_name,email,phone,active,created_at&order=full_name.asc'),
     secretRequest('/rest/v1/wallets?select=agency_id,balance_cny,updated_at'),
-    secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,amount_mnt,total_mnt,status,created_at&order=created_at.desc')
+    secretRequest('/rest/v1/topup_requests?select=id,invoice_number,agency_id,amount_cny,amount_mnt,total_mnt,status,created_at,pricing_model,funding_quote&order=created_at.desc')
   ]);
   const statistics = { ticketSalesCny: 0, topupsCny: 0, changePaymentsCny: 0 };
   for (let offset = 0; ; offset += 500) {

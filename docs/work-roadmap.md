@@ -1,6 +1,24 @@
 # NEXAHUB work ledger — 2026-10-06
 
-## Price/top-up follow-up — 9 October 2026, acceptance passed, release prepared
+## New feedback follow-up — 9 October 2026, LOCAL / NOT deployed
+
+- Soften search/fare prices20/18px semibold600; make top-up secondary MNT
+  13px and total14px readable in ink color. No financial calculation changes.
+- TOPUP_CONFIRM_REQUIRED root cause identified: admin SELECT omitted invoice
+  model/quote; UI took legacy path with empty receipt. Explicit fields added,
+  missing model fails closed; actual HTTP SELECT-projection regression added.
+- Release-scoped tests288/288 PASS. Browser update pending ordinary PowerShell;
+  Node publisher and same VPS block can release after browser gate. No SQL,
+  manual wallet changes or live test approval. Deployed revision remains65ad15b.
+
+## Price/top-up follow-up — 9 October 2026, production rollout accepted
+
+- User supplies commit65ad15b13ded0c30461a88ca2651258f62f6c18a and Git push
+  verified READY; local HEAD matches. VPS final Production UI/approval update
+  complete READY also supplied. Earlier prepared/not-executed notes below are
+  superseded for this payload. No SQL activation/manual wallet update.
+- Real invoice approval and production visual acceptance remain separate,
+  unverified items; do not infer them from mock tests or service health.
 
 - User updated mock-browser PASS at1280/390 covers clear prices in both
   themes/currencies, grouped input, fee breakdown, preserved passengers and

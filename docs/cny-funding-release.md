@@ -1,4 +1,20 @@
-# CNY funding release — not executed / acceptance-gated
+# CNY funding follow-up release — deployed 9 October 2026, user evidence
+
+**New local follow-up, not yet published:** Production TOPUP_CONFIRM_REQUIRED
+root cause was missing pricing_model/funding_quote in the admin overview SELECT.
+Those fields are now included; unknown model fails closed without empty receipt.
+Prices adjusted to20/18px weight600 and top-up secondary MNT13/14px ink color
+per new feedback. Release-scoped tests288/288 PASS; updated browser acceptance
+still pending. Use the existing Node publisher below (it runs browser before
+staging/push) then the same VPS block. No SQL rerun or actual test approval.
+
+Publication: 65ad15b13ded0c30461a88ca2651258f62f6c18a and Git push verified
+READY supplied by user; local HEAD matches. User also supplies final VPS
+Production UI/approval update complete READY. Helper health/start/import/tests
+guards therefore reached completion; no independent remote inspection here.
+No SQL activation or manual wallet update by helper. Live invoice approval and
+production visual check remain unverified. Earlier prepared/not-executed notes
+below are historical and superseded by this acceptance update.
 
 ## Current code-only follow-up: use these commands, NOT the historical SQL steps
 

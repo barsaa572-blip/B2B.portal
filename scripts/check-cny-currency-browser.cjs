@@ -11,7 +11,7 @@ const root=path.resolve(__dirname,'..');
   const browser=await chromium.launchPersistentContext(path.join(root,'tmp','cny-browser-profile'),{headless:true,...(process.platform==='win32'?{channel:'msedge'}:{})});
   try {
     for(const width of [1280,390]){
-      const page=await browser.newPage(),errors=[],calls=[];let approvalFailure=false;
+      const page=await browser.newPage(),errors=[],calls=[];let approvalFailure=false,missingInvoiceModel=false;
       await page.setViewportSize({width,height:900});
       page.on('pageerror',e=>errors.push(e.message));
       await page.addInitScript(({profile})=>sessionStorage.setItem('flightb2b-session',JSON.stringify({profile,accessToken:'cookie',refreshToken:'cookie',expiresAt:Date.now()+3600000,idleExpiresAt:Date.now()+1200000,sessionExpiresAt:Date.now()+43200000})),{profile});
@@ -23,7 +23,7 @@ const root=path.resolve(__dirname,'..');
           if(u.pathname==='/api/auth/session')return reply({idleExpiresAt:Date.now()+1200000,sessionExpiresAt:Date.now()+43200000});
           if(u.pathname==='/api/wallet')return reply({wallet:{balance_cny:10000},rate,transactions:[{id:'credit',amount_cny:10000,created_at:invoice.created_at,entry_type:'credit',reason:'Top-up'}]});
           if(u.pathname==='/api/bookings/dashboard')return reply({salesCny:2000,issuedBookings:1,pendingTopupMnt:quote.totalMnt,pendingTopupRequests:1,month:'2026-10',effectiveRateMnt:536.29});
-          if(u.pathname==='/api/admin/overview')return reply({agencies:[{id:'agency',name:'Mock Agency',active:true}],wallets:[{agency_id:'agency',balance_cny:10000}],profiles:[profile],branches:[],topups:[invoice]});
+          if(u.pathname==='/api/admin/overview')return reply({agencies:[{id:'agency',name:'Mock Agency',active:true}],wallets:[{agency_id:'agency',balance_cny:10000}],profiles:[profile],branches:[],topups:[missingInvoiceModel?{...invoice,pricing_model:undefined}:invoice]});
           if(u.pathname==='/api/topups/quote')return reply(fundingQuote(JSON.parse(req.postData()).amountCny,rate));
           if(u.pathname==='/api/admin/topups/invoice/approve' && approvalFailure)return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'Орсон NET CNY дүн нэхэмжлэлийн шилжүүлэх нийт дүнтэй таарахгүй байна.',code:'TOPUP_AMOUNT_MISMATCH'})});
           if(u.pathname==='/api/topups')return reply([invoice]);
@@ -56,7 +56,7 @@ const root=path.resolve(__dirname,'..');
           return {context:node.closest('.fare-family-price')?'fare-choice':node.closest('.pair-footer')?'round-trip':'one-way',size:parseFloat(style.fontSize),weight:parseInt(style.fontWeight),color:style.color,parentColor:parent.color,parentSize:parent.fontSize,sizeText:style.fontSize,margin:style.marginRight};
         }));
         assert.equal(typography.length,3);
-        for(const style of typography){const context=`${theme}/${currency}/${style.context}`;assert.ok(style.size>=22,`${context}: price must be legible`);assert.ok(style.weight>=800,`${context}: price must be bold`);assert.equal(style.color,style.parentColor,`${context}: currency value must keep its parent amount color`);assert.equal(style.sizeText,style.parentSize,`${context}: currency value must keep its parent amount size`);assert.equal(style.margin,'0px',`${context}: currency value must not inherit label spacing`);}
+        for(const style of typography){const context=`${theme}/${currency}/${style.context}`;assert.equal(style.size,width<=650?18:20,`${context}: price must match surrounding system proportions`);assert.equal(style.weight,600,`${context}: price must use restrained semibold, not extra-bold`);assert.equal(style.color,style.parentColor,`${context}: currency value must keep its parent amount color`);assert.equal(style.sizeText,style.parentSize,`${context}: currency value must keep its parent amount size`);assert.equal(style.margin,'0px',`${context}: currency value must not inherit label spacing`);}
         assert.equal(await page.locator('#test-prices').evaluate(el=>el.scrollWidth<=el.clientWidth),true,`${theme}/${currency}: price layouts must fit`);
       }
       await page.evaluate(()=>{document.documentElement.dataset.theme='light';PortalMoney.setCurrency('MNT');});
@@ -92,14 +92,30 @@ const root=path.resolve(__dirname,'..');
       assert.equal(await page.locator('#topup-rate-preview .funding-credit strong').textContent(),'¥ 100,000.00 CNY');
       assert.match(await page.locator('#topup-rate-preview .funding-total').textContent(),/Банк руу шилжүүлэх нийт дүн/);
       assert.equal(await page.locator('#topup-modal').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+      for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+        const figures=await page.locator('#topup-rate-preview small').evaluateAll(nodes=>nodes.map(node=>({size:parseFloat(getComputedStyle(node).fontSize),weight:getComputedStyle(node).fontWeight,color:getComputedStyle(node).color,expectedColor:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()})));
+        assert.equal(figures.length,5);
+        for(const figure of figures){assert.ok(figure.size>=13);assert.equal(figure.weight,'500');}
+        assert.equal(await page.locator('#topup-rate-preview').evaluate(el=>[...el.querySelectorAll('small')].every(node=>getComputedStyle(node).color===getComputedStyle(el.querySelector('.funding-row')).color)),true,`${theme}: MNT figures must not have faint label coloring`);
+      }
+      await page.evaluate(()=>document.documentElement.dataset.theme='light');
       await page.locator('#topup-modal').screenshot({path:path.join(screenshots,`topup-${width}.png`)});
       await page.evaluate(()=>document.querySelector('#topup-modal').close());
       await page.evaluate(()=>document.querySelector('[data-view="administration"]').click());
       await page.waitForFunction(()=>document.querySelector('#admin-topups details'));
       assert.match(await page.locator('#admin-topups').textContent(),/non-refundable/);
       assert.equal(await page.locator('#admin-topups tr').count(),1);
-      const replies=['MOCK-BANK-REFERENCE','10,000'];
+      const replies=[];
       page.on('dialog',async dialog=>dialog.accept(dialog.type()==='prompt'?replies.shift():undefined));
+      missingInvoiceModel=true;await page.evaluate(()=>loadAdministration());
+      await page.waitForFunction(()=>!document.querySelector('#admin-topups details'));
+      await page.locator('#admin-topups .topup-approve').click();
+      await page.waitForFunction(()=>document.querySelector('#toast')?.textContent.includes('үнийн загвар дутуу'));
+      assert.equal(calls.filter(c=>c.path==='/api/admin/topups/invoice/approve').length,0,'Missing model must not silently submit an empty legacy receipt');
+      missingInvoiceModel=false;await page.evaluate(()=>loadAdministration());
+      await page.waitForFunction(()=>document.querySelector('#admin-topups details'));
+      replies.push('MOCK-BANK-REFERENCE','10,000');
       await page.locator('#admin-topups .topup-approve').click();
       await page.waitForFunction(()=>document.querySelector('#toast')?.textContent.includes('таарахгүй'));
       assert.equal(calls.filter(c=>c.path==='/api/admin/topups/invoice/approve').length,0,'Principal alone must never be approved');

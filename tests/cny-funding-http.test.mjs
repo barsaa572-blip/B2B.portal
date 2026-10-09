@@ -16,6 +16,7 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
     if(u.pathname==='/auth/v1/user')return send({id:req.headers.authorization==='Bearer private-admin'?'admin':'agent'});
     if(u.pathname==='/rest/v1/profiles')return send(Object.values(profiles).filter(p=>u.searchParams.get('id')==='eq.'+p.id));
     if(u.pathname==='/rest/v1/agencies')return send([{id:'agency-a',active:true}]);
+    if(['/rest/v1/branches','/rest/v1/wallets','/rest/v1/wallet_transactions'].includes(u.pathname))return send([]);
     if(u.pathname==='/official'||u.pathname==='/bank')return send([{bank_name:u.pathname==='/official'?'MongolBank':'GolomtBank',date:today,rates:{cny:{noncash:{buy:u.pathname==='/official'?536.29:533.9,sell:u.pathname==='/official'?536.29:538}}}}]);
     if(u.pathname==='/rest/v1/rpc/cny_funding_ready')return send(ready);
     if(u.pathname==='/rest/v1/rpc/claim_spring_status_checks')return send([]);
@@ -26,8 +27,11 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
     }
     if(u.pathname==='/rest/v1/topup_requests'){
       if(req.method==='POST'){writes.push(body);return send([{...body,id:'invoice-1',status:'pending'}]);}
-      if(u.searchParams.get('id')==='eq.invoice-1')return send([{id:'invoice-1',pricing_model:'cny-funding-v1',agency_id:'agency-a',requested_by:'agent',status:'pending'}]);
-      return send([]);
+      const rows=[{...writes[0],id:'invoice-1',status:'pending',private_internal:'PRIVATE-METADATA'},
+        {id:'legacy-invoice',agency_id:'agency-a',status:'rejected',pricing_model:'legacy',funding_quote:null}];
+      const filtered=u.searchParams.has('id')?rows.filter(row=>u.searchParams.get('id')==='eq.'+row.id):rows;
+      const select=u.searchParams.get('select');
+      return send(select==='*'?filtered:filtered.map(row=>Object.fromEntries(select.split(',').map(key=>[key,row[key]]))));
     }
     if(u.pathname==='/rest/v1/bookings')return send([]);
     res.statusCode=500;return send({error:'Unexpected fixture endpoint'});
@@ -51,6 +55,19 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
   assert.equal(quote.status,200);const q=await quote.json();assert.equal(q.rateMnt,538);assert.equal(q.totalCny,10359.3);assert.equal(q.principalCny,10000);
   const r=await call('/api/topups',{cookie:agent,body:{amountCny:'10000',totalCny:1,amountMnt:1,agencyId:'foreign',requested_by:'admin',note:'test'}});
   assert.equal(r.status,201);assert.equal(writes.length,1);assert.equal(writes[0].agency_id,'agency-a');assert.equal(writes[0].requested_by,'agent');assert.equal(writes[0].funding_quote.totalCny,10359.3);
+  // Use actual overview route and actual PostgREST column projection: do not
+  // inject fields into the UI that production SELECT forgot to request.
+  assert.equal((await call('/api/admin/overview',{cookie:agent})).status,403);
+  const overviewResponse=await call('/api/admin/overview',{cookie:admin});
+  assert.equal(overviewResponse.status,200);
+  const overviewText=await overviewResponse.text(),overview=JSON.parse(overviewText);
+  const invoice=overview.topups.find(row=>row.id==='invoice-1');
+  assert.equal(invoice.pricing_model,'cny-funding-v1');
+  assert.deepEqual(invoice.funding_quote,writes[0].funding_quote);
+  assert.equal(invoice.funding_quote.totalCny,10359.3);
+  assert.equal(overview.topups.find(row=>row.id==='legacy-invoice').pricing_model,'legacy');
+  assert.equal(overview.topups.find(row=>row.id==='legacy-invoice').funding_quote,null);
+  assert.doesNotMatch(overviewText,/PRIVATE-METADATA|fixture-secret/);
   assert.equal((await call('/api/topups/quote',{body:{amountCny:'10000'}})).status,401);
   assert.equal((await call('/api/topups/quote',{cookie:agent,body:{amountCny:'10000'},origin:'https://foreign.test'})).status,403);
   assert.equal((await call('/api/admin/topups/invoice-1/approve',{cookie:agent,body:{confirmed:true,bankReference:'BANK-1',receivedCny:'10359.30'}})).status,403);
