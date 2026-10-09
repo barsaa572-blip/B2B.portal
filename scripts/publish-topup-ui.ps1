@@ -14,7 +14,7 @@ $taskFiles = @(
     'index.html', 'money-display.js', 'money-display.css', 'night-theme.css', 'server.mjs', 'styles.css',
     'scripts/check-cny-currency-browser.cjs', 'scripts/publish-topup-ui.ps1', 'scripts/publish-topup-ui.mjs', 'scripts/deploy-topup-ui.sh',
     'scripts/set-bank-crawl-interval.mjs', 'scripts/deploy-bank-crawl-interval.sh',
-    'tests/cny-approval.test.mjs', 'tests/cny-funding-http.test.mjs', 'tests/cny-funding.test.mjs', 'tests/booking-diagnostic.test.mjs',
+    'tests/cny-approval.test.mjs', 'tests/cny-funding-http.test.mjs', 'tests/cny-funding.test.mjs', 'tests/booking-diagnostic.test.mjs', 'tests/supplier-status-ui.test.mjs',
     'tests/money-display-dom.test.cjs', 'tests/money-typography.test.mjs', 'tests/pricing-model-two-fx.test.mjs', 'tests/settlement-audit-ui.test.mjs',
     'tests/support/cny-ui-server.cjs', 'tests/bank-crawl-interval.test.mjs', 'tests/topup-release.test.mjs',
     'CODEX_HANDOVER.md', 'docs/cny-funding-release.md', 'docs/work-roadmap.md', 'docs/bank-crawl-three-hour-release.md'
@@ -28,7 +28,7 @@ if (-not (Test-Path -LiteralPath $taskNode)) { $taskNode = (Get-Command node -Er
 if ($LASTEXITCODE -ne 0) { throw 'STOP: Syntax check failed.' }
 $taskTests = @((Invoke-ReleaseGit ls-files -- 'tests/*.test.*')) + @(
     'tests/cny-approval.test.mjs', 'tests/money-typography.test.mjs',
-    'tests/bank-crawl-interval.test.mjs', 'tests/topup-release.test.mjs', 'tests/settlement-audit-ui.test.mjs', 'tests/booking-diagnostic.test.mjs'
+    'tests/bank-crawl-interval.test.mjs', 'tests/topup-release.test.mjs', 'tests/settlement-audit-ui.test.mjs', 'tests/booking-diagnostic.test.mjs', 'tests/supplier-status-ui.test.mjs'
 )
 $taskTests = @($taskTests | Sort-Object -Unique)
 $taskPreviousPython = $env:PYTHON_FOR_FX_TEST
@@ -48,7 +48,7 @@ Invoke-ReleaseGit diff --check
 Invoke-ReleaseGit add -- @taskFiles
 Invoke-ReleaseGit diff --cached --check
 & git -c "safe.directory=$taskRepo" diff --cached --quiet
-if ($LASTEXITCODE -eq 1) { Invoke-ReleaseGit commit -m 'Fix checkout passenger enum values and validate real form submission' }
+if ($LASTEXITCODE -eq 1) { Invoke-ReleaseGit commit -m 'Simplify passenger ticket status without changing supplier verification' }
 elseif ($LASTEXITCODE -ne 0) { throw 'STOP: Staged diff check failed.' }
 Invoke-ReleaseGit push origin main
 $taskCommit = Invoke-ReleaseGit rev-parse HEAD

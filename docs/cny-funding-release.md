@@ -1,5 +1,14 @@
 # CNY funding follow-up release — deployed 9 October 2026, user evidence
 
+**Latest local minimal ticket-status UI, not deployed:** User confirms Book works.
+Status panel is now one collapsed Ticket status row; expand for passenger/route
+states. Removed long automatic-verification sentence from both initial open and
+polling. Unknown remains Not verified, failed checks preserve cached statuses,
+check time is tooltip only. No provider/sync/SQL/auth/financial changes. New UI
+test added to both publisher lists; updated mock-browser acceptance gates push.
+Release-scoped Node24 suite312/312 PASS, zero skipped. Actual browser acceptance
+must complete in ordinary PowerShell before any staging/commit/push.
+
 **Latest local Book fix, not deployed:** Production input_cleanup diagnostic
 shows no supplier booking attempt. Actual form emits title-case labels but strict
 server expects lowercase enums. Explicit option values and enum serialization now

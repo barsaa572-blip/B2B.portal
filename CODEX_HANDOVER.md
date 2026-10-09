@@ -1,5 +1,29 @@
 # Flight B2B Portal — Codex handover
 
+## Minimal ticket-status follow-up — 9 October 2026, LOCAL / NOT deployed
+
+- User confirms Book now works after the passenger enum release. Starting local
+  HEAD34d951ee0a13b64353c184d96d48f9c8d42075ad; no independent VPS SHA check.
+- User asks for minimal status UI without "Awaiting automatic Spring verification".
+  Replaced large always-expanded passenger block with one collapsed Ticket status
+  row. Short neutral states: Not verified, Partially verified, Verified, or Check
+  unavailable. Expand for compact route/passenger/status rows; saved check time
+  is tooltip only. Unknown states never imply verified; failed checks keep cached
+  values and show brief warning only inside disclosure.
+- Shared read-only DOM renderer used both on initial open and existing booking
+  refresh; preserves expanded state. No additional API/provider calls, sync job,
+  SQL/RLS/auth, wallet, payment or ticket-action changes. Supplier text uses only
+  textContent. Supabase skill applied to keep stored status/user data and database
+  access unchanged; no Supabase feature/schema implementation in this follow-up.
+- New UI tests cover missing/partial/unknown/error states, literal text and polling
+  consistency. Full real mock-browser gate updated for both widths/themes and
+  disclosure refresh/no-mutation; must pass in ordinary PowerShell before push.
+- Unrelated dirty YeePay integration notes and superseded untracked files are
+  preserved and excluded from publisher. No actual booking/payment here.
+- Verification: Node24 release-scoped suite312/312 PASS, zero skipped, plus syntax
+  and diff checks. Full real desktop/mobile browser acceptance remains the user
+  PowerShell publisher gate, not certified by sandbox execution here.
+
 ## Booking input enum fix — 9 October 2026, LOCAL / NOT deployed
 
 - User production diagnostic bb0c4fed-764a-4188-aee1-36a1644fde02 is

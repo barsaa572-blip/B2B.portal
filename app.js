@@ -242,6 +242,46 @@ const bookingSavedFareRules = booking => {
   }).join('');
   return `<section class="booking-detail-card"><details class="saved-fare-rules"><summary><strong>Fare rules & baggage</strong></summary><p>Saved fare conditions from reservation, not a fresh airline quote. After a flight change these conditions may be outdated. Final change/refund charges must be confirmed with Spring; fare difference may also apply. Child/infant conditions and no-show terms must be confirmed if not explicitly supplied.</p>${sections || `<p>${missing}</p>`}</details></section>`;
 };
+// Read-only presentation shared by initial open and the existing background
+// refresh. A missing/failed supplier check must never look like confirmation.
+const supplierStatusView = booking => {
+  const names = Array.isArray(booking.passengers) ? booking.passengers : [booking.passenger || 'Passenger'];
+  const rows = (booking.itinerary?.flights || []).flatMap((flight, index) =>
+    (globalThis.SpringTicketStatus?.flightStatuses(booking, index) || []).map(row => ({
+      route: `${flight.departure?.id || ''} → ${flight.arrival?.id || ''}`,
+      name: names[row.passengerIndex] || 'Passenger',
+      confirmed: Number.isInteger(row.flag) && row.label !== 'Unconfirmed',
+      label: !Number.isInteger(row.flag) || row.label === 'Unconfirmed' ? 'Not verified' : row.label
+    })));
+  const confirmed = rows.filter(row => row.confirmed).length;
+  const result = booking.supplierStatus?.result;
+  const label = result === 'error' ? 'Check unavailable' : !confirmed ? 'Not verified'
+    : result === 'unmatched' || confirmed < rows.length ? 'Partially verified' : 'Verified';
+  const checked = booking.supplierStatus?.lastSuccessfulAt;
+  return { rows, label, checked: checked && Number.isFinite(Date.parse(checked)) ? checked : null,
+    note: result === 'error' ? 'Previous status retained.' : result === 'unmatched' ? 'Some statuses are unconfirmed.' : '' };
+};
+const renderSupplierStatus = (panel, booking) => {
+  const wasOpen = panel.querySelector('details')?.open || false;
+  const view = supplierStatusView(booking);
+  const details = document.createElement('details');
+  details.open = wasOpen;
+  const summary = document.createElement('summary');
+  const heading = document.createElement('span'); heading.textContent = 'Ticket status';
+  const state = document.createElement('span'); state.className = 'supplier-status-value'; state.textContent = view.label;
+  if (view.checked) summary.title = `Last verified: ${new Date(view.checked).toLocaleString()}`;
+  summary.append(heading, state); details.append(summary);
+  const list = document.createElement('div'); list.className = 'supplier-status-list';
+  view.rows.forEach(row => {
+    const line = document.createElement('div'); line.className = 'supplier-status-row';
+    const route = document.createElement('span'); route.className = 'supplier-status-route'; route.textContent = row.route;
+    const name = document.createElement('span'); name.className = 'supplier-status-name'; name.textContent = row.name;
+    const value = document.createElement('span'); value.className = 'supplier-status-value'; value.textContent = row.label;
+    line.append(route, name, value); list.append(line);
+  });
+  if (view.note) { const note = document.createElement('small'); note.textContent = view.note; list.append(note); }
+  details.append(list); panel.replaceChildren(details);
+};
 const openBookingDetail = ref => {
   const booking = bookings.find(item => item.ref === ref);
   if (!booking) return;
@@ -264,27 +304,7 @@ const openBookingDetail = ref => {
   // Supplier results are informational; the booking/payment status stays separate.
   const statusPanel = document.createElement('section');
   statusPanel.className = 'booking-detail-card supplier-status-panel';
-  const statusHeading = document.createElement('h3');
-  statusHeading.textContent = 'Passenger flight status';
-  statusPanel.append(statusHeading);
-  (booking.itinerary?.flights || []).forEach((flight, flightIndex) => {
-    const heading = document.createElement('strong');
-    heading.textContent = `${flight.departure?.id || ''} → ${flight.arrival?.id || ''}`;
-    statusPanel.append(heading);
-    const rows = globalThis.SpringTicketStatus?.flightStatuses(booking, flightIndex) || [];
-    rows.forEach(row => {
-      const line = document.createElement('p');
-      line.textContent = `${passengers[row.passengerIndex] || 'Passenger'} · ${row.flag === null ? (booking.status === 'Ticketed' ? 'Ticketed · Spring status pending' : booking.status) : row.label}`;
-      statusPanel.append(line);
-    });
-  });
-  const syncNote = document.createElement('small');
-  const lastChecked = booking.supplierStatus?.lastSuccessfulAt;
-  syncNote.textContent = lastChecked && Number.isFinite(Date.parse(lastChecked))
-    ? `Last verified: ${new Date(lastChecked).toLocaleString()}` : 'Awaiting automatic Spring verification.';
-  if (booking.supplierStatus?.result === 'error') syncNote.textContent += ' Latest check failed; previous status retained.';
-  if (booking.supplierStatus?.result === 'unmatched') syncNote.textContent += ' Some passenger/flight statuses could not be matched.';
-  statusPanel.append(syncNote);
+  renderSupplierStatus(statusPanel, booking);
   modal.querySelector('.booking-detail-actions').before(statusPanel);
   modal.querySelector('.booking-close').addEventListener('click', () => { clearInterval(bookingDeadlineTimer); modal.close(); });
   modal.querySelector('.cancel-portal-booking')?.addEventListener('click', async () => { if (!confirm(`Cancel booking ${escapeHtml(booking.ref)}?`)) return; try { await updatePortalBookingStatus(booking.ref, 'cancel'); modal.close(); toast(`Booking ${escapeHtml(booking.ref)} cancelled.`); } catch (error) { toast(error.message); } });
@@ -1467,19 +1487,7 @@ const loadBookings = async () => {
       if (current) {
         // Replace only read-only status content, not active change/refund forms.
         const panel = modal.querySelector('.supplier-status-panel');
-        const lines = [...panel.querySelectorAll('p')];
-        let offset = 0;
-        (current.itinerary?.flights || []).forEach((flight, index) => {
-          const rows = globalThis.SpringTicketStatus?.flightStatuses(current, index) || [];
-          rows.forEach(row => {
-            if (lines[offset]) lines[offset].textContent = `${current.passengers[row.passengerIndex] || 'Passenger'} · ${row.flag === null ? 'Spring status pending' : row.label}`;
-            offset++;
-          });
-        });
-        const checked = current.supplierStatus?.lastSuccessfulAt;
-        panel.querySelector('small').textContent = checked && Number.isFinite(Date.parse(checked)) ? `Last verified: ${new Date(checked).toLocaleString()}` : 'Awaiting automatic Spring verification.';
-        if (current.supplierStatus?.result === 'error') panel.querySelector('small').textContent += ' Latest check failed; previous status retained.';
-        if (current.supplierStatus?.result === 'unmatched') panel.querySelector('small').textContent += ' Some passenger/flight statuses could not be matched.';
+        renderSupplierStatus(panel, current);
         const itineraryCard = modal.querySelector('.booking-itinerary-leg')?.closest('.booking-detail-card');
         if (itineraryCard) itineraryCard.innerHTML = safeHtml(`<h3>Itinerary</h3>${bookingFlightDetailsClean(current)}`);
       }

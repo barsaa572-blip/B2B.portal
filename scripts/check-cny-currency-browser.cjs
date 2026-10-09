@@ -196,8 +196,46 @@ const root=path.resolve(__dirname,'..');
       assert.deepEqual(nativeDialogs,['prompt'],'Cancelling receipt prompt stops refund confirmation');
       assert.equal(calls.filter(c=>c.method==='POST'&&!c.path.startsWith('/api/auth/')).length,auditWritesBefore,'Opening/filtering/closing audit or cancelling confirmation must not move money');
       await page.locator('#admin-modal .close').click();
+      const statusWritesBefore=calls.filter(c=>c.method==='POST'&&!c.path.startsWith('/api/auth/')).length;
+      await page.evaluate(()=>{
+        const panel=document.createElement('section');panel.id='test-supplier-status';panel.className='booking-detail-card supplier-status-panel';
+        document.querySelector('main').append(panel);
+        window.statusUiBooking={status:'Ticketed',passengers:['TEST PASSENGER'],documents:[{documentNumber:'FIXTURE'}],
+          itinerary:{flights:[{number:'9C1',travelDate:'2027-03-22',departure:{id:'AAA'},arrival:{id:'BBB'}}]}};
+        renderSupplierStatus(panel,statusUiBooking);
+      });
+      const statusPanel=page.locator('#test-supplier-status');
+      assert.equal(await statusPanel.locator('details').evaluate(node=>node.open),false);
+      assert.equal(await statusPanel.locator('summary .supplier-status-value').textContent(),'Not verified');
+      assert.equal(await statusPanel.locator('.supplier-status-list').isVisible(),false);
+      assert.doesNotMatch(await statusPanel.textContent(),/Awaiting automatic|Spring status pending/);
+      await statusPanel.locator('summary').click();
+      assert.equal(await statusPanel.locator('.supplier-status-list').isVisible(),true);
+      await page.evaluate(()=>{
+        statusUiBooking.supplierStatus={lastSuccessfulAt:'2026-10-09T01:00:00Z',records:[{flightKey:SpringTicketStatus.flightKey(statusUiBooking.itinerary.flights[0]),passengerKey:'FIXTURE',flag:3}]};
+        renderSupplierStatus(document.querySelector('#test-supplier-status'),statusUiBooking);
+      });
+      assert.equal(await statusPanel.locator('details').evaluate(node=>node.open),true,'Background refresh must preserve expanded details');
+      assert.equal(await statusPanel.locator('summary .supplier-status-value').textContent(),'Verified');
+      assert.equal(await statusPanel.locator('.supplier-status-row .supplier-status-value').textContent(),'Ticketed');
+      assert.match(await statusPanel.locator('summary').getAttribute('title'),/^Last verified:/);
+      assert.doesNotMatch(await statusPanel.textContent(),/Last verified:/);
+      await page.evaluate(()=>{
+        statusUiBooking.supplierStatus.result='error';
+        renderSupplierStatus(document.querySelector('#test-supplier-status'),statusUiBooking);
+      });
+      assert.equal(await statusPanel.locator('summary .supplier-status-value').textContent(),'Check unavailable');
+      assert.equal(await statusPanel.locator('.supplier-status-row .supplier-status-value').textContent(),'Ticketed','Cached verified status retained on failure');
+      await statusPanel.locator('summary').click();
+      for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+        assert.equal(await statusPanel.evaluate(node=>node.scrollWidth<=node.clientWidth),true,`${theme}: minimal status must fit`);
+        await statusPanel.screenshot({path:path.join(screenshots,`minimal-status-${theme}-${width}.png`)});
+      }
+      assert.equal(calls.filter(c=>c.method==='POST'&&!c.path.startsWith('/api/auth/')).length,statusWritesBefore,'Reading/expanding/rendering status must not make a mutation request');
+      await statusPanel.evaluate(node=>node.remove());
       assert.deepEqual(errors,[]);
-      await page.close();console.log(`PASS: canonical passenger form values, proportional prices, safe single approval dialog and readable refund audit with zero audit payment side effects (${width}px)`);
+      await page.close();console.log(`PASS: canonical passenger form values, clear prices, safe approval/refund audit and minimal read-only ticket status (${width}px)`);
     }
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
