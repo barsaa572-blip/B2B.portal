@@ -39,6 +39,14 @@ const root=path.resolve(__dirname,'..');
       await page.goto('http://127.0.0.1:4199/');
       await page.waitForFunction(()=>document.querySelector('#auth-root').hidden&&window.PortalMoney);
       await page.waitForFunction(()=>document.querySelector('#wallet-balance').textContent.includes('5,362,900'));
+      // Inspect actual browser option values from the real sanitized form,
+      // never hand-invent lower-case DTO values (the previous test blind spot).
+      const passengerOptions=await page.evaluate(()=>{
+        const card=document.createElement('div');card.innerHTML=safeHtml(passengerForm('Adult',0));
+        const options=name=>[...card.querySelector(`[name="${name}"]`).options].map(option=>({value:option.value,label:option.textContent}));
+        return {gender:options('gender'),document:options('document-type'),defaultDocument:card.querySelector('[name="document-type"]').value};
+      });
+      assert.deepEqual(passengerOptions,{gender:[{value:'',label:'Select'},{value:'male',label:'Male'},{value:'female',label:'Female'}],document:[{value:'passport',label:'Passport'},{value:'national id',label:'National ID'}],defaultDocument:'passport'});
       // Create a price panel through actual portal helpers, not a formatter stub.
       await page.evaluate(()=>{
         const panel=document.createElement('div');panel.id='test-checkout';
@@ -189,7 +197,7 @@ const root=path.resolve(__dirname,'..');
       assert.equal(calls.filter(c=>c.method==='POST'&&!c.path.startsWith('/api/auth/')).length,auditWritesBefore,'Opening/filtering/closing audit or cancelling confirmation must not move money');
       await page.locator('#admin-modal .close').click();
       assert.deepEqual(errors,[]);
-      await page.close();console.log(`PASS: proportional prices, safe single approval dialog and readable refund audit with zero audit payment side effects (${width}px)`);
+      await page.close();console.log(`PASS: canonical passenger form values, proportional prices, safe single approval dialog and readable refund audit with zero audit payment side effects (${width}px)`);
     }
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

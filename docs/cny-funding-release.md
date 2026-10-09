@@ -1,5 +1,16 @@
 # CNY funding follow-up release — deployed 9 October 2026, user evidence
 
+**Latest local Book fix, not deployed:** Production input_cleanup diagnostic
+shows no supplier booking attempt. Actual form emits title-case labels but strict
+server expects lowercase enums. Explicit option values and enum serialization now
+match, with labels unchanged. Actual form/submission-to-server regression covers
+male/female and passport/national id plus legacy labels; mock-browser publisher
+gate checks real DOM values. No server-validation bypass, SQL, wallet, pricing,
+supplier settings, retry or financial changes. Use same publisher/VPS block.
+Node24 release-scoped tests307/307 PASS, zero skipped. Actual HTTP with disabled
+supplier proves canonical DTO passes cleanup, while unknown gender fails closed.
+Real desktop/mobile DOM acceptance runs before Git writes in the Node publisher.
+
 **Latest local booking diagnostic, not deployed:** Fixed stages and random
 support IDs now distinguish pre-submission, possible supplier submission and
 portal persistence failure. Strict code/status only; no raw supplier messages,

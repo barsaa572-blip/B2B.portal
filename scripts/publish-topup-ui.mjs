@@ -46,7 +46,7 @@ function publish() {
   git('add', '--', ...releaseFiles);
   git('diff','--cached','--check');
   const changed=run('git',['-c',`safe.directory=${root}`,'diff','--cached','--quiet'],{accept:[0,1]}).status===1;
-  if(changed)git('commit','-m','Improve refund audit and add privacy-safe booking diagnostics');
+  if(changed)git('commit','-m','Fix checkout passenger enum values and validate real form submission');
   git('push','origin','main');
   const commit=gitText('rev-parse','HEAD');
   if(gitText('ls-remote','origin','refs/heads/main').split(/\s+/)[0]!==commit)throw new Error('Remote revision differs. Do not deploy.');

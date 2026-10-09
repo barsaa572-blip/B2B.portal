@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { createBookingDiagnostic, safeSpringCode, springRequestError } from '../backend/booking-diagnostic.mjs';
 import { createSpringClient } from '../backend/spring-client.mjs';
 import { BookingReviewRequired } from '../backend/booking-review.mjs';
+import { cleanPassengers } from '../backend/input-validation.mjs';
+import { cleanBookingItinerary } from '../backend/payment-security.mjs';
 
 test('diagnostic emits only fixed fields and strict provider codes, never private errors', () => {
   const lines = [];
@@ -111,29 +113,53 @@ test('only reservation POST gets diagnostic ID; browser only displays UUID and r
   assert.match(app, /if \(!bookingReviewAllowed\) bookingQuoteError = 'Review existing bookings/);
 });
 
-test('actual browser submission displays support UUID, preserves inputs and cannot replay an uncertain booking', async () => {
+test('actual form options and submission pass strict server validation, display UUID and never replay an uncertain booking', async () => {
   const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
   const code = app.slice(app.indexOf('const createPortalBookingFromForm ='), app.indexOf('// Capture the booking button click'));
+  const formCode = app.slice(app.indexOf('const passengerForm ='), app.indexOf('const selectedReviewFares ='));
+  const formContext = { splitDateField: () => '' };
+  vm.createContext(formContext); vm.runInContext(formCode + ';globalThis.render=passengerForm', formContext);
+  const markup = formContext.render('Adult', 0);
+  const optionValues = name => {
+    const select = markup.match(new RegExp('<select name="' + name + '"[^>]*>([\\s\\S]*?)</select>'))[1];
+    return [...select.matchAll(/<option value="([^"]+)"[^>]*>([^<]+)<\/option>/g)].map(match => [match[1], match[2]]);
+  };
+  const genders = optionValues('gender'), documents = optionValues('document-type');
+  assert.deepEqual(genders, [['male', 'Male'], ['female', 'Female']]);
+  assert.deepEqual(documents, [['passport', 'Passport'], ['national id', 'National ID']]);
   const id = '00000000-0000-4000-8000-000000000001';
-  for (const diagnosticId of [id, 'PRIVATE_PROVIDER_TEXT']) {
+  const combinations = genders.flatMap(([gender]) => documents.map(([documentType]) => ({ gender, documentType })));
+  // Legacy forms can already be open when the new serializer loads. Accept
+  // those known label casings without weakening the server's strict enum gate.
+  combinations.push({ gender: 'Male', documentType: 'Passport' }, { gender: 'Female', documentType: 'National ID' });
+  for (const { gender, documentType } of combinations) for (const diagnosticId of [id, 'PRIVATE_PROVIDER_TEXT']) {
     const submit = { disabled: false }, messages = [];
     const fields = { 'last-name': 'FIXTURE', 'first-name': 'TEST', 'date-of-birth': '1990-01-01',
-      'document-type': 'passport', 'document-number': 'FIXTURE', nationality: 'Mongolia',
-      'document-expiry': '2035-01-01', gender: 'male' };
+      'document-type': documentType, 'document-number': 'FIXTURE', nationality: 'Mongolia',
+      'document-expiry': '2035-01-01', gender };
     const card = { dataset: { passengerType: 'Adult' }, querySelector: selector => ({ value: fields[selector.match(/name="([^"]+)"/)[1]] || '' }) };
     const form = { querySelectorAll: () => [card], querySelector: selector => selector === '.issue-ticket' ? submit :
       ({ value: ({ 'contact-country-code': '+976', 'contact-phone': '12345678', 'contact-name': 'TEST', 'contact-email': 'test@example.invalid' })[selector.match(/name="([^"]+)"/)?.[1]] || '' }) };
-    let calls = 0;
+    let calls = 0, validated = 0;
     const context = { bookingSubmissionPending: false, bookingReviewAllowed: true, bookingQuote: {}, bookingQuoteError: '',
       currentBookingQuote: () => ({ quoteId: 'fixture', total: 100 }), clearFormErrors() {}, validateSplitDateControls: () => null,
       validateRequiredFields: () => null, passengerValidationError: () => null, dateOnly: value => value,
       selectedOutbound: { departure: { id: 'AAA' }, arrival: { id: 'BBB' } }, selectedReturn: null,
       document: { querySelector: selector => ({ value: selector === '#outbound-date' ? '2027-03-22' : '' }) },
-      secureFetch: async () => { calls++; return { ok: false, status: 403, text: async () => JSON.stringify({ error: 'Booking failed. Check existing bookings.', diagnosticId }) }; },
+      secureFetch: async (_url, options) => {
+        calls++;
+        const body = JSON.parse(options.body);
+        const cleaned = cleanPassengers(body.passengers);
+        cleanBookingItinerary(body.itinerary);
+        assert.equal(cleaned.travellers[0].gender, gender.toLowerCase());
+        assert.equal(cleaned.travellers[0].documentType, documentType.toLowerCase());
+        validated++;
+        return { ok: false, status: 403, text: async () => JSON.stringify({ error: 'Booking failed. Check existing bookings.', diagnosticId }) };
+      },
       toast: message => messages.push(message), refreshBookingPricePanel() {} };
     vm.createContext(context); vm.runInContext(code + ';globalThis.book=createPortalBookingFromForm', context);
     await context.book({ preventDefault() {}, currentTarget: form });
-    assert.equal(calls, 1); assert.equal(submit.disabled, true); assert.equal(context.bookingReviewAllowed, false);
+    assert.equal(calls, 1); assert.equal(validated, 1); assert.equal(submit.disabled, true); assert.equal(context.bookingReviewAllowed, false);
     assert.equal(fields['first-name'], 'TEST'); assert.equal(context.bookingQuote, null);
     assert.equal(messages[0].includes('Support ID:'), diagnosticId === id);
     assert.doesNotMatch(messages[0], /PRIVATE_PROVIDER_TEXT/);

@@ -72,6 +72,22 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
   assert.equal(bookingRecord.stage,'passenger_validation');
   assert.equal(bookingRecord.supplierAttempted,false);
   assert.doesNotMatch(diagnostics,/PRIVATE_PASSENGER_MARKER|fixture-secret|private-admin|private-agent/);
+  const canonicalBooking = {itinerary:{departureDate:'2027-03-22',flights:[{spring:{segHeadId:1}}]},passengers:{
+    contact:{name:'Fixture Agent',email:'fixture@example.invalid',phone:'12345678',areaCode:'976'},
+    travellers:[{type:'ADT',firstName:'TEST',lastName:'FIXTURE',gender:'male',documentType:'passport',
+      dateOfBirth:'1990-01-01',documentExpiry:'2035-01-01',documentNumber:'FIXTURE',nationality:'Mongolia'}]}};
+  // Deliberately disabled supplier in this fixture: canonical browser DTO must
+  // pass the real route's strict cleanup and reach the configuration gate only.
+  for (const [gender,expectedStage] of [['male','booking_configuration'],['unknown','input_cleanup']]) {
+    const body = structuredClone(canonicalBooking); body.passengers.travellers[0].gender=gender;
+    const response = await call('/api/bookings',{cookie:agent,body});
+    assert.equal(response.status,403);
+    const result = await response.json();
+    await new Promise(resolve=>setImmediate(resolve));
+    const record = diagnostics.split('\n').filter(line=>line.startsWith('NEXAHUB_BOOKING_DIAGNOSTIC '))
+      .map(line=>JSON.parse(line.slice('NEXAHUB_BOOKING_DIAGNOSTIC '.length))).find(row=>row.id===result.diagnosticId);
+    assert.ok(record); assert.equal(record.stage,expectedStage); assert.equal(record.supplierAttempted,false);
+  }
   const quote=await call('/api/topups/quote',{cookie:agent,body:{amountCny:'10000',rateMnt:1,serviceFeeCny:0,agencyId:'foreign'}});
   assert.equal(quote.status,200);const q=await quote.json();assert.equal(q.rateMnt,538);assert.equal(q.totalCny,10359.3);assert.equal(q.principalCny,10000);
   const r=await call('/api/topups',{cookie:agent,body:{amountCny:'10000',totalCny:1,amountMnt:1,agencyId:'foreign',requested_by:'admin',note:'test'}});

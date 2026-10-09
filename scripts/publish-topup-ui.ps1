@@ -48,7 +48,7 @@ Invoke-ReleaseGit diff --check
 Invoke-ReleaseGit add -- @taskFiles
 Invoke-ReleaseGit diff --cached --check
 & git -c "safe.directory=$taskRepo" diff --cached --quiet
-if ($LASTEXITCODE -eq 1) { Invoke-ReleaseGit commit -m 'Improve refund audit and add privacy-safe booking diagnostics' }
+if ($LASTEXITCODE -eq 1) { Invoke-ReleaseGit commit -m 'Fix checkout passenger enum values and validate real form submission' }
 elseif ($LASTEXITCODE -ne 0) { throw 'STOP: Staged diff check failed.' }
 Invoke-ReleaseGit push origin main
 $taskCommit = Invoke-ReleaseGit rev-parse HEAD

@@ -1,5 +1,30 @@
 # Flight B2B Portal — Codex handover
 
+## Booking input enum fix — 9 October 2026, LOCAL / NOT deployed
+
+- User production diagnostic bb0c4fed-764a-4188-aee1-36a1644fde02 is
+  input_cleanup, supplierAttempted=false. This attempt did NOT enter Spring.
+- Root cause reproduced offline: actual passengerForm options had no explicit
+  value, so browser sends Male/Female and Passport/National ID; strict server
+  cleanPassengers only accepts male/female and passport/national id. This affects
+  all fares, not Spring credentials, provider balance or the selected flight.
+- Fixed explicit option values, preserved visible labels. Serializer lowercases
+  only these two enum fields, also compatible with legacy title-case form values.
+  Backend validation, unknown-enum rejection, security, quotes, retry lock and
+  financial rules remain unchanged. No actual Spring request/book/payment made.
+- Regression test renders actual passengerForm, derives real option values and
+  passes actual submission JSON to strict cleanPassengers/cleanBookingItinerary
+  for all four combinations and legacy labels. Previous fixture assumed lowercase
+  already, hiding this mismatch. Real mock-browser gate now checks actual DOM
+  values/default and labels at both widths before publication.
+- Starting HEAD204d5703b57ec72187c0229d3b64d63607741c79. Existing unrelated
+  YeePay notes and untracked superseded drafts remain unstaged and untouched.
+- Validation: release-scoped Node24 suite307/307 PASS, zero skipped; syntax and
+  diff checks pass. Mock HTTP canonical DTO reaches configuration after cleanup,
+  unknown gender still fails before any supplier attempt. Full real DOM browser
+  acceptance remains the ordinary PowerShell publisher gate. Not committed/pushed
+  or deployed by this agent; no live booking, payment or SQL operation made.
+
 ## Readable refund/payment audit — 9 October 2026, LOCAL / NOT deployed
 
 - User screenshot shows the old audit inherits420px generic dialog width and
