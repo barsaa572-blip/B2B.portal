@@ -1,3 +1,23 @@
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Apply AFTER existing schema, top-up, wallet-funding-controls and
 -- change-wallet-payment migrations, BEFORE deploying the matching backend.
 -- No user data is deleted. Never re-run older permission migrations afterwards.
@@ -11,15 +31,20 @@ begin
   for f in select p.oid::regprocedure as signature from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname in (
-      'platform_adjust_wallet', 'platform_reset_all_wallets', 'assert_wallet_funds',
-      'issue_booking_from_wallet', 'record_change_payment', 'approve_topup_request',
-      'expire_pending_topup_requests'
+      'platform_adjust_wallet', 'assert_wallet_funds',
+      'issue_booking_from_wallet', 'record_change_payment', 'approve_topup_request'
     )
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f.signature);
     execute format('grant execute on function %s to service_role', f.signature);
   end loop;
 end $$;
+
+-- A retired reset must not regain execution privileges during bootstrap.
+revoke all on function public.platform_reset_all_wallets(uuid)
+  from public, anon, authenticated, service_role;
+revoke all on function public.expire_pending_topup_requests()
+  from public, anon, authenticated, service_role;
 
 revoke insert, update, delete, truncate, references, trigger on
   public.agencies, public.branches, public.profiles, public.bookings,

@@ -1,3 +1,16 @@
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+
 -- Additive migration after retail-rounding.sql. Does not activate the model,
 -- reprice existing invoices, erase history or change supplier payment amounts.
 begin;

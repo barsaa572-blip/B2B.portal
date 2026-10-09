@@ -398,13 +398,6 @@ export async function issueBookingFromWallet({ bookingId, actorId }) {
   });
 }
 
-export async function clearAllWalletBalancesAndHistory({ createdBy }) {
-  return secretRequest('/rest/v1/rpc/platform_reset_all_wallets', {
-    method: 'POST',
-    body: { p_created_by: createdBy }
-  });
-}
-
 export async function updateAgency(id, { name, registrationNumber, email, phone, address, active }) {
   const body = {};
   if (name !== undefined) body.name = name;
@@ -820,10 +813,6 @@ export async function approveTopupRequest(id, approvedBy, receipt = {}) {
     }});
   }
   return secretRequest('/rest/v1/rpc/approve_topup_request', { method: 'POST', body: { p_topup_id: id, p_approved_by: approvedBy } });
-}
-
-export async function expirePendingTopupRequests() {
-  return secretRequest('/rest/v1/rpc/expire_pending_topup_requests', { method: 'POST', body: {} });
 }
 
 export async function deleteTopupRequest(profile, id) {

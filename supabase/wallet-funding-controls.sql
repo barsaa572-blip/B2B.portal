@@ -1,26 +1,37 @@
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor.
--- This reset intentionally preserves bookings and top-up invoices; it clears
--- only wallet balances and the wallet ledger/history requested by the admin.
+-- Wallet reset is retired. Keep a non-mutating stub for old callers;
+-- never zero balances or delete financial history through this function.
 
 create or replace function public.platform_reset_all_wallets(p_created_by uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security invoker set search_path = '' as $$
 begin
-  if not exists (
-    select 1 from public.profiles
-    where id = p_created_by and role = 'platform_admin' and active
-  ) then
-    raise exception 'Only an active platform administrator can reset wallets';
-  end if;
-
-  -- Keep an explicit filter here: this is a deliberate ledger reset, not an
-  -- unrestricted REST DELETE request.
-  delete from public.wallet_transactions where agency_id is not null;
-  -- Same safeguard for the balance reset. Every wallet belongs to an agency.
-  update public.wallets
-  set balance_cny = 0, updated_at = now()
-  where agency_id is not null;
+  raise exception using errcode = '42501', message = 'WALLET_RESET_DISABLED';
 end;
 $$;
+revoke all on function public.platform_reset_all_wallets(uuid)
+  from public, anon, authenticated, service_role;
+comment on function public.platform_reset_all_wallets(uuid) is
+  'Retired: wallet balances and financial history must never be reset.';
 
 -- Checks funds only. Do not create a ledger debit here: that must happen in
 -- the same server-side transaction as a confirmed Spring payment/issue call.

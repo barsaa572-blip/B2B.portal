@@ -1,0 +1,1758 @@
+{
+  "enums": [
+    {
+      "name": "user_role",
+      "labels": [
+        "agent",
+        "office_manager",
+        "platform_admin"
+      ]
+    },
+    {
+      "name": "wallet_entry_type",
+      "labels": [
+        "credit",
+        "debit",
+        "adjustment"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "agencies",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "registration_number",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "phone",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "address",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "bookings",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "pnr",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "branch_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "status",
+          "type": "text",
+          "default": "'draft'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "total_cny",
+          "type": "numeric(14,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "itinerary",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "passengers",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "supplier_status",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "supplier_status_next_check_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "supplier_status_lease_until",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "supplier_status_lease_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "retail_price",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "branches",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=ar/postgres}",
+      "rls": true,
+      "name": "cny_funding_receipts",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "topup_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "bank_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "received_cny",
+          "type": "numeric(14,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "verified_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "financial_operations",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "booking_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "amount_cny",
+          "type": "numeric(14,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "state",
+          "type": "text",
+          "default": "'pending'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "password_security",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "password_changed_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "revision",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "portal_pricing_config",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "model",
+          "type": "text",
+          "default": "'legacy'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "activated_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "profiles",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "branch_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "role",
+          "type": "user_role",
+          "default": "'agent'::user_role",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "full_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "email",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "phone",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "retail_pricing",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "booking_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "snapshot",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "state",
+          "type": "text",
+          "default": "'prepared'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "settlement_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "settled_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "topup_requests",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "invoice_number",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "requested_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "amount_cny",
+          "type": "numeric(14,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "payment_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "note",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "status",
+          "type": "text",
+          "default": "'pending'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "approved_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "approved_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "amount_mnt",
+          "type": "numeric(14,0)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "official_cny_mnt_rate",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "markup_mnt",
+          "type": "numeric(14,2)",
+          "default": "4",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "effective_cny_mnt_rate",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "rate_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "service_fee_mnt",
+          "type": "numeric(14,0)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "total_mnt",
+          "type": "numeric(14,0)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "default": "(((date_trunc('day'::text, (now() AT TIME ZONE 'Asia/Ulaanbaatar'::text)) + '1 day'::interval) - '00:00:01'::interval) AT TIME ZONE 'Asia/Ulaanbaatar'::text)",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "correspondent_fee_cny",
+          "type": "numeric(14,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "correspondent_fee_mnt",
+          "type": "numeric(14,0)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "khaan_transfer_fee_mnt",
+          "type": "numeric(14,0)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "bank_transfer_fee_mnt",
+          "type": "numeric(14,0)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "bank_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "pricing_model",
+          "type": "text",
+          "default": "'legacy'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "funding_quote",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "wallet_transactions",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "entry_type",
+          "type": "wallet_entry_type",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "amount_cny",
+          "type": "numeric(14,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "booking_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "amount_mnt",
+          "type": "numeric(18,0)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "fx_rate_mnt",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "name": "wallets",
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "agency_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "balance_cny",
+          "type": "numeric(14,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "acl": null,
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "force_rls": false
+    }
+  ],
+  "indexes": [
+    {
+      "name": "bookings_supplier_status_due_idx",
+      "definition": "CREATE INDEX bookings_supplier_status_due_idx ON public.bookings USING btree (supplier_status_next_check_at) WHERE (status = 'Ticketed'::text)"
+    },
+    {
+      "name": "financial_agency_in_flight",
+      "definition": "CREATE UNIQUE INDEX financial_agency_in_flight ON public.financial_operations USING btree (agency_id) WHERE (state = ANY (ARRAY['pending'::text, 'needs_review'::text]))"
+    },
+    {
+      "name": "financial_operation_once",
+      "definition": "CREATE UNIQUE INDEX financial_operation_once ON public.financial_operations USING btree (booking_id, action, reference) WHERE (state <> 'released'::text)"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "agencies",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((id = current_agency_id()) OR is_platform_admin())",
+      "roles": [
+        "public"
+      ],
+      "tablename": "agencies",
+      "permissive": "PERMISSIVE",
+      "policyname": "agency isolation",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "bookings",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "bookings",
+      "permissive": "PERMISSIVE",
+      "policyname": "agent creates own booking",
+      "with_check": "((created_by = auth.uid()) AND (agency_id = current_agency_id()))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((created_by = auth.uid()) OR is_platform_admin() OR ((agency_id = current_agency_id()) AND (EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'office_manager'::user_role))))))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "bookings",
+      "permissive": "PERMISSIVE",
+      "policyname": "agent own bookings",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(is_platform_admin() OR (agency_id = current_agency_id()))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "bookings",
+      "permissive": "RESTRICTIVE",
+      "policyname": "portal current agency boundary",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "branches",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((agency_id = current_agency_id()) OR is_platform_admin())",
+      "roles": [
+        "public"
+      ],
+      "tablename": "branches",
+      "permissive": "PERMISSIVE",
+      "policyname": "branch isolation",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "profiles",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((id = auth.uid()) OR is_platform_admin())",
+      "roles": [
+        "public"
+      ],
+      "tablename": "profiles",
+      "permissive": "PERMISSIVE",
+      "policyname": "profile own or platform",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "topup_requests",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(is_platform_admin() OR (agency_id = current_agency_id()))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "topup_requests",
+      "permissive": "RESTRICTIVE",
+      "policyname": "portal current agency boundary",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((requested_by = auth.uid()) OR is_platform_admin() OR ((agency_id = current_agency_id()) AND (EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'office_manager'::user_role))))))",
+      "roles": [
+        "public"
+      ],
+      "tablename": "topup_requests",
+      "permissive": "PERMISSIVE",
+      "policyname": "topup request isolation",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "wallet_transactions",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((agency_id = current_agency_id()) OR is_platform_admin())",
+      "roles": [
+        "public"
+      ],
+      "tablename": "wallet_transactions",
+      "permissive": "PERMISSIVE",
+      "policyname": "ledger isolation",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "portal_active_reader()",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "wallets",
+      "permissive": "RESTRICTIVE",
+      "policyname": "active portal readers only",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((agency_id = current_agency_id()) OR is_platform_admin())",
+      "roles": [
+        "public"
+      ],
+      "tablename": "wallets",
+      "permissive": "PERMISSIVE",
+      "policyname": "wallet isolation",
+      "with_check": null
+    }
+  ],
+  "triggers": [
+    {
+      "name": "retail_operation_completed",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER retail_operation_completed AFTER UPDATE OF state ON public.financial_operations FOR EACH ROW EXECUTE FUNCTION retail_operation_completed()"
+    },
+    {
+      "name": "validate_cny_funding_quote",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER validate_cny_funding_quote BEFORE INSERT OR UPDATE ON public.topup_requests FOR EACH ROW EXECUTE FUNCTION validate_cny_funding_quote()"
+    }
+  ],
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "activate_cny_funding()",
+      "definition": "CREATE OR REPLACE FUNCTION public.activate_cny_funding()\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n perform 1 from public.portal_pricing_config where id for update;\r\n if public.cny_funding_ready() then return; end if;\r\n -- User reports no paid funds. Refuse rather than reset or double-charge them.\r\n lock table public.wallets, public.topup_requests, public.financial_operations in share row exclusive mode;\r\n if exists(select 1 from public.wallets where balance_cny<>0)\r\n   or exists(select 1 from public.topup_requests where status='pending')\r\n   or exists(select 1 from public.financial_operations where state in ('pending','needs_review')) then\r\n   raise exception 'Review existing balances, pending invoices and financial operations before activation';\r\n end if;\r\n update public.portal_pricing_config set model='cny-funding-v1',activated_at=now() where id;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "apply_retail_debit(uuid,text,text,uuid,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.apply_retail_debit(p_booking_id uuid, p_action text, p_reference text, p_actor uuid, p_reason text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare b public.bookings; q public.retail_pricing; extra numeric;\r\nbegin\r\n  select * into b from public.bookings where id=p_booking_id for update;\r\n  select * into q from public.retail_pricing where booking_id=b.id and action=p_action and reference=p_reference for update;\r\n  if not found or q.state='settled' then return; end if;\r\n  if q.state <> 'prepared' then raise exception 'Invalid settlement state'; end if;\r\n  if not exists(select 1 from public.financial_operations where booking_id=b.id and action=p_action and reference=p_reference and actor_id=p_actor and state='pending') then raise exception 'Verified payment operation required'; end if;\r\n  extra := (q.snapshot->>'walletCny')::numeric - (q.snapshot->>'supplierCny')::numeric;\r\n  if extra<0 then raise exception 'Invalid retail debit'; end if;\r\n  update public.wallets set balance_cny=balance_cny-extra,updated_at=now() where agency_id=b.agency_id;\r\n  update public.wallet_transactions set amount_cny=-(q.snapshot->>'walletCny')::numeric,\r\n    amount_mnt=-(q.snapshot->>'amountMnt')::numeric,fx_rate_mnt=(q.snapshot->>'rateMnt')::numeric\r\n    where agency_id=b.agency_id and reason=p_reason and entry_type='debit';\r\n  if not found then raise exception 'Original payment ledger entry missing'; end if;\r\n  update public.retail_pricing set state='settled',updated_at=now() where booking_id=b.id and action=p_action and reference=p_reference;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "approve_cny_topup(uuid,uuid,text,numeric)",
+      "definition": "CREATE OR REPLACE FUNCTION public.approve_cny_topup(p_topup_id uuid, p_actor uuid, p_bank_reference text, p_received_cny numeric)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare r public.topup_requests; receipt public.cny_funding_receipts; ref text;\r\nbegin\r\n if not public.cny_funding_ready() or not exists(select 1 from public.profiles where id=p_actor and active and role='platform_admin') then\r\n  raise exception 'Active administrator and CNY funding migration required'; end if;\r\n ref:=upper(trim(p_bank_reference));\r\n if ref is null or length(ref) not between 5 and 200 or p_received_cny is null\r\n   or p_received_cny::text in ('NaN','Infinity','-Infinity') or p_received_cny<=0 or p_received_cny<>round(p_received_cny,2) then\r\n   raise exception 'Verified bank reference and exact net CNY receipt required'; end if;\r\n select * into r from public.topup_requests where id=p_topup_id;\r\n if not found then raise exception 'Invoice not found'; end if;\r\n perform pg_advisory_xact_lock(hashtextextended('financial:'||r.agency_id::text,0));\r\n select * into r from public.topup_requests where id=p_topup_id for update;\r\n if r.pricing_model<>'cny-funding-v1' or p_received_cny is distinct from (r.funding_quote->>'totalCny')::numeric then\r\n  raise exception 'Receipt differs from the invoice; reconcile before credit'; end if;\r\n select * into receipt from public.cny_funding_receipts where topup_id=r.id;\r\n if found then\r\n  if receipt.bank_reference<>ref or receipt.received_cny<>p_received_cny then raise exception 'Receipt has already been recorded differently'; end if;\r\n  return jsonb_build_object('alreadyApproved',true);\r\n end if;\r\n if r.status<>'pending' or not exists(select 1 from public.agencies where id=r.agency_id and active)\r\n   or exists(select 1 from public.financial_operations where agency_id=r.agency_id and state in ('pending','needs_review')) then\r\n  raise exception 'Invoice/agency is unavailable or has an unresolved payment'; end if;\r\n insert into public.cny_funding_receipts(topup_id,bank_reference,received_cny,verified_by) values(r.id,ref,p_received_cny,p_actor);\r\n update public.topup_requests set status='approved',approved_at=now(),approved_by=p_actor where id=r.id;\r\n insert into public.wallets(agency_id,balance_cny,updated_at) values(r.agency_id,r.amount_cny,now())\r\n  on conflict(agency_id) do update set balance_cny=public.wallets.balance_cny+excluded.balance_cny,updated_at=now();\r\n insert into public.wallet_transactions(agency_id,entry_type,amount_cny,amount_mnt,fx_rate_mnt,reason,created_by)\r\n  values(r.agency_id,'credit',r.amount_cny,r.amount_mnt,r.effective_cny_mnt_rate,'Top-up approved: '||r.invoice_number,p_actor);\r\n return jsonb_build_object('creditedCny',r.amount_cny,'serviceFeeCny',(r.funding_quote->>'serviceFeeCny')::numeric);\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "approve_topup_request_legacy(uuid,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.approve_topup_request_legacy(p_topup_id uuid, p_approved_by uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare request_row public.topup_requests;\r\nbegin\r\n  if not exists (\r\n    select 1 from public.profiles\r\n    where id = p_approved_by and role = 'platform_admin' and active\r\n  ) then\r\n    raise exception 'Only an active platform administrator can approve top-ups';\r\n  end if;\r\n\r\n  select * into request_row\r\n  from public.topup_requests\r\n  where id = p_topup_id\r\n  for update;\r\n\r\n  if not found then\r\n    raise exception 'Top-up request not found';\r\n  end if;\r\n\r\n  if request_row.status <> 'pending' then\r\n    raise exception 'This top-up request has already been processed';\r\n  end if;\r\n\r\n  update public.topup_requests\r\n  set status = 'approved', approved_at = now(), approved_by = p_approved_by\r\n  where id = p_topup_id;\r\n\r\n  update public.wallets\r\n  set balance_cny = balance_cny + request_row.amount_cny,\r\n      updated_at = now()\r\n  where agency_id = request_row.agency_id;\r\n\r\n  insert into public.wallet_transactions (agency_id, entry_type, amount_cny, reason, created_by)\r\n  values (\r\n    request_row.agency_id,\r\n    'credit',\r\n    request_row.amount_cny,\r\n    'Top-up approved: ' || request_row.invoice_number,\r\n    p_approved_by\r\n  );\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "approve_topup_request(uuid,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.approve_topup_request(p_topup_id uuid, p_approved_by uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n if exists(select 1 from public.topup_requests where id=p_topup_id and pricing_model='cny-funding-v1') then\r\n  raise exception 'Verified CNY receipt required';\r\n end if;\r\n perform public.approve_topup_request_legacy(p_topup_id,p_approved_by);\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "assert_wallet_funds(uuid,numeric,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.assert_wallet_funds(p_agency_id uuid, p_amount_cny numeric, p_actor_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  current_balance numeric;\r\nbegin\r\n  if coalesce(p_amount_cny, 0) < 0 then\r\n    raise exception 'Wallet amount cannot be negative';\r\n  end if;\r\n\r\n  if not exists (\r\n    select 1 from public.profiles\r\n    where id = p_actor_id and active\r\n      and (role = 'platform_admin' or agency_id = p_agency_id)\r\n  ) then\r\n    raise exception 'You do not have access to this agency wallet';\r\n  end if;\r\n\r\n  select balance_cny into current_balance\r\n  from public.wallets\r\n  where agency_id = p_agency_id\r\n  for share;\r\n\r\n  if not found then\r\n    raise exception 'Wallet not found for this agency';\r\n  end if;\r\n\r\n  if coalesce(current_balance, 0) < p_amount_cny then\r\n    raise exception 'Insufficient wallet balance. Required: % CNY. Available: % CNY.',\r\n      round(p_amount_cny, 2), round(current_balance, 2);\r\n  end if;\r\n\r\n  return jsonb_build_object('ok', true, 'availableCny', current_balance, 'requiredCny', p_amount_cny);\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "begin_financial_operation_base(uuid,text,text,text,numeric)",
+      "definition": "CREATE OR REPLACE FUNCTION public.begin_financial_operation_base(p_actor uuid, p_pnr text, p_action text, p_reference text, p_amount numeric)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare b public.bookings; operation_id uuid; current_balance numeric; q jsonb;\r\nbegin\r\n  if p_action is null or p_action not in ('issue', 'change', 'refund')\r\n    or p_reference is null or length(p_reference) not between 1 and 500\r\n    or p_amount is null or p_amount::text in ('NaN', 'Infinity', '-Infinity') or p_amount < 0 then\r\n    raise exception 'Invalid financial operation';\r\n  end if;\r\n  select * into b from public.bookings where pnr = p_pnr;\r\n  if not found then raise exception 'Booking not found'; end if;\r\n  if not exists(select 1 from public.profiles p where p.id = p_actor and p.active\r\n    and (p.role = 'platform_admin' or (p.agency_id = b.agency_id\r\n      and (p.role = 'office_manager' or (p.role = 'agent' and b.created_by = p.id))\r\n      and exists(select 1 from public.agencies a where a.id = b.agency_id and a.active)))) then\r\n    raise exception 'Booking access denied';\r\n  end if;\r\n  -- Serialise agency spending across different tickets and backend processes.\r\n  perform pg_advisory_xact_lock(hashtextextended('financial:' || b.agency_id::text, 0));\r\n  select * into b from public.bookings where id = b.id for update;\r\n  if exists(select 1 from public.financial_operations where agency_id = b.agency_id\r\n    and state in ('pending','needs_review')) then\r\n    raise exception 'Agency has a financial operation in progress or awaiting reconciliation. Do not retry payment';\r\n  end if;\r\n  if exists(select 1 from public.financial_operations where booking_id = b.id\r\n    and action = p_action and reference = p_reference and state <> 'released') then\r\n    raise exception 'This financial operation has already been submitted';\r\n  end if;\r\n  if p_action = 'issue' then\r\n    if b.status <> 'Reserved' or b.created_at <= now() - interval '30 minutes'\r\n      or p_amount <= 0 or round(p_amount,2) <> b.total_cny then\r\n      raise exception 'Booking is not eligible for ticket issue';\r\n    end if;\r\n  else\r\n    if b.status <> 'Ticketed' then raise exception 'Ticketed booking required'; end if;\r\n  end if;\r\n  if p_action = 'change' then\r\n    q := b.itinerary->'changeQuotes'->p_reference;\r\n    if q is null or (q->>'securityVersion') is distinct from '1'\r\n      or (q->>'appId') is distinct from p_reference\r\n      or not (q ? 'quotedAt') or not ((q->'amountsCny') ? 'additionalPayment')\r\n      or (q->>'quotedAt')::timestamptz < now() - interval '15 minutes'\r\n      or (q->>'quotedAt')::timestamptz > now()\r\n      or round((q->'amountsCny'->>'additionalPayment')::numeric,2) is distinct from round(p_amount,2) then\r\n      raise exception 'A current matching server quote is required';\r\n    end if;\r\n  end if;\r\n  select balance_cny into current_balance from public.wallets where agency_id = b.agency_id for update;\r\n  if not found then raise exception 'Wallet not found'; end if;\r\n  if p_action <> 'refund' and (current_balance::text in ('NaN','Infinity','-Infinity') or current_balance < round(p_amount,2)) then raise exception 'Insufficient wallet balance'; end if;\r\n  insert into public.financial_operations(agency_id, booking_id, actor_id, action, reference, amount_cny)\r\n    values(b.agency_id, b.id, p_actor, p_action, p_reference, round(p_amount,2)) returning id into operation_id;\r\n  return operation_id;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "begin_financial_operation(uuid,text,text,text,numeric,jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION public.begin_financial_operation(p_actor uuid, p_pnr text, p_action text, p_reference text, p_amount numeric, p_expected_retail jsonb DEFAULT NULL::jsonb)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare operation uuid; q public.retail_pricing; b public.bookings; available numeric;\r\nbegin\r\n  operation := public.begin_financial_operation_base(p_actor,p_pnr,p_action,p_reference,p_amount);\r\n  select * into b from public.bookings where pnr=p_pnr;\r\n  select * into q from public.retail_pricing where booking_id=b.id and action=p_action and reference=p_reference for update;\r\n  if found then\r\n    if p_expected_retail is distinct from (q.snapshot - array['supplierCny','marginCny','adjustmentMnt','conversionResidualMnt']) then raise exception 'The confirmed retail price changed'; end if;\r\n    if q.state <> 'prepared' or q.updated_at < now()-interval '15 minutes'\r\n      or (p_action<>'refund' and (q.snapshot->>'supplierCny')::numeric <> round(p_amount,2)) then raise exception 'Retail price expired or changed; review the price again'; end if;\r\n    select balance_cny into available from public.wallets where agency_id=b.agency_id for update;\r\n    if p_action<>'refund' and available < (q.snapshot->>'walletCny')::numeric then raise exception 'Insufficient wallet balance'; end if;\r\n    update public.financial_operations set amount_cny=(q.snapshot->>'walletCny')::numeric where id=operation;\r\n  elsif p_expected_retail is not null or (b.retail_price is not null and p_action='issue') then\r\n    raise exception 'Retail price is missing. No supplier payment was sent';\r\n  end if;\r\n  return operation;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "claim_spring_status_checks()",
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_spring_status_checks()\n RETURNS SETOF bookings\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n  return query\r\n  with candidates as (\r\n    select b.id from public.bookings b\r\n    where b.status = 'Ticketed' and b.pnr not like 'B2B%'\r\n      and (b.supplier_status_lease_until is null or b.supplier_status_lease_until < now())\r\n      and (b.supplier_status_next_check_at <= now()\r\n        or b.supplier_status->>'revision' is distinct from md5(jsonb_build_array(b.itinerary->'flights', b.itinerary->'departureDate', b.itinerary->'returnDate', b.passengers)::text))\r\n    order by b.supplier_status_next_check_at nulls first, b.id\r\n    limit 5 for update skip locked\r\n  )\r\n  update public.bookings b set supplier_status_lease_until = now() + interval '5 minutes',\r\n    supplier_status_lease_id = gen_random_uuid(),\r\n    supplier_status = b.supplier_status || jsonb_build_object('claimedRevision', md5(jsonb_build_array(b.itinerary->'flights', b.itinerary->'departureDate', b.itinerary->'returnDate', b.passengers)::text))\r\n  from candidates c where b.id = c.id returning b.*;\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "cny_funding_ready()",
+      "definition": "CREATE OR REPLACE FUNCTION public.cny_funding_ready()\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n select exists(select 1 from public.portal_pricing_config where id and model='cny-funding-v1')\r\n   and to_regprocedure('public.approve_cny_topup(uuid,uuid,text,numeric)') is not null\r\n   and position('wallet is distinct from supplier' in pg_get_functiondef('public.store_retail_price(text,text,text,uuid,jsonb,jsonb)'::regprocedure))>0\r\n   and (select bool_and(c.relrowsecurity) from pg_class c where c.oid in ('public.cny_funding_receipts'::regclass,'public.portal_pricing_config'::regclass))\r\n   and not exists(select 1 from (values('anon'),('authenticated')) as roles(name)\r\n     where has_table_privilege(roles.name,'public.cny_funding_receipts','SELECT,INSERT,UPDATE,DELETE')\r\n        or has_table_privilege(roles.name,'public.portal_pricing_config','SELECT,INSERT,UPDATE,DELETE')\r\n        or has_function_privilege(roles.name,'public.activate_cny_funding()','EXECUTE')\r\n        or has_function_privilege(roles.name,'public.approve_cny_topup(uuid,uuid,text,numeric)','EXECUTE'))\r\n   and not has_function_privilege('service_role','public.approve_topup_request_legacy(uuid,uuid)','EXECUTE');\r\n$function$\n"
+    },
+    {
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "current_agency_id()",
+      "definition": "CREATE OR REPLACE FUNCTION public.current_agency_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  select agency_id\r\n  from public.profiles\r\n  where id = auth.uid() and active\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "expire_pending_topup_requests()",
+      "definition": "CREATE OR REPLACE FUNCTION public.expire_pending_topup_requests()\n RETURNS void\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  update public.topup_requests\r\n  set status = 'cancelled'\r\n  where status = 'pending' and expires_at <= now();\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "finish_financial_operation(uuid,uuid,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.finish_financial_operation(p_id uuid, p_actor uuid, p_state text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n  if p_state is null or p_state not in ('completed','needs_review') then raise exception 'Invalid operation state'; end if;\r\n  update public.financial_operations set state = p_state, updated_at = now()\r\n    where id = p_id and actor_id = p_actor and state = 'pending';\r\n  if not found then raise exception 'Financial operation cannot be updated'; end if;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "finish_spring_status_check(uuid,uuid,text,jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION public.finish_spring_status_check(p_booking_id uuid, p_lease_id uuid, p_revision text, p_result jsonb)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare b public.bookings; current_revision text;\r\nbegin\r\n  select * into b from public.bookings where id = p_booking_id for update;\r\n  if not found or b.supplier_status_lease_id is distinct from p_lease_id or p_lease_id is null then return false; end if;\r\n  current_revision := md5(jsonb_build_array(b.itinerary->'flights', b.itinerary->'departureDate', b.itinerary->'returnDate', b.passengers)::text);\r\n  if b.status <> 'Ticketed' or current_revision is distinct from p_revision then\r\n    update public.bookings set supplier_status_lease_until = null, supplier_status_lease_id = null,\r\n      supplier_status_next_check_at = now() where id = b.id;\r\n    return false;\r\n  end if;\r\n  update public.bookings set\r\n    supplier_status = case when p_result is null then\r\n      b.supplier_status || jsonb_build_object('result', 'error', 'lastAttemptAt', now(), 'revision', current_revision)\r\n    else p_result || jsonb_build_object('revision', current_revision) end,\r\n    supplier_status_next_check_at = now() + case\r\n      when p_result->>'result' = 'ok' and jsonb_array_length(p_result->'records') > 0\r\n        and not exists (select 1 from jsonb_array_elements(p_result->'records') r where r->>'flag' <> '40')\r\n      then interval '24 hours' else interval '15 minutes' end,\r\n    supplier_status_lease_until = null, supplier_status_lease_id = null\r\n  where id = b.id;\r\n  return true;\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "is_platform_admin()",
+      "definition": "CREATE OR REPLACE FUNCTION public.is_platform_admin()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  select exists (\r\n    select 1\r\n    from public.profiles\r\n    where id = auth.uid()\r\n      and role = 'platform_admin'\r\n      and active\r\n  )\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "issue_booking_from_wallet_base(uuid,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.issue_booking_from_wallet_base(p_booking_id uuid, p_actor_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  booking_row public.bookings;\r\n  current_balance numeric;\r\nbegin\r\n  select * into booking_row\r\n  from public.bookings\r\n  where id = p_booking_id\r\n  for update;\r\n\r\n  if not found then\r\n    raise exception 'Booking not found';\r\n  end if;\r\n\r\n  if not exists (\r\n    select 1 from public.profiles\r\n    where id = p_actor_id and active\r\n      and (\r\n        role = 'platform_admin'\r\n        or id = booking_row.created_by\r\n        or (role = 'office_manager' and agency_id = booking_row.agency_id)\r\n      )\r\n  ) then\r\n    raise exception 'You do not have access to issue this booking';\r\n  end if;\r\n\r\n  if booking_row.status <> 'Reserved' then\r\n    raise exception 'This booking is no longer available for ticket issue';\r\n  end if;\r\n\r\n  if booking_row.created_at <= now() - interval '30 minutes' then\r\n    update public.bookings set status = 'Cancelled' where id = booking_row.id;\r\n    raise exception 'The 30-minute ticketing deadline has passed. The reservation has been cancelled.';\r\n  end if;\r\n\r\n  select balance_cny into current_balance\r\n  from public.wallets\r\n  where agency_id = booking_row.agency_id\r\n  for update;\r\n\r\n  if not found then\r\n    raise exception 'Wallet not found for this agency';\r\n  end if;\r\n\r\n  if coalesce(current_balance, 0) < booking_row.total_cny then\r\n    raise exception 'Insufficient wallet balance. Required: % CNY. Available: % CNY.',\r\n      round(booking_row.total_cny, 2), round(current_balance, 2);\r\n  end if;\r\n\r\n  update public.wallets\r\n  set balance_cny = balance_cny - booking_row.total_cny,\r\n      updated_at = now()\r\n  where agency_id = booking_row.agency_id;\r\n\r\n  insert into public.wallet_transactions (agency_id, entry_type, amount_cny, reason, created_by)\r\n  values (\r\n    booking_row.agency_id,\r\n    'debit',\r\n    -booking_row.total_cny,\r\n    'Ticket issue: ' || coalesce(booking_row.pnr, booking_row.id::text),\r\n    p_actor_id\r\n  );\r\n\r\n  update public.bookings\r\n  set status = 'Ticketed'\r\n  where id = booking_row.id;\r\n\r\n  return jsonb_build_object(\r\n    'id', booking_row.id,\r\n    'pnr', booking_row.pnr,\r\n    'status', 'Ticketed',\r\n    'debitedCny', booking_row.total_cny,\r\n    'balanceCny', current_balance - booking_row.total_cny\r\n  );\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "issue_booking_from_wallet(uuid,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.issue_booking_from_wallet(p_booking_id uuid, p_actor_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare result jsonb; b public.bookings; q public.retail_pricing;\r\nbegin\r\n  result := public.issue_booking_from_wallet_base(p_booking_id,p_actor_id);\r\n  select * into b from public.bookings where id=p_booking_id;\r\n  perform public.apply_retail_debit(b.id,'issue',b.pnr,p_actor_id,'Ticket issue: '||b.pnr);\r\n  select * into q from public.retail_pricing where booking_id=b.id and action='issue' and reference=b.pnr;\r\n  if found then result := result || jsonb_build_object('debitedCny',(q.snapshot->>'walletCny')::numeric,'balanceCny',(select balance_cny from public.wallets where agency_id=b.agency_id)); end if;\r\n  return result;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "platform_adjust_wallet(uuid,numeric,text,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.platform_adjust_wallet(p_agency_id uuid, p_amount numeric, p_reason text, p_created_by uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n  if p_amount = 0 then\r\n    raise exception 'Amount must not be zero';\r\n  end if;\r\n\r\n  if not exists (\r\n    select 1 from public.profiles\r\n    where id = p_created_by\r\n      and role = 'platform_admin'\r\n      and active\r\n  ) then\r\n    raise exception 'Only an active platform administrator can adjust a wallet';\r\n  end if;\r\n\r\n  update public.wallets\r\n  set balance_cny = balance_cny + p_amount,\r\n      updated_at = now()\r\n  where agency_id = p_agency_id;\r\n\r\n  if not found then\r\n    raise exception 'Wallet not found';\r\n  end if;\r\n\r\n  insert into public.wallet_transactions (\r\n    agency_id, entry_type, amount_cny, reason, created_by\r\n  )\r\n  values (\r\n    p_agency_id, 'adjustment', p_amount, p_reason, p_created_by\r\n  );\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "owner": "postgres",
+      "comment": "Retired: wallet balances and financial history must never be reset.",
+      "signature": "platform_reset_all_wallets(uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.platform_reset_all_wallets(p_created_by uuid)\n RETURNS void\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n  raise exception using errcode = '42501', message = 'WALLET_RESET_DISABLED';\nend;\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "portal_active_reader()",
+      "definition": "CREATE OR REPLACE FUNCTION public.portal_active_reader()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  select exists(select 1 from public.profiles p where p.id = auth.uid() and p.active\r\n    and (p.role = 'platform_admin' or (p.role in ('agent','office_manager')\r\n      and exists(select 1 from public.agencies a where a.id = p.agency_id and a.active))));\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "portal_auth_security_ready()",
+      "definition": "CREATE OR REPLACE FUNCTION public.portal_auth_security_ready()\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\n  select not exists (\r\n    select 1 from unnest(array['agencies','branches','profiles','bookings','wallets',\r\n      'wallet_transactions','topup_requests','financial_operations','retail_pricing',\r\n      'password_security']) t(name)\r\n    cross join unnest(array['anon','authenticated']) r(name)\r\n    where has_table_privilege(r.name, 'public.' || t.name, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')\r\n      or has_any_column_privilege(r.name, 'public.' || t.name, 'SELECT,INSERT,UPDATE,REFERENCES')\r\n  ) and not exists (\r\n    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace\r\n    cross join unnest(array['anon','authenticated']) r(name)\r\n    where n.nspname = 'public' and c.relkind in ('v','m')\r\n      and (has_table_privilege(r.name, c.oid, 'SELECT')\r\n        or has_any_column_privilege(r.name, c.oid, 'SELECT'))\r\n  ) and not exists (\r\n    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace\r\n    cross join unnest(array['anon','authenticated']) r(name)\r\n    where n.nspname = 'public' and p.prosecdef\r\n      and p.proname not in ('current_agency_id','is_platform_admin','portal_active_reader')\r\n      and has_function_privilege(r.name, p.oid, 'EXECUTE')\r\n  );\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "record_change_payment_base(text,text,numeric,uuid,boolean)",
+      "definition": "CREATE OR REPLACE FUNCTION public.record_change_payment_base(p_pnr text, p_app_id text, p_amount numeric, p_actor uuid, p_check_only boolean DEFAULT false)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  b public.bookings;\r\n  balance numeric;\r\n  previous numeric;\r\n  reference text;\r\nbegin\r\n  if p_amount is null or p_amount <= 0 or p_app_id is null or p_app_id !~ '^[0-9]+$' then\r\n    raise exception 'Invalid change payment';\r\n  end if;\r\n  select * into b from public.bookings where pnr = p_pnr;\r\n  if not found then raise exception 'Booking not found'; end if;\r\n  if not exists (select 1 from public.profiles p where p.id = p_actor and p.active\r\n    and (p.role = 'platform_admin' or (p.agency_id = b.agency_id\r\n      and (p.role = 'office_manager' or (p.role = 'agent' and b.created_by = p.id))\r\n      and exists(select 1 from public.agencies a where a.id = b.agency_id and a.active)))) then\r\n    raise exception 'Booking access denied';\r\n  end if;\r\n  select balance_cny into balance from public.wallets where agency_id = b.agency_id for update;\r\n  if not found then raise exception 'Wallet not found'; end if;\r\n  reference := 'Change fee payment: ' || p_pnr || ' | Spring application ' || p_app_id;\r\n  select amount_cny into previous from public.wallet_transactions\r\n    where agency_id = b.agency_id and reason = reference limit 1;\r\n  if found then\r\n    if previous <> -round(p_amount, 2) then raise exception 'Change amount mismatch'; end if;\r\n    return jsonb_build_object('recorded', true);\r\n  end if;\r\n  if p_check_only then\r\n    if balance < round(p_amount, 2) then raise exception 'Insufficient wallet balance'; end if;\r\n    return jsonb_build_object('recorded', false);\r\n  end if;\r\n  -- Supplier has already accepted payment. Always record the actual liability.\r\n  update public.wallets set balance_cny = balance_cny - round(p_amount, 2), updated_at = now()\r\n    where agency_id = b.agency_id;\r\n  insert into public.wallet_transactions(agency_id, entry_type, amount_cny, reason, created_by)\r\n    values(b.agency_id, 'debit', -round(p_amount, 2), reference, p_actor);\r\n  return jsonb_build_object('recorded', true);\r\nend;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "record_change_payment(text,text,numeric,uuid,boolean)",
+      "definition": "CREATE OR REPLACE FUNCTION public.record_change_payment(p_pnr text, p_app_id text, p_amount numeric, p_actor uuid, p_check_only boolean DEFAULT false)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare b public.bookings; q public.retail_pricing; result jsonb;\r\nbegin\r\n  select * into b from public.bookings where pnr=p_pnr;\r\n  if not exists(select 1 from public.profiles p where p.id=p_actor and p.active\r\n    and (p.role='platform_admin' or (p.agency_id=b.agency_id and (p.role='office_manager' or b.created_by=p.id)))) then raise exception 'Booking access denied'; end if;\r\n  select * into q from public.retail_pricing where booking_id=b.id and action='change' and reference=p_app_id;\r\n  if found and q.state='settled' then\r\n    if (q.snapshot->>'supplierCny')::numeric <> round(p_amount,2) then raise exception 'Change amount mismatch'; end if;\r\n    return jsonb_build_object('recorded',true);\r\n  end if;\r\n  result := public.record_change_payment_base(p_pnr,p_app_id,p_amount,p_actor,p_check_only);\r\n  if not p_check_only then perform public.apply_retail_debit(b.id,'change',p_app_id,p_actor,'Change fee payment: '||p_pnr||' | Spring application '||p_app_id); end if;\r\n  return result;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "record_portal_password_change(uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.record_portal_password_change(p_user_id uuid)\n RETURNS void\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\r\n  insert into public.password_security(user_id, password_changed_at, revision)\r\n  values(p_user_id, clock_timestamp(), gen_random_uuid())\r\n  on conflict(user_id) do update set password_changed_at = excluded.password_changed_at,\r\n    revision = excluded.revision;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "retail_operation_completed()",
+      "definition": "CREATE OR REPLACE FUNCTION public.retail_operation_completed()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\nbegin\r\n  if new.state='completed' and old.state='pending' then\r\n    update public.retail_pricing set state=case when new.action='refund' then 'awaiting_settlement' else 'settled' end,updated_at=now()\r\n      where booking_id=new.booking_id and action=new.action and reference=new.reference and state='prepared'\r\n      and (new.action='refund' or (new.action='change' and (snapshot->>'walletCny')::numeric=0));\r\n  end if;\r\n  return new;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "retail_pricing_ready()",
+      "definition": "CREATE OR REPLACE FUNCTION public.retail_pricing_ready()\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  select to_regprocedure('public.begin_financial_operation(uuid,text,text,text,numeric,jsonb)') is not null\r\n    and to_regprocedure('public.settle_retail_refund(uuid,text,uuid,numeric,text)') is not null;\r\n$function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "settle_retail_refund(uuid,text,uuid,numeric,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.settle_retail_refund(p_booking_id uuid, p_reference text, p_actor uuid, p_supplier_received numeric, p_settlement_reference text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare b public.bookings; q public.retail_pricing;\r\nbegin\r\n  if not exists(select 1 from public.profiles where id=p_actor and active and role='platform_admin') then raise exception 'Administrator access required'; end if;\r\n  if p_settlement_reference is null or length(trim(p_settlement_reference)) not between 5 and 200 then raise exception 'Verified supplier settlement reference required'; end if;\r\n  select * into b from public.bookings where id=p_booking_id for update;\r\n  if not found then raise exception 'Booking not found'; end if;\r\n  select * into q from public.retail_pricing where booking_id=b.id and action='refund' and reference=p_reference for update;\r\n  if not found or p_supplier_received is distinct from (q.snapshot->>'supplierCny')::numeric then raise exception 'Supplier refund amount differs; reconcile before crediting'; end if;\r\n  if q.state='settled' then return jsonb_build_object('alreadySettled',true); end if;\r\n  if q.state<>'awaiting_settlement' or not exists(select 1 from public.financial_operations where booking_id=b.id and action='refund' and reference=p_reference and state='completed') then raise exception 'Refund request has not completed'; end if;\r\n  perform 1 from public.wallets where agency_id=b.agency_id for update;\r\n  if not found then raise exception 'Wallet not found'; end if;\r\n  update public.wallets set balance_cny=balance_cny+(q.snapshot->>'walletCny')::numeric,updated_at=now() where agency_id=b.agency_id;\r\n  if (q.snapshot->>'walletCny')::numeric > 0 then\r\n  insert into public.wallet_transactions(agency_id,entry_type,amount_cny,amount_mnt,fx_rate_mnt,reason,created_by)\r\n    values(b.agency_id,'credit',(q.snapshot->>'walletCny')::numeric,(q.snapshot->>'amountMnt')::numeric,(q.snapshot->>'rateMnt')::numeric,'Refund settled: '||b.pnr||' | '||p_reference,p_actor);\r\n  end if;\r\n  update public.retail_pricing set state='settled',settlement_reference=trim(p_settlement_reference),settled_by=p_actor,updated_at=now()\r\n    where booking_id=b.id and action='refund' and reference=p_reference;\r\n  update public.bookings set itinerary=jsonb_set(itinerary,'{refundHistory}',\r\n    (select coalesce(jsonb_agg(case when entry->'quote'->>'settlementKey'=p_reference then entry || jsonb_build_object('status','settled','settledAt',now()) else entry end),'[]'::jsonb)\r\n      from jsonb_array_elements(coalesce(itinerary->'refundHistory','[]'::jsonb)) entry)) where id=b.id;\r\n  return jsonb_build_object('creditedCny',(q.snapshot->>'walletCny')::numeric,'amountMnt',(q.snapshot->>'amountMnt')::numeric);\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "store_retail_price(text,text,text,uuid,jsonb,jsonb)",
+      "definition": "CREATE OR REPLACE FUNCTION public.store_retail_price(p_pnr text, p_action text, p_reference text, p_actor uuid, p_snapshot jsonb, p_public jsonb)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare b public.bookings; rate numeric; mnt numeric; wallet numeric; supplier numeric;\r\nbegin\r\n  select * into b from public.bookings where pnr = p_pnr for update;\r\n  if not found then raise exception 'Booking not found'; end if;\r\n  if not exists(select 1 from public.agencies where id=b.agency_id and active) then raise exception 'Agency is inactive'; end if;\r\n  if not exists(select 1 from public.profiles p where p.id = p_actor and p.active\r\n    and (p.role = 'platform_admin' or (p.agency_id = b.agency_id and\r\n      (p.role = 'office_manager' or b.created_by = p.id)))) then raise exception 'Booking access denied'; end if;\r\n  if p_action not in ('issue','change','refund') or p_reference is null or length(p_reference) not between 1 and 500\r\n    or (p_action = 'issue' and b.status <> 'Reserved') or (p_action <> 'issue' and b.status <> 'Ticketed') then raise exception 'Invalid pricing operation'; end if;\r\n  if public.cny_funding_ready() is distinct from (p_snapshot->>'version'='3') then raise exception 'Pricing model changed; refresh the price'; end if;\r\n  rate := (p_snapshot->>'rateMnt')::numeric;\r\n  mnt := (p_snapshot->>'amountMnt')::numeric;\r\n  wallet := (p_snapshot->>'walletCny')::numeric;\r\n  supplier := (p_snapshot->>'supplierCny')::numeric;\r\n  if (p_snapshot->>'version' not in ('1','3') or p_snapshot->>'version' is null) or rate is null or rate <= 0 or rate > 1000000\r\n    or mnt is null or mnt < 0 or mnt > 100000000000000 or mod(mnt,case when p_snapshot->>'version'='3' then 10 else 100 end) <> 0\r\n    or supplier is null or supplier < 0 or supplier > 10000000000\r\n    or (case when p_snapshot->>'version'='3' then wallet is distinct from supplier else wallet is distinct from round(mnt/rate,2) end)\r\n    or p_snapshot->>'direction' is distinct from (case when p_action='refund' then 'refund' else 'charge' end)\r\n    or p_public is distinct from (p_snapshot - array['supplierCny','marginCny','adjustmentMnt','conversionResidualMnt']) then\r\n    raise exception 'Invalid retail settlement quote';\r\n  end if;\r\n  if exists(select 1 from public.financial_operations where booking_id=b.id and state in ('pending','needs_review')) then raise exception 'Resolve the current financial operation first'; end if;\r\n  if exists(select 1 from public.retail_pricing where booking_id=b.id and action=p_action and reference=p_reference and state<>'prepared') then raise exception 'Pricing is already settled'; end if;\r\n  insert into public.retail_pricing(booking_id,action,reference,snapshot,actor_id)\r\n    values(b.id,p_action,p_reference,p_snapshot,p_actor)\r\n    on conflict(booking_id,action,reference) do update set snapshot=excluded.snapshot,actor_id=excluded.actor_id,updated_at=now();\r\n  if p_action='issue' then update public.bookings set retail_price=p_public,total_cny=supplier where id=b.id; end if;\r\nend $function$\n"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "comment": null,
+      "signature": "validate_cny_funding_quote()",
+      "definition": "CREATE OR REPLACE FUNCTION public.validate_cny_funding_quote()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare q jsonb; rate numeric; principal numeric; fee numeric; correspondent numeric; bank numeric; tariff numeric;\r\nbegin\r\n if tg_op='UPDATE' then\r\n   if new.pricing_model is distinct from old.pricing_model then raise exception 'Saved invoice model is immutable'; end if;\r\n   if old.pricing_model='cny-funding-v1' and\r\n    (new.funding_quote is distinct from old.funding_quote or new.amount_cny is distinct from old.amount_cny\r\n     or new.amount_mnt is distinct from old.amount_mnt or new.total_mnt is distinct from old.total_mnt\r\n     or new.service_fee_mnt is distinct from old.service_fee_mnt or new.correspondent_fee_mnt is distinct from old.correspondent_fee_mnt\r\n     or new.bank_transfer_fee_mnt is distinct from old.bank_transfer_fee_mnt or new.agency_id<>old.agency_id\r\n     or new.requested_by<>old.requested_by or new.pricing_model<>old.pricing_model\r\n     or new.effective_cny_mnt_rate is distinct from old.effective_cny_mnt_rate\r\n     or new.rate_date is distinct from old.rate_date or new.invoice_number is distinct from old.invoice_number) then\r\n     raise exception 'Saved CNY funding invoice is immutable'; end if;\r\n   return new;\r\n end if;\r\n if new.pricing_model='legacy' then\r\n   if public.cny_funding_ready() then raise exception 'Legacy funding is disabled'; end if;\r\n   return new;\r\n end if;\r\n q:=new.funding_quote;\r\n if new.pricing_model<>'cny-funding-v1' or not public.cny_funding_ready()\r\n   or q->>'model' is distinct from 'cny-funding-v1' or q->>'version' is distinct from '1'\r\n   or q->>'transferCurrency' is distinct from 'CNY' then raise exception 'Invalid CNY funding model'; end if;\r\n principal:=(q->>'principalCny')::numeric; rate:=(q->>'rateMnt')::numeric;\r\n fee:=(q->>'serviceFeeCny')::numeric; correspondent:=(q->>'correspondentFeeCny')::numeric;\r\n bank:=(q->>'bankFeeCny')::numeric;\r\n tariff:=case when principal<=50000 then 5000 when principal<=100000 then 10000 else 20000 end;\r\n if principal is null or principal<=0 or principal>2000000 or principal<>round(principal,2)\r\n   or rate is null or rate<=0 or rate>1000000\r\n   or fee is distinct from round(principal*.03,2)\r\n   or correspondent is distinct from (case when principal<=100000 then 50 else 150 end)\r\n   or bank is distinct from ceil(tariff/rate*100)/100\r\n   or q->>'serviceFeePercent' is distinct from '3'\r\n   or q->'account'->>'iban' is distinct from 'MN940015001605336659'\r\n   or q->'account'->>'currency' is distinct from 'CNY'\r\n   or (q->>'bankTariffMnt')::numeric is distinct from tariff\r\n   or q->>'rateDate' is distinct from new.rate_date::text\r\n   or new.rate_date > (now() at time zone 'Asia/Ulaanbaatar')::date\r\n   or new.rate_date < (now() at time zone 'Asia/Ulaanbaatar')::date-4\r\n   or new.amount_cny is distinct from principal\r\n   or (q->>'totalCny')::numeric is distinct from principal+fee+correspondent+bank\r\n   or new.amount_mnt is distinct from ceil(principal*rate/10)*10\r\n   or new.service_fee_mnt is distinct from ceil(fee*rate/10)*10\r\n   or new.correspondent_fee_mnt is distinct from ceil(correspondent*rate/10)*10\r\n   or new.bank_transfer_fee_mnt is distinct from ceil(bank*rate/10)*10\r\n   or new.total_mnt is distinct from new.amount_mnt+new.service_fee_mnt+new.correspondent_fee_mnt+new.bank_transfer_fee_mnt\r\n   or (q->>'totalMnt')::numeric is distinct from new.total_mnt\r\n   or new.effective_cny_mnt_rate is distinct from rate\r\n   or new.status is distinct from 'pending' then raise exception 'Invalid CNY funding calculation'; end if;\r\n if not exists(select 1 from public.profiles where id=new.requested_by and active and agency_id=new.agency_id\r\n   and role in ('agent','office_manager','platform_admin'))\r\n   or not exists(select 1 from public.agencies where id=new.agency_id and active) then raise exception 'Funding access denied'; end if;\r\n return new;\r\nend $function$\n"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "agencies_name_key",
+      "definition": "UNIQUE (name)",
+      "table_name": "agencies"
+    },
+    {
+      "name": "agencies_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "agencies"
+    },
+    {
+      "name": "bookings_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id)",
+      "table_name": "bookings"
+    },
+    {
+      "name": "bookings_branch_id_fkey",
+      "definition": "FOREIGN KEY (branch_id) REFERENCES branches(id)",
+      "table_name": "bookings"
+    },
+    {
+      "name": "bookings_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES profiles(id)",
+      "table_name": "bookings"
+    },
+    {
+      "name": "bookings_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "bookings"
+    },
+    {
+      "name": "bookings_pnr_key",
+      "definition": "UNIQUE (pnr)",
+      "table_name": "bookings"
+    },
+    {
+      "name": "bookings_total_cny_check",
+      "definition": "CHECK ((total_cny >= (0)::numeric))",
+      "table_name": "bookings"
+    },
+    {
+      "name": "branches_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE CASCADE",
+      "table_name": "branches"
+    },
+    {
+      "name": "branches_agency_id_name_key",
+      "definition": "UNIQUE (agency_id, name)",
+      "table_name": "branches"
+    },
+    {
+      "name": "branches_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "branches"
+    },
+    {
+      "name": "cny_funding_receipts_bank_reference_key",
+      "definition": "UNIQUE (bank_reference)",
+      "table_name": "cny_funding_receipts"
+    },
+    {
+      "name": "cny_funding_receipts_pkey",
+      "definition": "PRIMARY KEY (topup_id)",
+      "table_name": "cny_funding_receipts"
+    },
+    {
+      "name": "cny_funding_receipts_received_cny_check",
+      "definition": "CHECK ((received_cny > (0)::numeric))",
+      "table_name": "cny_funding_receipts"
+    },
+    {
+      "name": "cny_funding_receipts_topup_id_fkey",
+      "definition": "FOREIGN KEY (topup_id) REFERENCES topup_requests(id)",
+      "table_name": "cny_funding_receipts"
+    },
+    {
+      "name": "cny_funding_receipts_verified_by_fkey",
+      "definition": "FOREIGN KEY (verified_by) REFERENCES profiles(id)",
+      "table_name": "cny_funding_receipts"
+    },
+    {
+      "name": "financial_operations_action_check",
+      "definition": "CHECK ((action = ANY (ARRAY['issue'::text, 'change'::text, 'refund'::text])))",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "financial_operations_actor_id_fkey",
+      "definition": "FOREIGN KEY (actor_id) REFERENCES profiles(id)",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "financial_operations_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id)",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "financial_operations_amount_cny_check",
+      "definition": "CHECK ((amount_cny >= (0)::numeric))",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "financial_operations_booking_id_fkey",
+      "definition": "FOREIGN KEY (booking_id) REFERENCES bookings(id)",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "financial_operations_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "financial_operations_state_check",
+      "definition": "CHECK ((state = ANY (ARRAY['pending'::text, 'needs_review'::text, 'completed'::text, 'released'::text])))",
+      "table_name": "financial_operations"
+    },
+    {
+      "name": "password_security_pkey",
+      "definition": "PRIMARY KEY (user_id)",
+      "table_name": "password_security"
+    },
+    {
+      "name": "password_security_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "table_name": "password_security"
+    },
+    {
+      "name": "portal_pricing_config_id_check",
+      "definition": "CHECK (id)",
+      "table_name": "portal_pricing_config"
+    },
+    {
+      "name": "portal_pricing_config_model_check",
+      "definition": "CHECK ((model = ANY (ARRAY['legacy'::text, 'cny-funding-v1'::text])))",
+      "table_name": "portal_pricing_config"
+    },
+    {
+      "name": "portal_pricing_config_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "portal_pricing_config"
+    },
+    {
+      "name": "profiles_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id)",
+      "table_name": "profiles"
+    },
+    {
+      "name": "profiles_branch_id_fkey",
+      "definition": "FOREIGN KEY (branch_id) REFERENCES branches(id)",
+      "table_name": "profiles"
+    },
+    {
+      "name": "profiles_check",
+      "definition": "CHECK (((role = 'platform_admin'::user_role) OR (agency_id IS NOT NULL)))",
+      "table_name": "profiles"
+    },
+    {
+      "name": "profiles_id_fkey",
+      "definition": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "table_name": "profiles"
+    },
+    {
+      "name": "profiles_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "profiles"
+    },
+    {
+      "name": "retail_pricing_action_check",
+      "definition": "CHECK ((action = ANY (ARRAY['issue'::text, 'change'::text, 'refund'::text])))",
+      "table_name": "retail_pricing"
+    },
+    {
+      "name": "retail_pricing_actor_id_fkey",
+      "definition": "FOREIGN KEY (actor_id) REFERENCES profiles(id)",
+      "table_name": "retail_pricing"
+    },
+    {
+      "name": "retail_pricing_booking_id_fkey",
+      "definition": "FOREIGN KEY (booking_id) REFERENCES bookings(id)",
+      "table_name": "retail_pricing"
+    },
+    {
+      "name": "retail_pricing_pkey",
+      "definition": "PRIMARY KEY (booking_id, action, reference)",
+      "table_name": "retail_pricing"
+    },
+    {
+      "name": "retail_pricing_settled_by_fkey",
+      "definition": "FOREIGN KEY (settled_by) REFERENCES profiles(id)",
+      "table_name": "retail_pricing"
+    },
+    {
+      "name": "retail_pricing_state_check",
+      "definition": "CHECK ((state = ANY (ARRAY['prepared'::text, 'settled'::text, 'awaiting_settlement'::text])))",
+      "table_name": "retail_pricing"
+    },
+    {
+      "name": "topup_requests_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id)",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "topup_requests_amount_cny_check",
+      "definition": "CHECK ((amount_cny > (0)::numeric))",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "topup_requests_approved_by_fkey",
+      "definition": "FOREIGN KEY (approved_by) REFERENCES profiles(id)",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "topup_requests_invoice_number_key",
+      "definition": "UNIQUE (invoice_number)",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "topup_requests_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "topup_requests_requested_by_fkey",
+      "definition": "FOREIGN KEY (requested_by) REFERENCES profiles(id)",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "topup_requests_status_check",
+      "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))",
+      "table_name": "topup_requests"
+    },
+    {
+      "name": "wallet_transactions_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id)",
+      "table_name": "wallet_transactions"
+    },
+    {
+      "name": "wallet_transactions_amount_cny_check",
+      "definition": "CHECK ((amount_cny <> (0)::numeric))",
+      "table_name": "wallet_transactions"
+    },
+    {
+      "name": "wallet_transactions_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES profiles(id)",
+      "table_name": "wallet_transactions"
+    },
+    {
+      "name": "wallet_transactions_pkey",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "wallet_transactions"
+    },
+    {
+      "name": "wallets_agency_id_fkey",
+      "definition": "FOREIGN KEY (agency_id) REFERENCES agencies(id) ON DELETE CASCADE",
+      "table_name": "wallets"
+    },
+    {
+      "name": "wallets_pkey",
+      "definition": "PRIMARY KEY (agency_id)",
+      "table_name": "wallets"
+    }
+  ],
+  "other_relations": []
+}

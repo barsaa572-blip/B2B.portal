@@ -32,7 +32,7 @@ import { airportByCode, searchAirports } from './backend/airport-directory.mjs';
 import { rankSpringAirport } from './backend/spring-route-directory.mjs';
 import { getCnyMntRate, quoteCnyToMnt } from './backend/fx-rate.mjs';
 import { createOfficeAgent, getOfficeUserAccess, requireOfficeManager, updateOfficeAgent } from './backend/supabase-client.mjs';
-import { adjustWallet, approveTopupRequest, assertWalletFunds, clearAllWalletBalancesAndHistory, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getAgencyForTicket, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingChange, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
+import { adjustWallet, approveTopupRequest, assertWalletFunds, createAgency, createPortalBooking, createTopupRequest, createUser, deleteAgency, deleteTopupRequest, deleteUser, expireTicketingDeadlineBookings, getAdminOverview, getAgencyForTicket, getSupabaseStatus, getTopupInvoice, getTopupRequests, getWalletDetails, listPortalBookings, profileForAccessToken, recordPortalBookingChange, refreshAuthSession, requirePlatformAdmin, setPortalBookingSpringAmount, signInWithPassword, syncPortalBookingFromSpring, updateAgency, updatePortalBooking, updateUser } from './backend/supabase-client.mjs';
 
 const PORT = Number(process.env.PORT || 4173);
 const priceQuotes = createPriceQuotes();
@@ -1467,7 +1467,7 @@ try {
       if (req.method === 'POST' && /\/users\/[\w-]+\/invite$/.test(url.pathname)) limitRequest(`resend-invite:${actor}`, 5, 600000);
       if (url.pathname === '/api/topups' && req.method === 'POST') limitRequest(`topup:${actor}`, 5, 600000);
       if (url.pathname === '/api/backend/status' && req.securityProfile.role !== 'platform_admin') return send(res, 403, { error: 'Administrator access required.' });
-      if (url.pathname === '/api/admin/wallet-reset') return send(res, 403, { error: 'Public wallet reset is disabled.' });
+      if (url.pathname === '/api/admin/wallet-reset') return send(res, 403, { error: 'Wallet reset is disabled.', code: 'WALLET_RESET_DISABLED' });
     }
   }
 } catch (error) {
@@ -1732,9 +1732,6 @@ if (agencyStatusMatch && req.method === 'PATCH') {
   if (typeof body.active !== 'boolean') throw new Error('Agency active status must be true or false.');
   return send(res, 200, await updateAgency(agencyStatusMatch[1], { active: body.active }));
 }
-if (url.pathname === '/api/admin/wallet-reset' && req.method === 'POST') { const body = await readJson(req);
-if (body.confirmation !== 'RESET WALLETS') throw new Error('Confirmation text must be RESET WALLETS.');
-await clearAllWalletBalancesAndHistory({ createdBy: admin.id }); return send(res, 200, { ok: true }); }
 const approveMatch = url.pathname.match(/^\/api\/admin\/topups\/([\w-]+)\/approve$/);
 if (approveMatch && req.method === 'POST') {
   const receipt = await readJson(req);

@@ -29,7 +29,9 @@ test('code-only rollout backs up before stop, restores umask and checks service 
   assert.ok(source.indexOf('umask 022')<source.indexOf('task_git merge --ff-only'));
   assert.ok(source.indexOf('service-user runtime imports')<source.indexOf('systemctl start flightb2b'));
   assert.match(source,/status --porcelain --untracked-files=no/);
-  assert.match(source,/task_git diff --quiet[^\n]*package\.json package-lock\.json supabase \.env\.example/);
+  assert.match(source,/task_git diff --quiet[^\n]*package\.json package-lock\.json \.env\.example/);
+  assert.ok(source.indexOf('sql-cleanup-preflight.mjs')<source.indexOf('systemctl stop flightb2b'));
+  assert.match(source,/SQL files are release artifacts only/);
   assert.match(source,/127\.0\.0\.1:4173\/api\/health/);
   assert.match(source,/merge-base --is-ancestor/);
   assert.doesNotMatch(source,/reset --hard|chmod -R|npm ci|docker compose|activate_cny_funding|psql|export .*SECRET/);

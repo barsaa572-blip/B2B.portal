@@ -12,7 +12,8 @@ test "$(task_git rev-parse origin/main)" = "$TASK_RELEASE"
 test -z "$(task_git status --porcelain --untracked-files=no)"
 TASK_BEFORE=$(task_git rev-parse HEAD)
 task_git merge-base --is-ancestor "$TASK_BEFORE" "$TASK_RELEASE"
-task_git diff --quiet "$TASK_BEFORE" "$TASK_RELEASE" -- package.json package-lock.json supabase .env.example
+# SQL files are release artifacts only; database migrations were applied via Supabase.
+task_git diff --quiet "$TASK_BEFORE" "$TASK_RELEASE" -- package.json package-lock.json .env.example
 TASK_NODE=/opt/nexahub-node/bin/node
 test -x "$TASK_NODE"
 test "$("$TASK_NODE" --version | cut -d. -f1)" = v24
@@ -22,6 +23,15 @@ TASK_GROUP=$(id -gn "$TASK_USER")
 systemctl is-active --quiet flightb2b
 # Check existing financial settings without changing them, before downtime.
 "$TASK_NODE" scripts/cny-funding-preflight.mjs
+# Run only the upcoming read-only gate before downtime, without loading migration SQL.
+TASK_GATE_DIR=$(mktemp -d /tmp/nexahub-sql-gate.XXXXXX)
+mkdir -m 700 "$TASK_GATE_DIR/scripts"
+task_git show "$TASK_RELEASE:scripts/sql-cleanup-preflight.mjs" > "$TASK_GATE_DIR/scripts/sql-cleanup-preflight.mjs"
+cp scripts/vps-security-preflight.mjs "$TASK_GATE_DIR/scripts/vps-security-preflight.mjs"
+"$TASK_NODE" "$TASK_GATE_DIR/scripts/sql-cleanup-preflight.mjs"
+# Remove exactly the two temporary code files; no recursive deletion.
+rm -- "$TASK_GATE_DIR/scripts/sql-cleanup-preflight.mjs" "$TASK_GATE_DIR/scripts/vps-security-preflight.mjs"
+rmdir -- "$TASK_GATE_DIR/scripts" "$TASK_GATE_DIR"
 
 umask 077
 TASK_BACKUP=$(mktemp -d /var/backups/nexahub-topup-ui.XXXXXX)
@@ -49,6 +59,7 @@ mapfile -t TASK_TESTS < <(task_git ls-files -- 'tests/*.test.*')
 test "${#TASK_TESTS[@]}" -gt 0
 "$TASK_NODE" --test "${TASK_TESTS[@]}"
 "$TASK_NODE" scripts/cny-funding-preflight.mjs
+"$TASK_NODE" scripts/sql-cleanup-preflight.mjs
 systemctl reset-failed flightb2b
 systemctl start flightb2b
 for task_attempt in {1..30}; do
@@ -60,4 +71,4 @@ systemctl is-active flightb2b
 test "$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://nexahub.airsales.ub.mn/)" = 200
 echo 'Website HTTP: 200'
 TASK_STOPPED=0
-echo 'READY: Production UI/booking diagnostics deployed. No SQL activation or manual wallet update.'
+echo 'READY: Production code/SQL cleanup release deployed. No SQL replay or manual wallet update.'

@@ -11,6 +11,26 @@ begin
 end $$;
 
 -- SOURCE: supabase/schema.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run in Supabase SQL Editor after creating the project.
 create type public.user_role as enum ('agent', 'office_manager', 'platform_admin');
 create type public.wallet_entry_type as enum ('credit', 'debit', 'adjustment');
@@ -105,6 +125,26 @@ create policy "agent creates own booking" on public.bookings for insert with che
 
 
 -- SOURCE: supabase/admin-functions.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor. This creates an atomic, auditable wallet adjustment.
 create or replace function public.platform_adjust_wallet(
   p_agency_id uuid,
@@ -137,6 +177,26 @@ $$;
 
 
 -- SOURCE: supabase/topups.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor.
 create table if not exists public.topup_requests (
   id uuid primary key default gen_random_uuid(),
@@ -190,6 +250,26 @@ $$;
 
 
 -- SOURCE: supabase/mnt-pricing.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor. Keeps a permanent pricing snapshot on each invoice/booking.
 alter table public.topup_requests
   add column if not exists amount_mnt numeric(14,0),
@@ -209,51 +289,65 @@ alter table public.bookings
 
 
 -- SOURCE: supabase/topup-expiry.sql
--- Run once in Supabase SQL Editor. Pending top-up invoices expire at 23:59:59 Ulaanbaatar time.
-alter table public.topup_requests
-  add column if not exists expires_at timestamptz;
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
 
-update public.topup_requests
-set expires_at = ((date_trunc('day', created_at at time zone 'Asia/Ulaanbaatar') + interval '1 day' - interval '1 second') at time zone 'Asia/Ulaanbaatar')
-where expires_at is null;
-
-alter table public.topup_requests
-  alter column expires_at set default ((date_trunc('day', now() at time zone 'Asia/Ulaanbaatar') + interval '1 day' - interval '1 second') at time zone 'Asia/Ulaanbaatar');
-
-alter table public.topup_requests
-  alter column expires_at set not null;
-
+-- HISTORICAL EMPTY-PROJECT BOOTSTRAP ONLY. See supabase/migrations.
+alter table public.topup_requests add column if not exists expires_at timestamptz;
+alter table public.topup_requests alter column expires_at drop default;
+alter table public.topup_requests alter column expires_at drop not null;
 alter table public.topup_requests drop constraint if exists topup_requests_status_check;
-alter table public.topup_requests
-  add constraint topup_requests_status_check check (status in ('pending', 'approved', 'rejected', 'cancelled'));
+alter table public.topup_requests add constraint topup_requests_status_check
+  check (status in ('pending', 'approved', 'rejected', 'cancelled'));
 
 create or replace function public.expire_pending_topup_requests()
-returns void language sql security definer set search_path = public as $$
-  update public.topup_requests
-  set status = 'cancelled'
-  where status = 'pending' and expires_at <= now();
-$$;
-
-create or replace function public.approve_topup_request(p_topup_id uuid, p_approved_by uuid)
-returns void language plpgsql security definer set search_path = public as $$
-declare request_row public.topup_requests;
+returns void language plpgsql security invoker set search_path = '' as $$
 begin
-  if not exists (select 1 from public.profiles where id = p_approved_by and role = 'platform_admin' and active) then
-    raise exception 'Only an active platform administrator can approve top-ups';
-  end if;
-  perform public.expire_pending_topup_requests();
-  select * into request_row from public.topup_requests where id = p_topup_id for update;
-  if not found then raise exception 'Top-up request not found'; end if;
-  if request_row.status <> 'pending' then raise exception 'This top-up request has already been processed or has expired'; end if;
-  update public.topup_requests set status = 'approved', approved_at = now(), approved_by = p_approved_by where id = p_topup_id;
-  update public.wallets set balance_cny = balance_cny + request_row.amount_cny, updated_at = now() where agency_id = request_row.agency_id;
-  insert into public.wallet_transactions (agency_id, entry_type, amount_cny, reason, created_by)
-  values (request_row.agency_id, 'credit', request_row.amount_cny, 'Top-up approved: ' || request_row.invoice_number, p_approved_by);
+  raise exception using errcode = '42501', message = 'INVOICE_EXPIRY_DISABLED';
 end;
 $$;
+revoke all on function public.expire_pending_topup_requests()
+  from public, anon, authenticated, service_role;
 
 
 -- SOURCE: supabase/topup-wallet-credit-fix.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor.
 -- An approved top-up must always create (or increase) the agency wallet.
 -- This supersedes earlier versions of approve_topup_request.
@@ -304,6 +398,26 @@ $$;
 
 
 -- SOURCE: supabase/topup-bank-transfer-fees.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in the Supabase SQL Editor before deploying the bank-fee invoice update.
 -- Each invoice snapshots the specific banking charges that were quoted to the agency.
 alter table public.topup_requests
@@ -324,81 +438,66 @@ comment on column public.topup_requests.bank_transfer_fee_mnt is
 
 
 -- SOURCE: supabase/remove-topup-expiry.sql
--- Run once in Supabase SQL Editor to make pending top-up invoices non-expiring.
--- Pending invoices will remain available until a platform administrator approves
--- them, or an authorised user deletes them.
-
-create or replace function public.approve_topup_request(p_topup_id uuid, p_approved_by uuid)
-returns void language plpgsql security definer set search_path = public as $$
-declare request_row public.topup_requests;
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
 begin
-  if not exists (
-    select 1 from public.profiles
-    where id = p_approved_by and role = 'platform_admin' and active
-  ) then
-    raise exception 'Only an active platform administrator can approve top-ups';
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
   end if;
-
-  select * into request_row
-  from public.topup_requests
-  where id = p_topup_id
-  for update;
-
-  if not found then
-    raise exception 'Top-up request not found';
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
   end if;
-
-  if request_row.status <> 'pending' then
-    raise exception 'This top-up request has already been processed';
-  end if;
-
-  update public.topup_requests
-  set status = 'approved', approved_at = now(), approved_by = p_approved_by
-  where id = p_topup_id;
-
-  -- Never allow an approved invoice to disappear without crediting a wallet.
-  insert into public.wallets (agency_id, balance_cny, updated_at)
-  values (request_row.agency_id, request_row.amount_cny, now())
-  on conflict (agency_id) do update
-  set balance_cny = public.wallets.balance_cny + excluded.balance_cny,
-      updated_at = now();
-
-  insert into public.wallet_transactions (agency_id, entry_type, amount_cny, reason, created_by)
-  values (
-    request_row.agency_id,
-    'credit',
-    request_row.amount_cny,
-    'Top-up approved: ' || request_row.invoice_number,
-    p_approved_by
-  );
 end;
-$$;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
+-- Pending invoices never expire. Does not replace any approval function.
+alter table public.topup_requests alter column expires_at drop default;
+alter table public.topup_requests alter column expires_at drop not null;
 
 
 -- SOURCE: supabase/wallet-funding-controls.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor.
--- This reset intentionally preserves bookings and top-up invoices; it clears
--- only wallet balances and the wallet ledger/history requested by the admin.
+-- Wallet reset is retired. Keep a non-mutating stub for old callers;
+-- never zero balances or delete financial history through this function.
 
 create or replace function public.platform_reset_all_wallets(p_created_by uuid)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security invoker set search_path = '' as $$
 begin
-  if not exists (
-    select 1 from public.profiles
-    where id = p_created_by and role = 'platform_admin' and active
-  ) then
-    raise exception 'Only an active platform administrator can reset wallets';
-  end if;
-
-  -- Keep an explicit filter here: this is a deliberate ledger reset, not an
-  -- unrestricted REST DELETE request.
-  delete from public.wallet_transactions where agency_id is not null;
-  -- Same safeguard for the balance reset. Every wallet belongs to an agency.
-  update public.wallets
-  set balance_cny = 0, updated_at = now()
-  where agency_id is not null;
+  raise exception using errcode = '42501', message = 'WALLET_RESET_DISABLED';
 end;
 $$;
+revoke all on function public.platform_reset_all_wallets(uuid)
+  from public, anon, authenticated, service_role;
+comment on function public.platform_reset_all_wallets(uuid) is
+  'Retired: wallet balances and financial history must never be reset.';
 
 -- Checks funds only. Do not create a ledger debit here: that must happen in
 -- the same server-side transaction as a confirmed Spring payment/issue call.
@@ -528,6 +627,26 @@ $$;
 
 
 -- SOURCE: supabase/change-wallet-payment.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run before deploying the change-payment update.
 create or replace function public.record_change_payment(
   p_pnr text, p_app_id text, p_amount numeric, p_actor uuid,
@@ -577,6 +696,26 @@ notify pgrst, 'reload schema';
 
 
 -- SOURCE: supabase/agency-contact-details.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once in Supabase SQL Editor before deploying the agency-contact update.
 alter table public.agencies
   add column if not exists registration_number text,
@@ -586,6 +725,26 @@ alter table public.agencies
 
 
 -- SOURCE: supabase/agent-contact-details.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run before deploying the agent contact and ticket PDF update.
 alter table public.profiles
   add column if not exists email text,
@@ -597,6 +756,26 @@ where u.id = p.id and (p.email is null or p.email = '');
 
 
 -- SOURCE: supabase/spring-status-sync.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run once on the target Supabase project before deploying the worker.
 -- No booking/payment/itinerary values are rewritten.
 alter table public.bookings add column if not exists supplier_status jsonb not null default '{}'::jsonb;
@@ -661,6 +840,26 @@ notify pgrst, 'reload schema';
 
 
 -- SOURCE: supabase/security-hardening.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Apply AFTER existing schema, top-up, wallet-funding-controls and
 -- change-wallet-payment migrations, BEFORE deploying the matching backend.
 -- No user data is deleted. Never re-run older permission migrations afterwards.
@@ -673,15 +872,20 @@ begin
   for f in select p.oid::regprocedure as signature from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname in (
-      'platform_adjust_wallet', 'platform_reset_all_wallets', 'assert_wallet_funds',
-      'issue_booking_from_wallet', 'record_change_payment', 'approve_topup_request',
-      'expire_pending_topup_requests'
+      'platform_adjust_wallet', 'assert_wallet_funds',
+      'issue_booking_from_wallet', 'record_change_payment', 'approve_topup_request'
     )
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f.signature);
     execute format('grant execute on function %s to service_role', f.signature);
   end loop;
 end $$;
+
+-- A retired reset must not regain execution privileges during bootstrap.
+revoke all on function public.platform_reset_all_wallets(uuid)
+  from public, anon, authenticated, service_role;
+revoke all on function public.expire_pending_topup_requests()
+  from public, anon, authenticated, service_role;
 
 revoke insert, update, delete, truncate, references, trigger on
   public.agencies, public.branches, public.profiles, public.bookings,
@@ -843,6 +1047,26 @@ notify pgrst, 'reload schema';
 
 
 -- SOURCE: supabase/retail-rounding.sql
+-- HISTORICAL BOOTSTRAP ONLY: current releases use supabase/migrations.
+do $historical_guard$
+declare registered boolean := false;
+begin
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select exists(select 1 from supabase_migrations.schema_migrations where name = ''nexahub_baseline'')' into registered;
+  end if;
+  if registered then
+    raise exception 'HISTORICAL_SQL_DISABLED: use versioned migrations, not old standalone files';
+  end if;
+end;
+$historical_guard$;
+do $pre_cny_guard$
+begin
+  if to_regprocedure('public.cny_funding_ready()') is not null then
+    raise exception 'HISTORICAL_SQL_DISABLED: this file must not overwrite current CNY funding functions';
+  end if;
+end;
+$pre_cny_guard$;
+
 -- Run after security-hardening.sql. Existing financial history is unchanged.
 alter table public.bookings add column if not exists retail_price jsonb;
 alter table public.wallet_transactions add column if not exists amount_mnt numeric(18,0);

@@ -93,7 +93,19 @@ test('HTTP boundary blocks private files, anonymous finance, forged origins and 
   assert.equal((await call('/api/backend/status', { headers: auth })).status, 403);
   for (const action of ['issue', 'refund-submit', 'sync']) assert.equal((await call(`/api/bookings/OTHER/${action}`, { method: 'POST', headers: auth })).status, 403);
   assert.equal((await call('/api/bookings/OTHER/change-submit', { method: 'POST', headers: auth })).status, 403);
-  assert.equal((await call('/api/admin/wallet-reset', { method: 'POST', headers: { authorization: 'Bearer admin-test' } })).status, 403);
+  const writesBeforeReset = writes;
+  for (const token of ['admin-test', 'agent-test']) {
+    for (const method of ['GET', 'POST', 'DELETE']) {
+      const reset = await call('/api/admin/wallet-reset', {
+        method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        ...(method === 'POST' ? { body: JSON.stringify({ confirmation: 'RESET WALLETS' }) } : {})
+      });
+      assert.equal(reset.status, 403);
+      assert.equal((await reset.json()).code, 'WALLET_RESET_DISABLED');
+    }
+  }
+  assert.equal((await call('/api/admin/wallet-reset', { method: 'POST' })).status, 401);
+  assert.equal(writes, writesBeforeReset, 'A reset attempt must not write to the database');
   for (let index = 0; index < 30; index++) assert.equal((await call('/api/auth/login', { method: 'POST' })).status, 400);
   const limited = await call('/api/auth/login', { method: 'POST' });
   assert.equal(limited.status, 429); assert.ok(Number(limited.headers.get('retry-after')) > 0);

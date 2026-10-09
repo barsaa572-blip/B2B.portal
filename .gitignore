@@ -10,3 +10,5 @@ node_modules/
 /tmp/cny-browser-profile/
 /output/pdf/
 /private/invoice/
+/supabase/.temp/
+/supabase/.branches/

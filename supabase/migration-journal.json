@@ -1,0 +1,9 @@
+{
+  "project": "gxofgtasjaxqxmbqljhd",
+  "migrations": [
+    {"version":"20261009100739","name":"disable_wallet_reset"},
+    {"version":"20261009102942","name":"nexahub_baseline"},
+    {"version":"20261009102947","name":"retire_expiry_optimize_access"},
+    {"version":"20261009103332","name":"verify_sql_cleanup_readiness"}
+  ]
+}
