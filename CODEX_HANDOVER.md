@@ -1,5 +1,52 @@
 # Flight B2B Portal — Codex handover
 
+## Readable refund/payment audit — 9 October 2026, LOCAL / NOT deployed
+
+- User screenshot shows the old audit inherits420px generic dialog width and
+  clips the table. Now a980px max responsive audit workspace,14px body/18px
+  amounts, cards instead of the table, single-column mobile with vertical scroll.
+  Launcher/title/labels/empty states use plain Mongolian.
+- Default filter is awaiting_settlement refunds only; All records shows quotes,
+  issue/change payments and settled refunds with distinct explanatory states.
+  Cards identify PNR, agency, operation, expected supplier receipt and wallet CNY;
+  saved MNT is explicitly display-only. Margin/reference are secondary details.
+- Admin-only retail_pricing SELECT now includes bookings(pnr,agency_id) so agency
+  names can be resolved from the already loaded admin overview. No new grant/RPC,
+  schema or accounting change. Actual HTTP test proves admin sees agency_id,
+  agents are denied before provider read, audit GET causes no credit.
+- Original refund-entry indices are preserved after filtering. Only pending
+  refunds have a credit action. Existing manual amount/reference/final-confirm
+  flow remains (translated); server amount/state/role/atomic one-time credit
+  guards unchanged. Filters disabled during POST, success marks entry settled
+  and refreshes pending summary/list. No automatic YeePay verification added.
+- Release-scoped Node24 tests299/299 PASS, zero skipped. New UI tests cover
+  filtering, escaped content, empty states, original indices and responsive CSS.
+  Mock browser checks empty/populated light/dark at1280/390, no horizontal clipping,
+  cancellation and no financial POST merely from browsing/filtering. This still
+  runs in ordinary PowerShell as the publisher gate (sandbox launch limitation).
+- Starting local HEAD ecc5655962c19fff90dffdee01cc684d46cd3ec9; no independent
+  VPS revision check. New test added to both publishers' explicit files/test sets.
+  Existing code-only VPS block remains valid. No push/deploy/SQL/live refund here.
+  Prior uncommitted YeePay documentation notes and unrelated drafts preserved.
+
+## YeePay / YeeFlightLink key coordination — 9 October 2026
+
+- Read “Set up YeeFlightLink support” on user's request. Its existing RSA2048
+  key pair passes offline validation. User's vendor update there says key/API
+  permissions configured for120403279. Do NOT regenerate or replace that key.
+- A distinct unregistered payment candidate is prepared; public-only sibling
+  outputs/yeepay-onboarding package contains PEM/base64 + README/vendor message.
+  Private is outside B2B Git in workspace .private/yeepay-payment-120403279,
+  owner+SYSTEM ACL only. No private material printed/copied into this repo.
+  Initial requested home-folder location was inaccessible even after permission
+  grants; no key was created there. Final location was announced to the user.
+- Matching pair/signature, public representations and no-overwrite rerun verified.
+  See docs/yeepay-integration-plan.md for public fingerprints and next gates:
+  shared vs independent payment key registration, international API contract,
+  correct Spring receiving merchant/binding. No actual provider/VPS/payment work.
+- Don't push/deploy/activate SQL merely for this key package. Existing UI publish
+  workflow is separate. No messaging to the other chat or provider performed.
+
 ## Invoice spacing / single approval dialog / checkout total — 9 October 2026, LOCAL / NOT deployed
 
 - Starting local HEAD 5a469625d64426b8e7428b0e8f5c1a6ccaf5a97c. Latest
@@ -576,3 +623,29 @@ agency management and Spring calls must remain server-side.
 > `backend/spring-client.mjs`, and `app.js`; use Spring calculations but require
 > final confirmation for submissions. Explain the exact files you will change,
 > then implement and run node syntax checks.
+# Booking diagnostic follow-up — 9 October 2026, local / not deployed
+
+- Validation: Node24 release-scoped suite307/307 PASS, zero skipped; syntax and
+  diff checks pass. Localhost mock HTTP proves response ID matches sanitized
+  server log; extracted actual browser function proves UUID display and disabled
+  retry. Real desktop/mobile browser acceptance still runs in ordinary user
+  PowerShell via publisher before any staging/commit/push.
+- User reports the same generic Book failure for multiple flights. VPS read-only
+  evidence: booking enabled, Spring basic API configured, remote IP matches VPS,
+  database configured and pricing schema ready. No matching old rejection logs.
+  Actual root cause and whether Spring created a reservation remain unknown.
+- User approved diagnostic instrumentation only, not a real booking/payment.
+  POST /api/bookings now has random support UUID and fixed stage markers,
+  conservative supplierAttempted/referenceReceived booleans, strictly validated
+  Spring code and HTTP status. No messages, raw bodies, PII, identities, PNR,
+  URLs, secrets or stacks are logged. Removed old raw supplier-message warnings.
+  Spring JSON/token errors preserve structured safe metadata; existing HTTP403,
+  fare-review HTTP409, quote consumption and ambiguous-result lock are unchanged.
+- Browser shows UUID on failure; ordinary Node publisher includes new module,
+  Spring client and diagnostic tests. Uses existing UI/refund-audit release gate.
+  No SQL, environment, pricing, payment, wallet or automatic retry changes.
+- Cannot reconstruct historical failure or infer missing supplier booking from
+  absence in local list. Reconcile BOTH supplier and portal before any new Book.
+  New logs: journalctl -u flightb2b --since '15 minutes ago' --no-pager -o cat |
+  grep '^NEXAHUB_BOOKING_DIAGNOSTIC ' | tail -n 10
+  This prints only the new fixed-field diagnostics, never paste raw journals.

@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {fileURLToPath} from 'node:url';
 test('actual HTTP CNY funding uses server sell quote, tenant scope and verified admin receipt',async t=>{
-  const writes=[],receipts=[];let ready=true, approvalFailure=null;
+  const writes=[],receipts=[],auditSelects=[];let ready=true, approvalFailure=null;
   const profiles={agent:{id:'agent',role:'agent',agency_id:'agency-a',active:true},admin:{id:'admin',role:'platform_admin',agency_id:'agency-a',active:true}};
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ulaanbaatar',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const provider=createServer(async(req,res)=>{
@@ -33,17 +33,24 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
       const select=u.searchParams.get('select');
       return send(select==='*'?filtered:filtered.map(row=>Object.fromEntries(select.split(',').map(key=>[key,row[key]]))));
     }
+    if(u.pathname==='/rest/v1/retail_pricing') {
+      auditSelects.push(u.searchParams.get('select'));
+      assert.equal(u.searchParams.get('limit'),'500');
+      assert.equal(u.searchParams.get('order'),'updated_at.desc');
+      const includeAgency = u.searchParams.get('select')?.includes('bookings(pnr,agency_id)');
+      return send([{booking_id:'refund-booking',action:'refund',reference:'refund-reference',snapshot:{walletCny:750,supplierCny:750,amountMnt:402210,marginCny:0},state:'awaiting_settlement',bookings:{pnr:'REFUND-PNR',...(includeAgency?{agency_id:'agency-a'}:{})}}]);
+    }
     if(u.pathname==='/rest/v1/bookings')return send([]);
     res.statusCode=500;return send({error:'Unexpected fixture endpoint'});
   });
-  let child;
+  let child, diagnostics = '';
   t.after(async()=>{if(child&&child.exitCode===null){const done=once(child,'exit');child.kill();await done;}provider.closeAllConnections();await new Promise(r=>provider.close(r));});
   provider.listen(0,'127.0.0.1');await once(provider,'listening');
   const probe=createServer();probe.listen(0,'127.0.0.1');await once(probe,'listening');const port=probe.address().port;await new Promise(r=>probe.close(r));
   const base=`http://127.0.0.1:${provider.address().port}`;
   const env={...process.env,PORT:String(port),APP_ENV:'test',PRICING_MODEL:'cny-funding-v1',AUTH_EMAIL_OTP_REQUIRED:'false',AUTH_PASSWORD_ROTATION_REQUIRED:'false',SUPABASE_URL:base,SUPABASE_SECRET_KEY:'fixture-secret',SUPABASE_PUBLISHABLE_KEY:'fixture-public',MONGOLBANK_CNY_RATE_API_URL:base+'/official',GOLOMT_BANK_CNY_RATE_API_URL:base+'/bank'};
   for(const key of Object.keys(env))if(key.startsWith('SPRING_'))env[key]='';
-  child=spawn(process.execPath,['server.mjs'],{cwd:fileURLToPath(new URL('..',import.meta.url)),env,stdio:['ignore','pipe','pipe']});child.stderr.resume();
+  child=spawn(process.execPath,['server.mjs'],{cwd:fileURLToPath(new URL('..',import.meta.url)),env,stdio:['ignore','pipe','pipe']});child.stderr.on('data', b => { diagnostics += String(b); });
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Fixture did not start')),10000);child.stdout.on('data',b=>{if(String(b).includes('listening on')){clearTimeout(timer);resolve();}});child.once('exit',c=>{clearTimeout(timer);reject(Error('Fixture exit '+c));});});
   const call=(path,{cookie,body,method=body?'POST':'GET',origin='https://portal.test'}={})=>new Promise((resolve,reject)=>{
     const req=httpRequest(`http://127.0.0.1:${port}${path}`,{method,headers:{host:'portal.test',origin,'content-type':'application/json',...(cookie?{cookie}:{})}},res=>{const chunks=[];res.on('data',b=>chunks.push(b));res.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));});
@@ -51,6 +58,20 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
   });
   const login=async who=>{const r=await call('/api/auth/login',{body:{email:who+'@example.invalid',password:'FixturePassword1!'}});assert.equal(r.status,200);assert.doesNotMatch(await r.text(),/private-/);return r.headers.get('set-cookie').split(';')[0];};
   const agent=await login('agent'),admin=await login('admin');
+  const invalidBooking = await call('/api/bookings',{cookie:agent,body:{itinerary:{departureDate:'invalid'},passengers:{travellers:[{lastName:'PRIVATE_PASSENGER_MARKER'}]}}});
+  assert.equal(invalidBooking.status,403);
+  const bookingError = await invalidBooking.json();
+  assert.equal(bookingError.code,'BOOKING_FAILED');
+  assert.match(bookingError.diagnosticId,/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+  assert.doesNotMatch(JSON.stringify(bookingError),/PRIVATE_PASSENGER_MARKER|fixture-secret/);
+  await new Promise(resolve=>setImmediate(resolve));
+  const bookingLog = diagnostics.split('\n').find(line=>line.startsWith('NEXAHUB_BOOKING_DIAGNOSTIC '));
+  assert.ok(bookingLog,'Actual reservation route must emit the support ID diagnostic');
+  const bookingRecord = JSON.parse(bookingLog.slice('NEXAHUB_BOOKING_DIAGNOSTIC '.length));
+  assert.equal(bookingRecord.id,bookingError.diagnosticId);
+  assert.equal(bookingRecord.stage,'passenger_validation');
+  assert.equal(bookingRecord.supplierAttempted,false);
+  assert.doesNotMatch(diagnostics,/PRIVATE_PASSENGER_MARKER|fixture-secret|private-admin|private-agent/);
   const quote=await call('/api/topups/quote',{cookie:agent,body:{amountCny:'10000',rateMnt:1,serviceFeeCny:0,agencyId:'foreign'}});
   assert.equal(quote.status,200);const q=await quote.json();assert.equal(q.rateMnt,538);assert.equal(q.totalCny,10359.3);assert.equal(q.principalCny,10000);
   const r=await call('/api/topups',{cookie:agent,body:{amountCny:'10000',totalCny:1,amountMnt:1,agencyId:'foreign',requested_by:'admin',note:'test'}});
@@ -68,6 +89,15 @@ test('actual HTTP CNY funding uses server sell quote, tenant scope and verified 
   assert.equal(overview.topups.find(row=>row.id==='legacy-invoice').pricing_model,'legacy');
   assert.equal(overview.topups.find(row=>row.id==='legacy-invoice').funding_quote,null);
   assert.doesNotMatch(overviewText,/PRIVATE-METADATA|fixture-secret/);
+  assert.equal((await call('/api/admin/retail-pricing',{cookie:agent})).status,403);
+  assert.equal(auditSelects.length,0,'Agent must not query admin settlement data');
+  const auditResponse=await call('/api/admin/retail-pricing',{cookie:admin});
+  assert.equal(auditResponse.status,200);
+  const audit=await auditResponse.json();
+  assert.equal(audit.entries[0].bookings.agency_id,'agency-a','Actual admin query must deliver agency owner for the refund UI');
+  assert.equal(audit.entries[0].snapshot.walletCny,750);
+  assert.equal(audit.entries[0].state,'awaiting_settlement');
+  assert.equal(receipts.length,0,'Reading audit must not approve or credit a wallet');
   assert.equal((await call('/api/topups/quote',{body:{amountCny:'10000'}})).status,401);
   assert.equal((await call('/api/topups/quote',{cookie:agent,body:{amountCny:'10000'},origin:'https://foreign.test'})).status,403);
   assert.equal((await call('/api/admin/topups/invoice-1/approve',{cookie:agent,body:{confirmed:true,bankReference:'BANK-1',receivedCny:'10359.30'}})).status,403);

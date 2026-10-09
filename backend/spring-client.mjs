@@ -3,6 +3,7 @@
  * Browser code must never import this module or receive its credentials.
  */
 import { createHash } from 'node:crypto';
+import { springRequestError } from './booking-diagnostic.mjs';
 import { springEndpoint, springEnabled, requireSpringEnabled } from './supplier-transport.mjs';
 
 const required = (value, name) => {
@@ -58,7 +59,7 @@ export function createSpringClient(env = process.env) {
     if (!response.ok || data.ifSuccess === 'N') {
       const code = data.errCode ?? data.code ?? data.errorCode;
       const message = data.errMsg ?? data.message ?? data.msg ?? data.errorMsg;
-      throw new Error([message, code ? `(${code})` : ''].filter(Boolean).join(' ') || `Spring API request failed (${response.status}).`);
+      throw springRequestError([message, code ? `(${code})` : ''].filter(Boolean).join(' ') || `Spring API request failed (${response.status}).`, code, response.status);
     }
     return data;
   }
@@ -78,7 +79,7 @@ export function createSpringClient(env = process.env) {
         body: JSON.stringify({ appKey, grantType, sign, timestamp })
       }).then(async response => {
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.ifSuccess !== 'Y' || !data.oauth2ResultDTO?.accessToken) throw new Error(data.errMsg || `Spring token request failed (${response.status}).`);
+        if (!response.ok || data.ifSuccess !== 'Y' || !data.oauth2ResultDTO?.accessToken) throw springRequestError(data.errMsg || `Spring token request failed (${response.status}).`, data.errCode ?? data.code ?? data.errorCode, response.status);
         return data.oauth2ResultDTO;
       });
     },

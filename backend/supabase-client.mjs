@@ -27,7 +27,7 @@ export async function getPrivateRetailPrice(bookingId, action, reference) {
 
 export async function retailPricingAudit(profile) {
   if (profile.role !== 'platform_admin') throw new HttpError(403, 'Administrator access required.');
-  return secretRequest('/rest/v1/retail_pricing?select=booking_id,action,reference,snapshot,state,updated_at,bookings(pnr)&order=updated_at.desc&limit=500');
+  return secretRequest('/rest/v1/retail_pricing?select=booking_id,action,reference,snapshot,state,updated_at,bookings(pnr,agency_id)&order=updated_at.desc&limit=500');
 }
 
 export async function settleRetailRefund(profile, body) {

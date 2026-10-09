@@ -11,7 +11,7 @@ const root=path.resolve(__dirname,'..');
   const browser=await chromium.launchPersistentContext(path.join(root,'tmp','cny-browser-profile'),{headless:true,...(process.platform==='win32'?{channel:'msedge'}:{})});
   try {
     for(const width of [1280,390]){
-      const page=await browser.newPage(),errors=[],calls=[];let approvalFailure=false,missingInvoiceModel=false;
+      const page=await browser.newPage(),errors=[],calls=[];let approvalFailure=false,missingInvoiceModel=false,auditEntries=[];
       await page.setViewportSize({width,height:900});
       page.on('pageerror',e=>errors.push(e.message));
       await page.addInitScript(({profile})=>sessionStorage.setItem('flightb2b-session',JSON.stringify({profile,accessToken:'cookie',refreshToken:'cookie',expiresAt:Date.now()+3600000,idleExpiresAt:Date.now()+1200000,sessionExpiresAt:Date.now()+43200000})),{profile});
@@ -24,6 +24,7 @@ const root=path.resolve(__dirname,'..');
           if(u.pathname==='/api/wallet')return reply({wallet:{balance_cny:10000},rate,transactions:[{id:'credit',amount_cny:10000,created_at:invoice.created_at,entry_type:'credit',reason:'Top-up'}]});
           if(u.pathname==='/api/bookings/dashboard')return reply({salesCny:2000,issuedBookings:1,pendingTopupMnt:quote.totalMnt,pendingTopupRequests:1,month:'2026-10',effectiveRateMnt:536.29});
           if(u.pathname==='/api/admin/overview')return reply({agencies:[{id:'agency',name:'Mock Agency',active:true}],wallets:[{agency_id:'agency',balance_cny:10000}],profiles:[profile],branches:[],topups:[missingInvoiceModel?{...invoice,pricing_model:undefined}:invoice]});
+          if(u.pathname==='/api/admin/retail-pricing')return reply({entries:auditEntries});
           if(u.pathname==='/api/topups/quote')return reply(fundingQuote(JSON.parse(req.postData()).amountCny,rate));
           if(u.pathname==='/api/admin/topups/invoice/approve' && approvalFailure)return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'Орсон NET CNY дүн нэхэмжлэлийн шилжүүлэх нийт дүнтэй таарахгүй байна.',code:'TOPUP_AMOUNT_MISMATCH'})});
           if(u.pathname==='/api/topups')return reply([invoice]);
@@ -159,8 +160,36 @@ const root=path.resolve(__dirname,'..');
       assert.deepEqual(JSON.parse(approval.body),{confirmed:true,bankReference:'MOCK-BANK-REFERENCE',receivedCny:'10359.29'});
       assert.deepEqual(nativeDialogs,[],'Approval must use exactly one custom dialog, no native popup steps');
       assert.equal(await page.locator('#admin-modal').evaluate(node=>node.open),false);
+      const auditWritesBefore=calls.filter(c=>c.method==='POST'&&!c.path.startsWith('/api/auth/')).length;
+      await page.locator('.admin-audit-button').click();
+      await page.waitForSelector('#admin-modal .settlement-audit');
+      assert.match(await page.locator('#admin-modal .settlement-empty').textContent(),/Батлах буцаалт одоогоор алга/);
+      assert.equal(await page.locator('#admin-modal').evaluate(node=>node.scrollWidth<=node.clientWidth),true,'Empty audit has no horizontal clipping');
+      if(width>650)assert.ok(await page.locator('#admin-modal').evaluate(node=>node.clientWidth)>=900,'Audit must not inherit the 420px form width');
+      await page.locator('#admin-modal').screenshot({path:path.join(screenshots,`refund-audit-empty-${width}.png`)});
+      await page.locator('#admin-modal .close').click();
+      const auditRow=(action,state,pnr)=>({booking_id:pnr,action,state,reference:'MOCK-REFUND-REFERENCE',bookings:{pnr,agency_id:'agency'},snapshot:{walletCny:750,supplierCny:750,marginCny:0,amountMnt:402210}});
+      auditEntries=[auditRow('issue','settled','ISSUE'),auditRow('change','prepared','CHANGE'),auditRow('refund','settled','REFUNDED'),auditRow('refund','awaiting_settlement','PENDING')];
+      await page.locator('.admin-audit-button').click();
+      await page.waitForSelector('#admin-modal .settlement-record');
+      assert.equal(await page.locator('#admin-modal .settlement-record').count(),1);
+      assert.equal(await page.locator('#admin-modal [data-settle-refund]').getAttribute('data-settle-refund'),'3');
+      assert.match(await page.locator('#admin-modal .settlement-record').textContent(),/Mock Agency/);
+      assert.match(await page.locator('#admin-modal [data-audit-pending-amount]').textContent(),/750\.00 CNY/);
+      await page.locator('#admin-modal [data-settlement-filter="all"]').click();
+      assert.equal(await page.locator('#admin-modal .settlement-record').count(),4);
+      assert.equal(await page.locator('#admin-modal [data-settle-refund]').count(),1);
+      for(const theme of ['light','dark']){
+        await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+        assert.equal(await page.locator('#admin-modal').evaluate(node=>node.scrollWidth<=node.clientWidth),true,`${theme}: populated audit must fit`);
+        await page.locator('#admin-modal').screenshot({path:path.join(screenshots,`refund-audit-${theme}-${width}.png`)});
+      }
+      await page.locator('#admin-modal [data-settle-refund]').click();
+      assert.deepEqual(nativeDialogs,['prompt'],'Cancelling receipt prompt stops refund confirmation');
+      assert.equal(calls.filter(c=>c.method==='POST'&&!c.path.startsWith('/api/auth/')).length,auditWritesBefore,'Opening/filtering/closing audit or cancelling confirmation must not move money');
+      await page.locator('#admin-modal .close').click();
       assert.deepEqual(errors,[]);
-      await page.close();console.log(`PASS: proportional checkout prices, tidy invoice breakdown, one approval dialog, cancellation and exact mocked bank receipt (${width}px)`);
+      await page.close();console.log(`PASS: proportional prices, safe single approval dialog and readable refund audit with zero audit payment side effects (${width}px)`);
     }
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -60,4 +60,4 @@ systemctl is-active flightb2b
 test "$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://nexahub.airsales.ub.mn/)" = 200
 echo 'Website HTTP: 200'
 TASK_STOPPED=0
-echo 'READY: Production UI/approval update complete. No SQL activation or manual wallet update.'
+echo 'READY: Production UI/booking diagnostics deployed. No SQL activation or manual wallet update.'

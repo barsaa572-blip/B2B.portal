@@ -1,5 +1,16 @@
 # NEXAHUB work ledger — 2026-10-06
 
+## Refund audit readability — 9 October 2026, LOCAL / NOT deployed
+
+-980px responsive audit, cards instead of clipped table, Mongolian labels,
+  pending refunds first / All records, visible agency and expected CNY amounts.
+- Admin-only booking agency_id read added; no permissions/schema/money changes.
+  Manual receipt confirmation and one-time server credit retained. No live payment
+  or automatic YeePay refund verification performed.
+-299/299 release tests PASS; updated browser gate covers desktop/mobile/themes,
+  empty/populated cases, cancel and zero audit side effects. Same Node publish and
+  code-only VPS block, no SQL. Starting local HEAD ecc5655; remote not inspected.
+
 ## Latest UI follow-up — 9 October 2026, LOCAL / NOT deployed
 
 - Invoice amounts on separate lines; full-width frozen breakdown with spacing,

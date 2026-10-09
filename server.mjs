@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { createBrowserSessions } from './backend/browser-session.mjs';
 import { createRememberedEmail } from './backend/remembered-email.mjs';
 import { BookingReviewRequired } from './backend/booking-review.mjs';
+import { createBookingDiagnostic, springRequestError } from './backend/booking-diagnostic.mjs';
 import { createLoginSecurity, emailStepRequired, passwordRotationRequired, passwordDue, passwordRevision, publicLoginProfile } from './backend/login-security.mjs';
 import { assertPortalAuthReady, sendPortalEmailCode, verifyPortalEmailCode, revokePortalProviderSession } from './backend/supabase-client.mjs';
 import { textField, cleanPassengers, cleanPassengerCounts } from './backend/input-validation.mjs';
@@ -713,45 +714,60 @@ const springResponseShape = (value, depth = 0) => {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, springResponseShape(item, depth + 1)]));
 };
 
-async function createLiveSpringBooking(profile, body) {
+async function createLiveSpringBooking(profile, body, diagnostic = null) {
+  diagnostic?.step('pricing_schema');
   if (roundingEnabled()) await assertRetailSchemaReady();
+  diagnostic?.step('input_cleanup');
   body = { ...body, itinerary: cleanBookingItinerary(body.itinerary), passengers: cleanPassengers(body.passengers) };
+  diagnostic?.step('booking_configuration');
   if (process.env.SPRING_BOOKING_ENABLED !== 'true') throw new Error('Spring test booking is disabled on this server. Set SPRING_BOOKING_ENABLED=true only after confirming the test environment.');
   if (!getSpringStatus().httpJsonReady) throw new Error('Spring HTTP JSON API is not configured on this server.');
+  diagnostic?.step('spring_payload');
   const payload = createSpringBookingPayload(body);
+  diagnostic?.step('quote_validation');
   const selection = priceSelection(body.itinerary.flights, { adults: payload.adultNum, children: payload.childNum, infants: payload.infantNum });
   let agreed;
   try { agreed = priceQuotes.require(body.quoteId, profile.id, selection); }
   catch { throw new BookingReviewRequired('The price quote expired or no longer matches. Refresh prices or search again. No reservation was sent.'); }
+  diagnostic?.step('spring_client');
   const client = createSpringClient();
+  diagnostic?.step('spring_token');
   const token = await client.getAccessToken();
+  diagnostic?.step('price_verification');
   let checked;
   try { checked = verifiedPrice(await client.getSpecificPrice(priceRequest(selection), token.accessToken), selection); }
-  catch { throw new BookingReviewRequired('The selected fare could not be confirmed. Refresh prices or search again. No reservation was sent.'); }
+  catch (error) {
+    const review = new BookingReviewRequired('The selected fare could not be confirmed. Refresh prices or search again. No reservation was sent.');
+    review.springCode = error.springCode;
+    review.springHttpStatus = error.springHttpStatus;
+    throw review;
+  }
   if (JSON.stringify(checked) !== JSON.stringify(agreed)) throw new BookingReviewRequired('Spring price changed. Refresh and review the new price before booking. No reservation was sent.');
   // Claim once, after the async check and before the external booking mutation.
   // A parallel submission or an uncertain result must not replay this quote.
+  diagnostic?.step('quote_recheck');
   try { priceQuotes.require(body.quoteId, profile.id, selection); }
   catch { throw new BookingReviewRequired('The price quote expired during verification. Refresh prices or search again. No reservation was sent.'); }
   const retailPrice = roundingEnabled() ? priceQuotes.requireRetail(body.quoteId, profile.id, selection) : null;
   if (roundingEnabled() && !retailPrice) throw new BookingReviewRequired('Sale price expired. Refresh and review the price again. No reservation was sent.');
   priceQuotes.consume(body.quoteId);
   body.totalCny = checked.total;
+  diagnostic?.step('supplier_booking');
   const result = await client.bookOrder(payload, token.accessToken);
+  diagnostic?.step('supplier_response');
   if (result?.success === false || result?.flag === false) {
     const code = typeof result.code === 'string' || typeof result.code === 'number' ? ` (${result.code})` : '';
     const message = typeof result.message === 'string' && result.message.trim()
       ? result.message.trim()
       : 'Spring did not accept this booking request.';
-    console.warn(`Spring booking rejected${code}: ${message}`);
-    throw new Error(`Spring booking rejected${code}: ${message}`);
+    throw springRequestError(`Spring booking rejected${code}: ${message}`, result.code ?? result.errCode);
   }
   const pnr = springOrderReference(result);
   if (!pnr) {
-    console.warn('Spring booking response has no recognised order reference:', JSON.stringify(springResponseShape(result)));
     throw new Error('Spring returned a booking response without a PNR/order number. No local booking was created.');
   }
   const itinerary = { ...body.itinerary, verifiedPrice: checked, springOrder: { pnr, responseCode: result.errCode || null } };
+  diagnostic?.step('portal_save');
   return createPortalBooking(profile, { ...body, itinerary, pnr, status: 'Reserved', retailPrice });
 }
 
@@ -1549,7 +1565,9 @@ if (url.pathname === '/api/flights/price' && req.method === 'POST') {
 if (url.pathname === '/api/backend/status') return send(res, 200, { spring: getSpringStatus(), springSoap: getSpringSoapStatus(), supabase: getSupabaseStatus() });
 if (url.pathname === '/api/fx/cny-mnt') { try { return send(res, 200, await getCnyMntRate()); } catch (error) { return send(res, 503, { error: "Request could not be completed. Check your input or try again later." }); } }
 if (url.pathname.startsWith('/api/office/users')) return handleOfficeUsers(req, res, url);
-if (url.pathname.startsWith('/api/bookings')) { try {
+if (url.pathname.startsWith('/api/bookings')) {
+  const bookingDiagnostic = url.pathname === '/api/bookings' && req.method === 'POST' ? createBookingDiagnostic() : null;
+  try {
   const profile = await authenticatedProfile(req);
   if (url.pathname === '/api/bookings/dashboard' && req.method === 'GET') {
     const summary = await getDashboardSummary(profile);
@@ -1561,10 +1579,12 @@ if (url.pathname.startsWith('/api/bookings')) { try {
     return send(res, 200, await listPortalBookings(profile));
   }
   if (url.pathname === '/api/bookings' && req.method === 'POST') {
+    bookingDiagnostic.step('request_body');
     const body = await readJson(req);
     if (!body.itinerary || !body.passengers) throw new Error('Itinerary and passenger details are required.');
+    bookingDiagnostic.step('passenger_validation');
     validateBookingPassengers(body);
-    return send(res, 201, { booking: await createLiveSpringBooking(profile, body) });
+    return send(res, 201, { booking: await createLiveSpringBooking(profile, body, bookingDiagnostic) });
   }
   const documentMatch = url.pathname.match(/^\/api\/bookings\/([A-Za-z0-9-]+)\/(ticket|receipt)\.pdf$/);
   if (documentMatch && req.method === 'GET') {
@@ -1651,8 +1671,9 @@ if (url.pathname.startsWith('/api/bookings')) { try {
   }
   return send(res, 404, { error: 'Booking endpoint not found.' });
 } catch (error) {
+  const diagnosticId = bookingDiagnostic?.fail(error);
   if (error instanceof BookingReviewRequired) return send(res, 409, { error: error.message, code: 'FARE_REVIEW_REQUIRED', safeToRefresh: true });
-  return send(res, 403, { error: "Booking request is not allowed. If submission was attempted, check existing bookings before retrying." });
+  return send(res, 403, { error: "Booking request is not allowed. If submission was attempted, check existing bookings before retrying.", ...(diagnosticId ? { code: 'BOOKING_FAILED', diagnosticId } : {}) });
 } }
 if (url.pathname === '/api/wallet' && req.method === 'GET') { try { return send(res, 200, await getWalletDetails(await authenticatedProfile(req))); } catch (error) { return send(res, 403, { error: "Wallet access is not allowed." }); } }
 if (url.pathname === '/api/auth/password' && req.method === 'POST') {

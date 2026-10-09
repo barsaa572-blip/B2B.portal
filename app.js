@@ -1678,7 +1678,8 @@ const createPortalBookingFromForm = async event => {
       if (response.status === 409 && data.code === 'FARE_REVIEW_REQUIRED' && data.safeToRefresh === true) {
         bookingReviewAllowed = true; bookingQuoteError = data.error || 'Refresh and review the selected fare. No reservation was sent.';
       }
-      throw new Error(data.error || 'Booking could not be created.');
+      const diagnostic = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(data.diagnosticId || '') ? ` (Support ID: ${data.diagnosticId})` : '';
+      throw new Error((data.error || 'Booking could not be created.') + diagnostic);
     }
     const booking = portalBookingFromRow(data.booking);
     bookings.unshift(booking);

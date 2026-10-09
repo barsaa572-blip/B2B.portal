@@ -1,5 +1,26 @@
 # CNY funding follow-up release — deployed 9 October 2026, user evidence
 
+**Latest local booking diagnostic, not deployed:** Fixed stages and random
+support IDs now distinguish pre-submission, possible supplier submission and
+portal persistence failure. Strict code/status only; no raw supplier messages,
+PNR, passengers, payloads or secrets logged. Existing booking locks/responses,
+pricing and financial rules preserved. Multi-flight production cause UNKNOWN;
+user readiness checks pass, but old logs lack evidence. No real test booking or
+payment made. Reconcile supplier AND portal before trying another Book. Existing
+Node publisher and VPS code-only block below deploy this with the prepared audit
+UI; unrelated YeePay notes/proposal/private keys stay outside this publication.
+Node24 release-scoped tests307/307 PASS, zero skipped; includes real localhost
+HTTP ID/log matching and actual browser-function preservation/no-replay test.
+Full real mock-browser desktop/mobile acceptance remains the publisher gate.
+
+**Latest local change, not deployed:** Refund audit is now a wide980px responsive
+card workspace, plain Mongolian labels, pending refunds first and All records
+filter, agency names and distinct expected receipt/wallet amounts. No clipped
+table; no automatic provider settlement or financial rule changes. Admin read
+includes booking agency_id; actual role/projection HTTP checks pass. Release
+suite299/299 PASS, zero skipped. Updated mock-browser layout/cancellation tests
+are the publisher gate; run the same Node publisher and VPS block below. No SQL.
+
 **Latest local follow-up, not deployed:** Invoice amounts are stacked, frozen
 breakdown is a full-width disclosure row, approval is one dialog with required
 real bank reference/NET CNY and one final submit. Checkout total18px regular400.

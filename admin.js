@@ -170,6 +170,18 @@
     const current = session();
     return Boolean(current.accessToken && current.profile?.role === 'platform_admin');
   };
+  const settlementAuditMarkup = (entries, pendingOnly = true) => {
+    const visible = entries.map((entry, index) => ({entry, index})).filter(({entry}) => !pendingOnly || (entry.action === 'refund' && entry.state === 'awaiting_settlement'));
+    if (!visible.length) return `<div class="settlement-empty"><strong>${pendingOnly ? 'Батлах буцаалт одоогоор алга' : 'Төлбөрийн бүртгэл одоогоор алга'}</strong><p>${pendingOnly ? 'Буцаалтын хүсэлт амжилттай илгээгдэж, орлого тулгах шатанд ороход энд гарна. Бүх тооцоог харах бол “Бүх бүртгэл”-ийг сонгоно уу.' : 'Тийз, өөрчлөлт эсвэл буцаалтын тооцоо үүсэхэд энд харагдана.'}</p></div>`;
+    const actions = {issue:'Тийз гаргалт',change:'Өөрчлөлтийн төлбөр',refund:'Тийзний буцаалт'};
+    return visible.map(({entry, index}) => {
+      const refund = entry.action === 'refund', awaiting = refund && entry.state === 'awaiting_settlement';
+      const state = entry.state === 'prepared' ? 'Үнийн тооцоо' : entry.state === 'settled' ? (refund ? 'Wallet-д буцаасан' : 'Төлбөр бүртгэгдсэн') : awaiting ? 'Орлого тулгах хүлээлттэй' : String(entry.state || 'Төлөв тодорхойгүй');
+      const snapshot = entry.snapshot || {};
+      const company = agency(entry.bookings?.agency_id)?.name || 'Агентлаг тодорхойгүй';
+      return `<article class="settlement-record"><div class="settlement-record-head"><div><strong>${escape(entry.bookings?.pnr || entry.booking_id)}</strong><p>${escape(company)} · ${escape(actions[entry.action] || entry.action)}</p></div><span class="settlement-state ${awaiting ? 'is-pending' : entry.state === 'settled' ? 'is-settled' : ''}">${escape(state)}</span></div><dl class="settlement-amounts"><div><dt>${refund ? 'Агентын wallet-д буцаах дүн' : 'Агентын wallet-ээс төлөх дүн'}</dt><dd>${cny(snapshot.walletCny)} CNY</dd><small>MNT харуулах дүн: ${mnt(snapshot.amountMnt)}</small></div><div><dt>${refund ? 'Нийлүүлэгчээс буцаж орсон байх дүн' : 'Нийлүүлэгчийн төлбөр'}</dt><dd>${cny(snapshot.supplierCny)} CNY</dd><small>${refund ? 'Бодит орлогыг гүйлгээний баримттай тулгана.' : 'Энэ мөр нь нийлүүлэгчийн CNY дүн.'}</small></div></dl><details class="settlement-extra"><summary>Нэмэлт тооцоо</summary><p>Бүртгэлийн зөрүү: ${cny(snapshot.marginCny)} CNY · Лавлагаа: ${escape(entry.reference)}</p></details><div class="settlement-record-foot">${awaiting ? `<span>Мөнгө бодитоор буцаж орсон үед л батална.</span><button type="button" class="primary" data-settle-refund="${index}">Орлого тулгаж, wallet-д буцаах</button>` : `<span>${entry.state === 'prepared' ? 'Энэ нь зөвхөн тооцоо; мөнгө орсон эсвэл төлөгдсөн баталгаа биш.' : refund && entry.state === 'settled' ? 'Буцаалт бүртгэгдсэн. Дахин батлах шаардлагагүй.' : 'Энэ мөрөөс wallet-д мөнгө нэмэх үйлдэл хийхгүй.'}</span>`}</div></article>`;
+    }).join('');
+  };
   let loading = false;
   const load = async () => {
     if (!isPlatformAdmin() || loading) return;
@@ -189,30 +201,53 @@
   const setup = () => {
     const accounting = document.createElement('button');
     accounting.type = 'button'; accounting.className = 'secondary admin-audit-button';
-    accounting.textContent = 'Retail settlement audit';
+    accounting.textContent = 'Буцаалт ба төлбөрийн бүртгэл';
     byId('#administration')?.append(accounting);
     accounting.addEventListener('click', async () => {
       if (!isPlatformAdmin()) return;
       accounting.disabled = true;
       try {
         const data = await api('/api/admin/retail-pricing');
-        if (!isPlatformAdmin()) return;
+        if (!isPlatformAdmin() || byId('#admin-modal')?.open) return;
         const element = modal();
-        element.innerHTML = safeHtml(`<section class="admin-form"><button class="close" type="button">×</button><h2>Retail settlement audit</h2><p>Administrator only. Latest 500 quotes; prepared quotes are not earned income. Confirm a refund only after checking the supplier settlement record.</p><div class="table-wrap"><table><thead><tr><th>PNR / Action</th><th>MNT</th><th>Wallet CNY</th><th>Supplier CNY</th><th>Margin CNY</th><th>State</th><th></th></tr></thead><tbody>${data.entries.map((entry, index) => `<tr><td>${escape(entry.bookings?.pnr || entry.booking_id)} / ${escape(entry.action)}</td><td>${mnt(entry.snapshot.amountMnt)}</td><td>${cny(entry.snapshot.walletCny)}</td><td>${cny(entry.snapshot.supplierCny)}</td><td>${cny(entry.snapshot.marginCny)}</td><td>${escape(entry.state)}</td><td>${entry.action === 'refund' && entry.state === 'awaiting_settlement' ? `<button type="button" class="secondary" data-settle-refund="${index}">Confirm settlement</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7">No retail settlements recorded.</td></tr>'}</tbody></table></div></section>`);
+        element.setAttribute('aria-labelledby', 'settlement-audit-title');
+        const entries = Array.isArray(data.entries) ? data.entries : [];
+        const pending = entries.filter(entry => entry.action === 'refund' && entry.state === 'awaiting_settlement');
+        const pendingAmount = pending.reduce((sum, entry) => sum + Number(entry.snapshot?.walletCny || 0), 0);
+        element.innerHTML = safeHtml(`<section class="admin-form settlement-audit"><button class="close" type="button" aria-label="Close">×</button><p class="eyebrow">АДМИНЫ САНХҮҮГИЙН БҮРТГЭЛ</p><h2 id="settlement-audit-title">Буцаалт ба төлбөрийн бүртгэл</h2><p class="settlement-intro">Энд агентын wallet-д буцаалт оруулах болон төлбөрийн тооцоог хянана. Буцаалтыг нийлүүлэгчээс мөнгө бодитоор орсныг шалгасны дараа батална.</p><div class="settlement-summary"><div><span>Батлах буцаалт</span><strong data-audit-pending-count>${pending.length}</strong></div><div><span>Хүлээгдэж буй wallet буцаалт</span><strong data-audit-pending-amount>${cny(pendingAmount)} CNY</strong><small>Одоогоор wallet-д ороогүй дүн</small></div></div><div class="settlement-filters" role="group" aria-label="Бүртгэл шүүх"><button type="button" data-settlement-filter="pending" aria-pressed="true">Буцаалт батлах (${pending.length})</button><button type="button" data-settlement-filter="all" aria-pressed="false">Бүх бүртгэл (${entries.length})</button></div><div class="settlement-records"></div><p class="settlement-limit">Сүүлийн 500 хүртэлх бүртгэл. Үнийн тооцоо нь бодит орлого гэсэн үг биш.</p></section>`);
+        const records = element.querySelector('.settlement-records');
+        let selectedPendingOnly = true;
+        const renderAudit = pendingOnly => {
+          selectedPendingOnly = pendingOnly;
+          const remaining = entries.filter(entry => entry.action === 'refund' && entry.state === 'awaiting_settlement');
+          element.querySelector('[data-audit-pending-count]').textContent = remaining.length;
+          element.querySelector('[data-audit-pending-amount]').textContent = `${cny(remaining.reduce((sum, entry) => sum + Number(entry.snapshot?.walletCny || 0), 0))} CNY`;
+          element.querySelector('[data-settlement-filter="pending"]').textContent = `Буцаалт батлах (${remaining.length})`;
+          records.innerHTML = safeHtml(settlementAuditMarkup(entries, pendingOnly));
+          element.querySelectorAll('[data-settlement-filter]').forEach(button => button.setAttribute('aria-pressed', String((button.dataset.settlementFilter === 'pending') === pendingOnly)));
+        };
+        element.querySelectorAll('[data-settlement-filter]').forEach(button => button.addEventListener('click', () => renderAudit(button.dataset.settlementFilter === 'pending')));
+        renderAudit(true);
         element.querySelector('.close').onclick = () => closeModal(element);
-        element.querySelectorAll('[data-settle-refund]').forEach(button => button.addEventListener('click', async () => {
-          const entry = data.entries[Number(button.dataset.settleRefund)];
-          const amount = window.prompt('Enter the actual refund received from Spring (CNY). Check the supplier settlement record first.');
+        records.addEventListener('click', async event => {
+          const button = event.target.closest('[data-settle-refund]');
+          if (!button || button.disabled) return;
+          const entry = entries[Number(button.dataset.settleRefund)];
+          if (!entry || entry.action !== 'refund' || entry.state !== 'awaiting_settlement') return;
+          const amount = window.prompt('Нийлүүлэгчээс бодитоор буцаж орсон CNY дүнг оруулна уу. Эхлээд гүйлгээний баримтыг тулгана.');
           if (amount === null || !amount.trim()) return;
-          const reference = window.prompt('Enter the supplier settlement reference (at least 5 characters).');
+          const reference = window.prompt('Буцаалтын гүйлгээний баталгаат дугаар (5-аас доошгүй тэмдэгт):');
           if (!reference) return;
-          if (!window.confirm(`Confirm the supplier has settled this refund and credit the agency wallet ${cny(entry.snapshot.walletCny)} CNY (${mnt(entry.snapshot.amountMnt)})?`)) return;
+          if (!window.confirm(`Нийлүүлэгчээс буцаалт орсныг тулгасан уу? Тухайн агентын wallet-д ${cny(entry.snapshot.walletCny)} CNY нэмнэ (${mnt(entry.snapshot.amountMnt)}).`)) return;
           button.disabled = true;
+          element.querySelectorAll('[data-settlement-filter]').forEach(filter => filter.disabled = true);
           try {
             await api('/api/admin/refund-settlement', { method: 'POST', body: JSON.stringify({ bookingId: entry.booking_id, reference: entry.reference, supplierReceived: Number(amount), settlementReference: reference, confirmed: true }) });
-            button.textContent = 'Settled'; notify('Refund credited.'); await load();
+            entry.state = 'settled';
+            renderAudit(selectedPendingOnly); notify('Буцаалт агентын wallet-д бүртгэгдлээ.'); await load();
           } catch (error) { button.disabled = false; notify(error.message); }
-        }));
+          finally { element.querySelectorAll('[data-settlement-filter]').forEach(filter => filter.disabled = false); }
+        });
         element.showModal();
       } catch (error) { notify(error.message); }
       finally { accounting.disabled = false; }
